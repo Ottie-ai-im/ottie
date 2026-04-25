@@ -59,12 +59,11 @@ export default {
     runtimeVersion: {
       policy: "appVersion",
     },
-    // TODO: replace with Ottie's own EAS project URL once registered.
-    // The previous value pointed at the upstream EAS project and would push
-    // OTA updates there if left unchanged.
-    updates: {
-      url: "TODO",
-    },
+    // OTA updates intentionally disabled in dev. The previous value pointed at
+    // the upstream EAS project and would push OTA updates there if left in.
+    // To enable: register Ottie's own EAS project with `eas init`, then add:
+    //   updates: { url: "https://u.expo.dev/<your-project-id>" }
+    // back to this config.
     ios: {
       supportsTablet: true,
       infoPlist: {
@@ -148,15 +147,11 @@ export default {
       reactCompiler: true,
       autolinkingModuleResolution: true,
     },
-    // TODO: register Ottie's own EAS project (`eas init`) and paste the
-    // resulting projectId here. The previous value belonged to the upstream
-    // project; leaving it would route iOS/Android builds to the wrong
-    // account.
+    // EAS project intentionally not configured. To enable EAS builds,
+    // run `eas init` once and Expo CLI will write the projectId back into
+    // this block automatically.
     extra: {
       router: {},
-      eas: {
-        projectId: "TODO",
-      },
     },
     owner: "ottie",
   },
