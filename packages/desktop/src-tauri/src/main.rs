@@ -65,6 +65,14 @@ fn main() {
         ])
         .manage(AppState { daemon: Mutex::new(None) })
         .manage(bridge::PendingOpenProject(Mutex::new(initial_open_project)))
+        .manage(bridge::DaemonInfoState(Mutex::new(bridge::DaemonInfo {
+            listen: env::var("OTTIE_LISTEN").unwrap_or_else(|_| "127.0.0.1:6767".into()),
+            home: env::var("OTTIE_HOME").unwrap_or_else(|_| {
+                env::var("HOME")
+                    .map(|h| format!("{h}/.ottie"))
+                    .unwrap_or_else(|_| ".ottie".into())
+            }),
+        })))
         .setup(move |app| {
             // Apply the bridge init script to every existing webview. New
             // ones inherit it via WebviewWindowBuilder::initialization_script

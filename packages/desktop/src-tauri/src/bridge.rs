@@ -32,6 +32,28 @@ pub fn ottie_get_pending_open_project(state: State<'_, PendingOpenProject>) -> O
     state.0.lock().unwrap().take()
 }
 
+#[derive(Default, Clone)]
+pub struct DaemonInfo {
+    pub listen: String,
+    pub home: String,
+}
+
+pub struct DaemonInfoState(pub Mutex<DaemonInfo>);
+
+fn daemon_status_value(info: &DaemonInfo) -> Value {
+    json!({
+        "serverId": "ottie-desktop",
+        "status": "running",
+        "listen": info.listen,
+        "hostname": "localhost",
+        "pid": null,
+        "home": info.home,
+        "version": null,
+        "desktopManaged": true,
+        "error": null,
+    })
+}
+
 // -------------------------- generic invoke -------------------------------
 //
 // The Electron build dispatched a long list of named commands through one
@@ -50,32 +72,48 @@ pub struct NotImplemented {
 // shape Paseo's Electron preload used and lets us read it later without
 // rewiring the bridge.
 #[tauri::command]
-pub fn ottie_invoke(command: String, #[allow(unused_variables)] args: Option<Value>) -> Result<Value, String> {
+pub fn ottie_invoke<R: Runtime>(
+    app: AppHandle<R>,
+    command: String,
+    #[allow(unused_variables)] args: Option<Value>,
+) -> Result<Value, String> {
     let _ = args;
+    let info = app
+        .try_state::<DaemonInfoState>()
+        .map(|s| s.0.lock().unwrap().clone())
+        .unwrap_or_default();
+
     match command.as_str() {
-        // Daemon status — until we port the manager, report a stable shape
-        // matching Paseo's `resolveStatus()` output (status: "running" |
-        // "stopped" | etc.). The desktop manages the daemon as a sidecar so
-        // it's effectively "running" whenever the shell is up.
-        "desktop_daemon_status" => Ok(json!({
-            "status": "running",
-            "version": null,
-            "managed": true,
-            "tauriPort": true,
+        "desktop_daemon_status"
+        | "start_desktop_daemon"
+        | "restart_desktop_daemon" => Ok(daemon_status_value(&info)),
+
+        "stop_desktop_daemon" => {
+            let mut stopped = info.clone();
+            // We never actually stop the sidecar from the UI today (Tauri's
+            // ExitRequested handler owns that). Surface "running" so the
+            // renderer's status panel doesn't flap to error.
+            stopped.listen = info.listen.clone();
+            Ok(daemon_status_value(&stopped))
+        }
+
+        "desktop_daemon_logs" => Ok(json!({
+            "logPath": format!("{}/daemon.log", info.home),
+            "contents": "",
         })),
+
+        "desktop_daemon_pairing" => Ok(json!({
+            "relayEnabled": false,
+            "url": null,
+            "qr": null,
+        })),
+
         "get_local_daemon_version" => Ok(json!({ "version": null, "error": null })),
         "cli_daemon_status" => Ok(json!({ "status": "unknown" })),
 
         // Idle time: Tauri does not expose powerMonitor. Returning 0 is
         // safe — the renderer treats it as "user just acted".
         "desktop_get_system_idle_time" => Ok(json!(0)),
-
-        // Soft no-op for daemon control: the sidecar lifecycle is managed
-        // by main.rs Exit handler, the renderer's start/stop buttons just
-        // return success.
-        "start_desktop_daemon" | "stop_desktop_daemon" | "restart_desktop_daemon" => {
-            Ok(json!({ "ok": true, "managed": true }))
-        }
 
         // Updater / installer surface: park as not implemented.
         "check_app_update"
@@ -84,8 +122,6 @@ pub fn ottie_invoke(command: String, #[allow(unused_variables)] args: Option<Val
         | "get_cli_install_status"
         | "install_skills"
         | "get_skills_install_status"
-        | "desktop_daemon_logs"
-        | "desktop_daemon_pairing"
         | "write_attachment_base64"
         | "copy_attachment_file"
         | "read_file_base64"
