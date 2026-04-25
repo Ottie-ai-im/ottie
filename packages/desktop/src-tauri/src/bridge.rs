@@ -38,13 +38,6 @@ pub fn ottie_get_pending_open_project(state: State<'_, PendingOpenProject>) -> O
 // `paseo:invoke` channel. We mirror that here so the frontend doesn't need
 // to know which calls are "real" vs. stubbed.
 
-#[derive(Deserialize)]
-pub struct InvokeArgs {
-    pub command: String,
-    #[serde(default)]
-    pub args: Value,
-}
-
 #[derive(Serialize)]
 pub struct NotImplemented {
     pub error: String,
@@ -52,9 +45,14 @@ pub struct NotImplemented {
     pub tauri_port: bool,
 }
 
+// `args` is currently informational — every dispatched branch ignores it,
+// but keeping it in the signature lets the frontend pass the same payload
+// shape Paseo's Electron preload used and lets us read it later without
+// rewiring the bridge.
 #[tauri::command]
-pub fn ottie_invoke(args: InvokeArgs) -> Result<Value, String> {
-    match args.command.as_str() {
+pub fn ottie_invoke(command: String, #[allow(unused_variables)] args: Option<Value>) -> Result<Value, String> {
+    let _ = args;
+    match command.as_str() {
         // Daemon status — until we port the manager, report a stable shape
         // matching Paseo's `resolveStatus()` output (status: "running" |
         // "stopped" | etc.). The desktop manages the daemon as a sidecar so
@@ -98,7 +96,7 @@ pub fn ottie_invoke(args: InvokeArgs) -> Result<Value, String> {
         | "close_local_daemon_transport" => Ok(serde_json::to_value(NotImplemented {
             error: format!(
                 "{} is not implemented in the Tauri shell yet",
-                args.command
+                command
             ),
             tauri_port: true,
         })
@@ -120,30 +118,25 @@ pub struct DialogAskOptions {
     pub kind: Option<String>,
 }
 
-#[derive(Deserialize)]
-pub struct DialogAskArgs {
-    pub message: String,
-    #[serde(default)]
-    pub options: DialogAskOptions,
-}
-
 #[tauri::command]
 pub async fn ottie_dialog_ask<R: Runtime>(
     app: AppHandle<R>,
-    args: DialogAskArgs,
+    message: String,
+    options: Option<DialogAskOptions>,
 ) -> Result<bool, String> {
-    let kind = match args.options.kind.as_deref() {
+    let options = options.unwrap_or_default();
+    let kind = match options.kind.as_deref() {
         Some("warning") => MessageDialogKind::Warning,
         Some("error") => MessageDialogKind::Error,
         _ => MessageDialogKind::Info,
     };
-    let ok = args.options.ok_label.unwrap_or_else(|| "OK".into());
-    let cancel = args.options.cancel_label.unwrap_or_else(|| "Cancel".into());
-    let title = args.options.title.unwrap_or_else(|| "Confirm".into());
+    let ok = options.ok_label.unwrap_or_else(|| "OK".into());
+    let cancel = options.cancel_label.unwrap_or_else(|| "Cancel".into());
+    let title = options.title.unwrap_or_else(|| "Confirm".into());
 
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.dialog()
-        .message(args.message)
+        .message(message)
         .title(title)
         .kind(kind)
         .buttons(MessageDialogButtons::OkCancelCustom(ok, cancel))
@@ -172,20 +165,14 @@ pub struct DialogFilter {
     pub extensions: Vec<String>,
 }
 
-#[derive(Deserialize)]
-pub struct DialogOpenArgs {
-    #[serde(default)]
-    pub options: DialogOpenOptions,
-}
-
 #[tauri::command]
 pub async fn ottie_dialog_open<R: Runtime>(
     app: AppHandle<R>,
-    args: DialogOpenArgs,
+    options: Option<DialogOpenOptions>,
 ) -> Result<Value, String> {
     use tauri_plugin_dialog::FilePath;
 
-    let opts = args.options;
+    let opts = options.unwrap_or_default();
     let mut builder = app.dialog().file();
     if let Some(t) = opts.title {
         builder = builder.set_title(t);
@@ -269,21 +256,17 @@ pub fn ottie_notification_is_supported<R: Runtime>(app: AppHandle<R>) -> bool {
 pub struct NotificationSendPayload {
     pub title: String,
     pub body: Option<String>,
+    #[allow(dead_code)]
     pub data: Option<Value>,
-}
-
-#[derive(Deserialize)]
-pub struct NotificationSendArgs {
-    pub payload: NotificationSendPayload,
 }
 
 #[tauri::command]
 pub fn ottie_notification_send<R: Runtime>(
     app: AppHandle<R>,
-    args: NotificationSendArgs,
+    payload: NotificationSendPayload,
 ) -> Result<bool, String> {
-    let mut builder = app.notification().builder().title(&args.payload.title);
-    if let Some(body) = &args.payload.body {
+    let mut builder = app.notification().builder().title(&payload.title);
+    if let Some(body) = &payload.body {
         builder = builder.body(body);
     }
     builder.show().map_err(|e| e.to_string())?;
@@ -292,18 +275,13 @@ pub fn ottie_notification_send<R: Runtime>(
 
 // ------------------------------ opener -----------------------------------
 
-#[derive(Deserialize)]
-pub struct OpenerArgs {
-    pub url: String,
-}
-
 #[tauri::command]
 pub fn ottie_opener_open_url<R: Runtime>(
     app: AppHandle<R>,
-    args: OpenerArgs,
+    url: String,
 ) -> Result<(), String> {
     app.opener()
-        .open_url(&args.url, None::<&str>)
+        .open_url(&url, None::<&str>)
         .map_err(|e| e.to_string())
 }
 
@@ -311,22 +289,19 @@ pub fn ottie_opener_open_url<R: Runtime>(
 
 #[derive(Deserialize, Default)]
 pub struct ContextMenuInput {
+    #[allow(dead_code)]
     pub kind: Option<String>,
     #[serde(rename = "hasSelection", default)]
+    #[allow(dead_code)]
     pub has_selection: bool,
-}
-
-#[derive(Deserialize)]
-pub struct ContextMenuArgs {
-    #[serde(default)]
-    pub input: ContextMenuInput,
 }
 
 #[tauri::command]
 pub fn ottie_menu_show_context<R: Runtime>(
     app: AppHandle<R>,
-    _args: ContextMenuArgs,
+    input: Option<ContextMenuInput>,
 ) -> Result<(), String> {
+    let _ = input;
     use tauri::menu::{MenuBuilder, PredefinedMenuItem};
 
     let win = match focused(&app) {
@@ -375,6 +350,7 @@ pub fn ottie_window_is_fullscreen<R: Runtime>(app: AppHandle<R>) -> Result<bool,
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct WindowControlsUpdate {
     pub height: Option<f64>,
     #[serde(rename = "backgroundColor")]
@@ -383,34 +359,24 @@ pub struct WindowControlsUpdate {
     pub foreground_color: Option<String>,
 }
 
-#[derive(Deserialize)]
-pub struct WindowControlsArgs {
-    #[serde(default)]
-    pub update: Option<WindowControlsUpdate>,
-}
-
 #[tauri::command]
 pub fn ottie_window_update_controls<R: Runtime>(
     _app: AppHandle<R>,
-    _args: WindowControlsArgs,
+    update: Option<WindowControlsUpdate>,
 ) -> Result<(), String> {
     // Electron's Window Controls Overlay is configurable via the `windows`
     // bundle config. Tauri v2 has no programmatic equivalent yet — the
     // overlay style is fixed at window creation. Treat as a soft no-op.
+    let _ = update;
     Ok(())
-}
-
-#[derive(Deserialize)]
-pub struct BadgeArgs {
-    pub count: Option<i64>,
 }
 
 #[tauri::command]
 pub fn ottie_window_set_badge_count<R: Runtime>(
     app: AppHandle<R>,
-    args: BadgeArgs,
+    count: Option<i64>,
 ) -> Result<(), String> {
-    set_dock_badge(&app, args.count);
+    set_dock_badge(&app, count);
     Ok(())
 }
 
