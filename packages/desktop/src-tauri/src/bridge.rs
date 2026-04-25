@@ -40,10 +40,44 @@ pub struct DaemonInfo {
 
 pub struct DaemonInfoState(pub Mutex<DaemonInfo>);
 
+fn read_server_id(home: &str) -> String {
+    // The daemon writes its persistent server identifier to
+    // `$OTTIE_HOME/server-id` on first startup. Reading the same value here
+    // means the renderer's host registry sees a single stable entry per
+    // installation instead of accumulating one phantom host per restart.
+    let path = format!("{home}/server-id");
+    match std::fs::read_to_string(&path) {
+        Ok(s) => {
+            let trimmed = s.trim().to_string();
+            if trimmed.is_empty() {
+                "srv_unknown".into()
+            } else {
+                trimmed
+            }
+        }
+        Err(_) => "srv_unknown".into(),
+    }
+}
+
+fn probe_listen(listen: &str) -> bool {
+    use std::net::{TcpStream, ToSocketAddrs};
+    use std::time::Duration;
+    let Some(addr) = listen.to_socket_addrs().ok().and_then(|mut it| it.next()) else {
+        return false;
+    };
+    TcpStream::connect_timeout(&addr, Duration::from_millis(150)).is_ok()
+}
+
 fn daemon_status_value(info: &DaemonInfo) -> Value {
+    let alive = probe_listen(&info.listen);
+    let server_id = if alive {
+        read_server_id(&info.home)
+    } else {
+        "srv_unknown".into()
+    };
     json!({
-        "serverId": "ottie-desktop",
-        "status": "running",
+        "serverId": server_id,
+        "status": if alive { "running" } else { "starting" },
         "listen": info.listen,
         "hostname": "localhost",
         "pid": null,
