@@ -59,8 +59,11 @@ export default {
     runtimeVersion: {
       policy: "appVersion",
     },
+    // TODO: replace with Ottie's own EAS project URL once registered.
+    // The previous value pointed at the upstream EAS project and would push
+    // OTA updates there if left unchanged.
     updates: {
-      url: "https://u.expo.dev/0e7f65ce-0367-46c8-a238-2b65963d235a",
+      url: "TODO",
     },
     ios: {
       supportsTablet: true,
@@ -145,10 +148,14 @@ export default {
       reactCompiler: true,
       autolinkingModuleResolution: true,
     },
+    // TODO: register Ottie's own EAS project (`eas init`) and paste the
+    // resulting projectId here. The previous value belonged to the upstream
+    // project; leaving it would route iOS/Android builds to the wrong
+    // account.
     extra: {
       router: {},
       eas: {
-        projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",
+        projectId: "TODO",
       },
     },
     owner: "ottie",

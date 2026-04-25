@@ -91,6 +91,9 @@ def write(img: Image.Image, path: Path) -> None:
 
 def render_set() -> None:
     # ---- packages/app/assets/images ----
+    # Browser tab favicons: light = dark logo on transparent, dark = white
+    # logo on transparent. The `attention` and `running` variants tint the
+    # middle dot.
     write(render_logo(48, BLACK), APP_ASSETS / "favicon.png")
     write(render_logo(48, BLACK), APP_ASSETS / "favicon-light.png")
     write(render_logo(48, WHITE), APP_ASSETS / "favicon-dark.png")
@@ -110,9 +113,24 @@ def render_set() -> None:
         render_logo(48, WHITE, accent=GREEN, accent_dot_index=1),
         APP_ASSETS / "favicon-dark-running.png",
     )
+
+    # SVG twins of the same favicons (some renderers prefer SVG).
+    write_logo_svg(BLACK, APP_ASSETS / "favicon-light.svg")
+    write_logo_svg(WHITE, APP_ASSETS / "favicon-dark.svg")
+    write_logo_svg(BLACK, APP_ASSETS / "favicon-light-attention.svg", accent=AMBER)
+    write_logo_svg(WHITE, APP_ASSETS / "favicon-dark-attention.svg", accent=AMBER)
+    write_logo_svg(BLACK, APP_ASSETS / "favicon-light-running.svg", accent=GREEN)
+    write_logo_svg(WHITE, APP_ASSETS / "favicon-dark-running.svg", accent=GREEN)
+
     write(render_logo(1024, BLACK), APP_ASSETS / "icon.png")
     write(render_logo(96, BLACK), APP_ASSETS / "notification-icon.png")
     write(render_logo(200, BLACK), APP_ASSETS / "splash-icon.png")
+
+    # Android adaptive icon: foreground draws on top of a separate background
+    # colour set in app.config.js (currently #000000). Use the white logo so
+    # it shows on the black backdrop. The Android template expects 1024×1024
+    # with the logo centred in the inner ~66% safe zone.
+    write(render_logo(1024, WHITE), APP_ASSETS / "android-icon-foreground.png")
 
     # ---- packages/desktop/src-tauri/icons ----
     # Tauri reads at least 32×32 for the build context. Render at 512 for
@@ -120,17 +138,29 @@ def render_set() -> None:
     write(render_logo(512, BLACK), DESKTOP_ICONS / "icon.png")
 
     # ---- packages/website/public ----
-    write_svg(WEBSITE_PUBLIC / "favicon.svg")
+    write_logo_svg(None, WEBSITE_PUBLIC / "favicon.svg")  # uses currentColor
 
 
-def write_svg(path: Path) -> None:
-    """Hand-write an SVG for crisp scaling on the marketing site."""
+def write_logo_svg(
+    fg: tuple[int, int, int] | None,
+    path: Path,
+    accent: tuple[int, int, int] | None = None,
+) -> None:
+    """Hand-write an SVG matching the PNG layout. fg=None → currentColor."""
+
+    def hex_or_current(rgb: tuple[int, int, int] | None) -> str:
+        if rgb is None:
+            return "currentColor"
+        return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+
+    main = hex_or_current(fg)
+    accent_hex = hex_or_current(accent) if accent else main
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">\n'
-        '  <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" stroke-width="7"/>\n'
-        '  <circle cx="32" cy="50" r="7.5" fill="currentColor"/>\n'
-        '  <circle cx="50" cy="50" r="7.5" fill="currentColor"/>\n'
-        '  <circle cx="68" cy="50" r="7.5" fill="currentColor"/>\n'
+        f'  <circle cx="50" cy="50" r="42" fill="none" stroke="{main}" stroke-width="7"/>\n'
+        f'  <circle cx="32" cy="50" r="7.5" fill="{main}"/>\n'
+        f'  <circle cx="50" cy="50" r="7.5" fill="{accent_hex}"/>\n'
+        f'  <circle cx="68" cy="50" r="7.5" fill="{main}"/>\n'
         '</svg>\n'
     )
     path.parent.mkdir(parents=True, exist_ok=True)
