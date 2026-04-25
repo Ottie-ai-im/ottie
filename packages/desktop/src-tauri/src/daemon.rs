@@ -40,12 +40,20 @@ pub fn spawn<R: Runtime>(app: &AppHandle<R>) -> Result<DaemonHandle, String> {
         "/binaries/resources",
     );
 
+    // Origins the renderer can connect from. In dev the renderer is served
+    // by Expo at http://localhost:8081; in packaged builds Tauri's webview
+    // uses tauri://localhost on macOS / Linux and http://tauri.localhost on
+    // Windows. Same-origin (loopback to the daemon's own host:port) is
+    // always allowed by the WS server.
+    let cors_origins = "http://localhost:8081,tauri://localhost,http://tauri.localhost";
+
     let sidecar = app
         .shell()
         .sidecar("ottie-daemon")
         .map_err(|e| format!("failed to resolve ottie-daemon sidecar: {e}"))?
         .env("OTTIE_DESKTOP_MANAGED", "1")
-        .env("OTTIE_DAEMON_RESOURCES_DIR", dev_resources_dir);
+        .env("OTTIE_DAEMON_RESOURCES_DIR", dev_resources_dir)
+        .env("OTTIE_CORS_ORIGINS", cors_origins);
 
     let (mut rx, child) = sidecar
         .spawn()
