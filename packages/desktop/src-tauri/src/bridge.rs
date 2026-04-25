@@ -97,10 +97,30 @@ pub fn ottie_invoke<R: Runtime>(
             Ok(daemon_status_value(&stopped))
         }
 
-        "desktop_daemon_logs" => Ok(json!({
-            "logPath": format!("{}/daemon.log", info.home),
-            "contents": "",
-        })),
+        "desktop_daemon_logs" => {
+            let log_path = format!("{}/daemon.log", info.home);
+            // Tail the last ~256 KB so the panel renders quickly even if the
+            // log is huge.
+            const MAX_BYTES: u64 = 256 * 1024;
+            let contents = std::fs::metadata(&log_path)
+                .ok()
+                .map(|m| m.len())
+                .map(|len| {
+                    use std::io::{Read, Seek, SeekFrom};
+                    let start = len.saturating_sub(MAX_BYTES);
+                    let mut buf = String::new();
+                    if let Ok(mut f) = std::fs::File::open(&log_path) {
+                        let _ = f.seek(SeekFrom::Start(start));
+                        let _ = f.take(MAX_BYTES).read_to_string(&mut buf);
+                    }
+                    buf
+                })
+                .unwrap_or_default();
+            Ok(json!({
+                "logPath": log_path,
+                "contents": contents,
+            }))
+        }
 
         "desktop_daemon_pairing" => Ok(json!({
             "relayEnabled": false,
