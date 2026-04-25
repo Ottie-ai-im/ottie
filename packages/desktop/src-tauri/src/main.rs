@@ -2,31 +2,24 @@
 //
 // Ports the responsibilities of the previous Electron main process:
 //   - Supervise the daemon sidecar (start at launch, stop at exit).
-//   - Open a single main window pointing at the Expo web build.
-//   - Single-instance lock so a second launch focuses the existing window.
+//   - Open a single main window pointing at the Expo build.
 //
 // Items not yet ported (need product decisions or platform-specific work):
-//   - TODO: custom URL scheme handler (Electron used a custom app:// scheme); Tauri v2
-//     serves `frontendDist` natively, but deep-link routing must be reimplemented
-//     via the `tauri-plugin-deep-link` plugin if needed.
-//   - TODO: CLI passthrough (`runCliPassthroughIfRequested`) — invoking the
-//     packaged binary as a CLI; Tauri does not provide this out of the box.
-//   - TODO: macOS dock badge, dock icon override, native context menu, drag/drop
-//     prevention, react-devtools auto-load.
-//   - TODO: open-project IPC (`ipcMain.handle("ottie:get-pending-open-project")`)
-//     must be reimplemented as a Tauri command if the renderer still needs it.
-//   - TODO: dev-worktree userData isolation (env override /
-//     git worktree detection) — port to Tauri's `path` resolver if still wanted.
-//   - TODO: notifications, dialogs, shell openers, application menu — use the
-//     corresponding Tauri v2 plugins (`tauri-plugin-notification`,
-//     `tauri-plugin-dialog`, `tauri-plugin-shell`).
+//   - TODO: custom URL scheme handler (Electron used a custom app:// scheme).
+//   - TODO: CLI passthrough (`runCliPassthroughIfRequested`).
+//   - TODO: macOS dock badge / native context menu / drag-drop prevention.
+//   - TODO: open-project IPC reimplemented as a Tauri command.
+//   - TODO: dev-worktree userData isolation.
+//   - TODO: notifications, dialogs, shell openers, application menu.
 
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 mod daemon;
 
 use std::sync::Mutex;
+
 use tauri::{Manager, RunEvent};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 struct AppState {
     daemon: Mutex<Option<daemon::DaemonHandle>>,
@@ -36,6 +29,8 @@ fn main() {
     env_logger::init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             daemon: Mutex::new(None),
         })
@@ -47,8 +42,18 @@ fn main() {
                     *state.daemon.lock().unwrap() = Some(child);
                 }
                 Err(err) => {
-                    log::error!("failed to spawn daemon sidecar: {err}");
-                    // TODO: surface a user-visible error dialog instead of just logging.
+                    log::error!("daemon sidecar failed to start: {err}");
+                    // Surface to the user without blocking the window — the
+                    // shell still loads the frontend so they can see the
+                    // error and choose what to do.
+                    handle
+                        .dialog()
+                        .message(format!(
+                            "Daemon failed to start.\n\n{err}\n\nThe app will open without a daemon."
+                        ))
+                        .kind(MessageDialogKind::Error)
+                        .title("Ottie")
+                        .blocking_show();
                 }
             }
             Ok(())
