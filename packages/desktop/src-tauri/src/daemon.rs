@@ -30,11 +30,22 @@ impl DaemonHandle {
 }
 
 pub fn spawn<R: Runtime>(app: &AppHandle<R>) -> Result<DaemonHandle, String> {
+    // In dev, Tauri copies the externalBin into target/<profile>/, so the
+    // wrapper's siblings are not the staged resources/. Pin the resources
+    // directory at compile time to the source layout. For bundled builds this
+    // path will not exist, and the wrapper's relative-path search will take
+    // over.
+    let dev_resources_dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/binaries/resources",
+    );
+
     let sidecar = app
         .shell()
         .sidecar("ottie-daemon")
         .map_err(|e| format!("failed to resolve ottie-daemon sidecar: {e}"))?
-        .env("OTTIE_DESKTOP_MANAGED", "1");
+        .env("OTTIE_DESKTOP_MANAGED", "1")
+        .env("OTTIE_DAEMON_RESOURCES_DIR", dev_resources_dir);
 
     let (mut rx, child) = sidecar
         .spawn()

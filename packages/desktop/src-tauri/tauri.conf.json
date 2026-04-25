@@ -31,9 +31,6 @@
     ],
     "externalBin": [
       "binaries/ottie-daemon"
-    ],
-    "resources": [
-      "binaries/resources/**"
     ]
   }
 }
