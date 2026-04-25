@@ -59,6 +59,58 @@ fn read_server_id(home: &str) -> String {
     }
 }
 
+/// Tiny synchronous HTTP/1.0 GET against a `host:port` listen target,
+/// expecting a JSON body. Pulling in reqwest/ureq for one loopback request
+/// felt heavy, so this is a hand-rolled minimal client. Origin is set to the
+/// daemon's own loopback URL so the WS server's same-origin allowlist
+/// short-circuits the WS-only origin check (the HTTP route wraps a JSON
+/// response that already passes the host allowlist middleware).
+fn ureq_get_json(url: &str) -> Result<Value, String> {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    let url = url
+        .strip_prefix("http://")
+        .ok_or_else(|| format!("non-http url: {url}"))?;
+    let (host_port, path) = match url.find('/') {
+        Some(i) => (&url[..i], &url[i..]),
+        None => (url, "/"),
+    };
+    let mut stream = TcpStream::connect_timeout(
+        &host_port
+            .parse()
+            .map_err(|e: std::net::AddrParseError| e.to_string())?,
+        Duration::from_millis(2000),
+    )
+    .map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_millis(5000)))
+        .ok();
+    let req = format!(
+        "GET {path} HTTP/1.0\r\nHost: {host_port}\r\nOrigin: http://{host_port}\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(req.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let mut buf = Vec::with_capacity(4096);
+    stream.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    // Find blank line separating headers/body.
+    let split = buf
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .map(|i| i + 4)
+        .or_else(|| buf.windows(2).position(|w| w == b"\n\n").map(|i| i + 2))
+        .ok_or_else(|| "no header/body separator in response".to_string())?;
+    let status_line = std::str::from_utf8(&buf[..buf.iter().position(|&b| b == b'\r' || b == b'\n').unwrap_or(buf.len())])
+        .unwrap_or("");
+    if !status_line.contains(" 200 ") {
+        return Err(format!("non-200 from daemon: {status_line}"));
+    }
+    let body = &buf[split..];
+    serde_json::from_slice::<Value>(body).map_err(|e| format!("invalid JSON body: {e}"))
+}
+
 fn probe_listen(listen: &str) -> bool {
     use std::net::{TcpStream, ToSocketAddrs};
     use std::time::Duration;
@@ -156,11 +208,22 @@ pub fn ottie_invoke<R: Runtime>(
             }))
         }
 
-        "desktop_daemon_pairing" => Ok(json!({
-            "relayEnabled": false,
-            "url": null,
-            "qr": null,
-        })),
+        "desktop_daemon_pairing" => {
+            // Hit the daemon's local-only /api/pair endpoint and forward the
+            // JSON to the renderer. Blocking call from the Tauri side is fine —
+            // it's a tiny loopback request and the command is async-callable
+            // from JS.
+            let url = format!("http://{}/api/pair", info.listen);
+            match ureq_get_json(&url) {
+                Ok(v) => Ok(v),
+                Err(err) => Ok(json!({
+                    "relayEnabled": false,
+                    "url": null,
+                    "qr": null,
+                    "error": err,
+                })),
+            }
+        }
 
         "get_local_daemon_version" => Ok(json!({ "version": null, "error": null })),
         "cli_daemon_status" => Ok(json!({ "status": "unknown" })),

@@ -116,6 +116,7 @@ import { archivePersistedWorkspaceRecord } from "./workspace-archive-service.js"
 import { wrapSessionMessage, type SessionOutboundMessage } from "./messages.js";
 import { createTerminalManager, type TerminalManager } from "../terminal/terminal-manager.js";
 import { createConnectionOfferV2, encodeOfferToFragmentUrl } from "./connection-offer.js";
+import { generateLocalPairingOffer } from "./pairing-offer.js";
 import { loadOrCreateDaemonKeyPair } from "./daemon-keypair.js";
 import { startRelayTransport, type RelayTransportController } from "./relay-transport.js";
 import { getOrCreateServerId } from "./server-id.js";
@@ -338,6 +339,37 @@ export async function createOttieDaemon(
       version: daemonVersion,
       listen: formatListenTarget(boundListenTarget ?? listenTarget),
     });
+  });
+
+  // Local-only pairing offer endpoint, used by the desktop shell to render
+  // the QR code that mobile clients scan to pair. The daemon binds to
+  // 127.0.0.1 by default so this is reachable only from the same machine —
+  // matches the safety boundary of the `ottie daemon pair` CLI command.
+  app.get("/api/pair", async (_req, res) => {
+    try {
+      const offer = await generateLocalPairingOffer({
+        ottieHome: config.ottieHome,
+        relayEnabled: config.relayEnabled ?? true,
+        relayEndpoint: config.relayEndpoint ?? "relay.ottie.app:443",
+        relayPublicEndpoint:
+          config.relayPublicEndpoint ?? config.relayEndpoint ?? "relay.ottie.app:443",
+        appBaseUrl: config.appBaseUrl ?? "https://app.ottie.app",
+        includeQr: true,
+      });
+      res.json({
+        relayEnabled: offer.relayEnabled,
+        url: offer.url ?? null,
+        qr: offer.qr ?? null,
+      });
+    } catch (err) {
+      logger.warn({ err }, "pairing_offer_failed");
+      res.status(500).json({
+        relayEnabled: false,
+        url: null,
+        qr: null,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   const handleFileDownload = async (req: express.Request, res: express.Response): Promise<void> => {
