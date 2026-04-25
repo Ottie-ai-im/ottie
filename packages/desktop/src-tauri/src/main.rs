@@ -75,6 +75,13 @@ fn main() {
             install_application_menu(&app.handle())?;
             wire_window_events(app);
 
+            // Open devtools automatically in dev so the renderer console is
+            // available without a manual "Toggle Developer Tools" click.
+            #[cfg(debug_assertions)]
+            for (_, win) in app.webview_windows() {
+                win.open_devtools();
+            }
+
             let handle = app.handle().clone();
             match daemon::spawn(&handle) {
                 Ok(child) => {

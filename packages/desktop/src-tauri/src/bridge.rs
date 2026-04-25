@@ -324,11 +324,26 @@ pub struct ContextMenuArgs {
 
 #[tauri::command]
 pub fn ottie_menu_show_context<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
     _args: ContextMenuArgs,
 ) -> Result<(), String> {
-    // TODO: build a real popup menu via tauri::menu::Menu::with_items + popup.
-    // For now we let the webview show its built-in context menu.
+    use tauri::menu::{MenuBuilder, PredefinedMenuItem};
+
+    let win = match focused(&app) {
+        Some(w) => w,
+        None => return Ok(()),
+    };
+
+    let menu = MenuBuilder::new(&app)
+        .item(&PredefinedMenuItem::cut(&app, None).map_err(|e| e.to_string())?)
+        .item(&PredefinedMenuItem::copy(&app, None).map_err(|e| e.to_string())?)
+        .item(&PredefinedMenuItem::paste(&app, None).map_err(|e| e.to_string())?)
+        .separator()
+        .item(&PredefinedMenuItem::select_all(&app, None).map_err(|e| e.to_string())?)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    win.popup_menu(&menu).map_err(|e| e.to_string())?;
     Ok(())
 }
 
