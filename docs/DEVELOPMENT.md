@@ -125,7 +125,7 @@ ls packages/desktop/src-tauri/binaries/      # ottie-daemon-<triple> + resources
 If missing, run `pnpm build:sidecar`.
 
 ### Port 6767 already in use
-A previously installed Paseo or Ottie daemon is still listening. Find and
+A previous Ottie daemon is still listening. Find and
 stop it before starting dev:
 
 ```bash

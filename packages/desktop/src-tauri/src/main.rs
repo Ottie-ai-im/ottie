@@ -348,7 +348,7 @@ fn dirs_data_dir() -> Option<PathBuf> {
 // ----------------------- open-project URL parsing -----------------------
 
 fn parse_open_project_path_from_argv(argv: Vec<String>) -> Option<String> {
-    // Mirrors packages/desktop/src/open-project-routing.ts in Paseo: accept
+    // Accept either an explicit deep link URL or a positional path argument:
     // either a custom URL (`ottie://open-project/<path>`) or a positional
     // path argument that points at an existing directory.
     for arg in argv.iter().skip(1) {

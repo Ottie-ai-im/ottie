@@ -57,7 +57,7 @@ fn daemon_status_value(info: &DaemonInfo) -> Value {
 // -------------------------- generic invoke -------------------------------
 //
 // The Electron build dispatched a long list of named commands through one
-// `paseo:invoke` channel. We mirror that here so the frontend doesn't need
+// `ottie_invoke` channel. We mirror that here so the frontend doesn't need
 // to know which calls are "real" vs. stubbed.
 
 #[derive(Serialize)]
@@ -69,7 +69,7 @@ pub struct NotImplemented {
 
 // `args` is currently informational — every dispatched branch ignores it,
 // but keeping it in the signature lets the frontend pass the same payload
-// shape Paseo's Electron preload used and lets us read it later without
+// shape the Electron preload used historically and lets us read it later without
 // rewiring the bridge.
 #[tauri::command]
 pub fn ottie_invoke<R: Runtime>(
