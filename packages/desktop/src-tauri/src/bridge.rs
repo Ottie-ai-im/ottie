@@ -223,11 +223,14 @@ pub async fn ottie_dialog_open<R: Runtime>(
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
-    fn first_string(paths: Vec<FilePath>) -> Option<String> {
-        paths
-            .into_iter()
-            .next()
-            .map(|p| p.to_string())
+    // FilePath's Display uses Debug formatting for the Path variant which
+    // wraps OS paths containing spaces in quotes. We want the raw OS path
+    // (or a plain URL string), so unwrap the variants explicitly.
+    fn fp_to_string(p: FilePath) -> String {
+        match p {
+            FilePath::Path(pb) => pb.to_string_lossy().into_owned(),
+            FilePath::Url(url) => url.to_string(),
+        }
     }
 
     if opts.directory {
@@ -237,7 +240,7 @@ pub async fn ottie_dialog_open<R: Runtime>(
                     .map(|ps| {
                         Value::Array(
                             ps.into_iter()
-                                .map(|p| Value::String(p.to_string()))
+                                .map(|p| Value::String(fp_to_string(p)))
                                 .collect(),
                         )
                     })
@@ -247,7 +250,7 @@ pub async fn ottie_dialog_open<R: Runtime>(
         } else {
             builder.pick_folder(move |path| {
                 let v = path
-                    .map(|p| Value::String(p.to_string()))
+                    .map(|p| Value::String(fp_to_string(p)))
                     .unwrap_or(Value::Null);
                 let _ = tx.send(v);
             });
@@ -258,7 +261,7 @@ pub async fn ottie_dialog_open<R: Runtime>(
                 .map(|ps| {
                     Value::Array(
                         ps.into_iter()
-                            .map(|p| Value::String(p.to_string()))
+                            .map(|p| Value::String(fp_to_string(p)))
                             .collect(),
                     )
                 })
@@ -268,13 +271,12 @@ pub async fn ottie_dialog_open<R: Runtime>(
     } else {
         builder.pick_file(move |path| {
             let v = path
-                .and_then(|p| Some(Value::String(p.to_string())))
+                .map(|p| Value::String(fp_to_string(p)))
                 .unwrap_or(Value::Null);
             let _ = tx.send(v);
         });
     }
 
-    let _ = first_string; // suppress unused warning when arms above don't all use it
     rx.await.map_err(|e| e.to_string())
 }
 
