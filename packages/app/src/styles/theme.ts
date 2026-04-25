@@ -158,15 +158,17 @@ const lightSemanticColors = {
   border: "#e4e4e7", // (was zinc-200, now zinc-200 - keep for contrast)
   borderAccent: "#ececf1", // Softer accent border for low-emphasis outlines
 
-  // Brand
-  accent: "#20744A",
-  accentBright: "#239956",
+  // Brand — WhatsApp-leaning green. accent is the calmer "deep" green
+  // used for buttons/active states; accentBright is the full saturation
+  // hue used for hover, focus rings, online indicators.
+  accent: "#1FA855",
+  accentBright: "#25D366",
   accentForeground: "#ffffff",
 
   // Semantic
   destructive: "#dc2626",
   destructiveForeground: "#ffffff",
-  success: "#20744A",
+  success: "#1FA855",
   successForeground: "#ffffff",
 
   // Legacy aliases (for gradual migration)
@@ -316,7 +318,7 @@ function buildDarkSemanticColors(tint: DarkThemeConfig) {
 // Dark tint definitions
 // ---------------------------------------------------------------------------
 
-// Ottie — subtle teal-green tint (default)
+// Ottie — subtle teal-green tint with WhatsApp-leaning brand green (default)
 const ottieDarkColors = buildDarkSemanticColors({
   surface0: "#181B1A",
   surface1: "#1E2120",
@@ -330,11 +332,11 @@ const ottieDarkColors = buildDarkSemanticColors({
   scrollbarHandle: "#717574",
   border: "#252B2A",
   borderAccent: "#2F3534",
-  accent: "#20744A",
-  accentBright: "#7ccba0",
+  accent: "#1FA855",
+  accentBright: "#25D366",
 });
 
-// Zinc — neutral gray, no tint
+// Zinc — neutral gray, no tint, but inherits Ottie brand green for accents
 const zincDarkColors = buildDarkSemanticColors({
   surface0: "#18181b",
   surface1: "#1f1f22",
@@ -348,8 +350,8 @@ const zincDarkColors = buildDarkSemanticColors({
   scrollbarHandle: "#71717a",
   border: "#27272a",
   borderAccent: "#303036",
-  accent: "#20744A",
-  accentBright: "#7ccba0",
+  accent: "#1FA855",
+  accentBright: "#25D366",
 });
 
 // Midnight — subtle blue tint
@@ -569,7 +571,7 @@ export const THEME_TO_UNISTYLES: Record<ThemeName, UnistylesThemeKey> = {
 
 export const THEME_SWATCHES: Record<ThemeName, string> = {
   light: "#ffffff",
-  dark: "#2D8B62",
+  dark: "#1FA855",
   zinc: "#808080",
   midnight: "#4A6BA8",
   claude: "#D97757",

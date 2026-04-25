@@ -127,7 +127,7 @@ export default {
         "expo-notifications",
         {
           icon: "./assets/images/notification-icon.png",
-          color: "#20744A",
+          color: "#1FA855",
         },
       ],
       "expo-audio",
