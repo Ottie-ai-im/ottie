@@ -1,186 +1,128 @@
-# Development
+# Development Setup
+
+How to go from a fresh checkout to a running Ottie desktop window.
 
 ## Prerequisites
 
-- Node.js (see `.tool-versions` for exact version)
-- npm workspaces (comes with Node)
+| Tool | Min version | Why | Install |
+|---|---|---|---|
+| Node.js | 20 | runtime for daemon dev mode, app build, scripts | mise / nvm / brew install node |
+| pnpm | 9 | monorepo / workspace manager | `curl -fsSL https://get.pnpm.io/install.sh \| sh -` |
+| Rust toolchain | stable | builds the Tauri v2 desktop shell | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Bun | 1.3+ | bundles the daemon into a single-file sidecar | `curl -fsSL https://bun.sh/install \| bash` |
 
-## Running the dev server
+### Tauri system dependencies
 
-```bash
-npm run dev
-```
+- **macOS**: Xcode Command Line Tools — `xcode-select --install`
+- **Linux** (unverified): WebKitGTK + build essentials. Ubuntu/Debian:
+  ```
+  sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+    libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+  ```
+  See https://v2.tauri.app/start/prerequisites/ for the canonical list.
+- **Windows** (unverified): WebView2 Runtime + Visual Studio Build Tools with
+  C++ workload. See the Tauri prerequisites page above.
 
-The dev script automatically picks an available port. Both the server and Expo app run in a Tmux session — see `CLAUDE.local.md` for system-specific session details.
+> Verified on macOS arm64 (aarch64-apple-darwin). Linux and Windows steps are
+> based on Tauri docs but have not been run end-to-end yet.
 
-### Running alongside the main checkout
-
-Set `OTTIE_HOME` to isolate state when running a second instance (e.g., in a worktree):
-
-```bash
-OTTIE_HOME=~/.ottie-blue npm run dev
-```
-
-- `OTTIE_HOME` — path for runtime state (agents, sockets, etc.). Defaults to `~/.ottie`.
-- In git worktrees, `npm run dev` derives a stable home like `~/.ottie-<worktree-name>`.
-  On first run, it seeds that home from `~/.ottie` by copying agent/project JSON metadata
-  and `config.json`; actual checkout/worktree directories are not copied.
-- `OTTIE_DEV_SEED_HOME=/path/to/home npm run dev` seeds from a different source home.
-- `OTTIE_DEV_RESET_HOME=1 npm run dev` clears and reseeds the derived worktree home.
-
-### Default ports
-
-In the main checkout:
-
-- Daemon: `localhost:6767`
-- Expo app: `localhost:8081`
-
-In worktrees or with `npm run dev`, ports may differ. Never assume defaults.
-
-### Daemon logs
-
-Check `$OTTIE_HOME/daemon.log` for trace-level logs.
-
-### Database queries
-
-Run arbitrary SQL against the SQLite database:
+## First-time Setup
 
 ```bash
-# Show table row counts
-npm run db:query
+git clone <repo>
+cd ottie
 
-# Run any SQL
-npm run db:query -- "SELECT agent_id, title, last_status FROM agent_snapshots"
-npm run db:query -- "SELECT agent_id, seq, item_kind FROM agent_timeline_rows ORDER BY committed_at DESC LIMIT 10"
+# 1. Install JS dependencies (~1–2 min)
+pnpm install
 
-# Point at a specific DB directory
-npm run db:query -- --db /path/to/db "SELECT ..."
+# 2. Pre-build workspace deps that other packages import via dist/
+pnpm --filter @ottie/highlight build
+pnpm --filter @ottie/relay build
+
+# 3. Build the daemon as a single-file sidecar (~10 s after Bun warm)
+pnpm build:sidecar
+
+# 4. Start the desktop dev environment
+pnpm dev:desktop
 ```
 
-Auto-detects the running dev daemon's database from `/tmp/ottie-dev.*`, `OTTIE_HOME`, or `~/.ottie/db`.
-Pass either a DB directory or a `ottie.sqlite` file to `--db`. The script opens the database directly in read-only mode.
+Step 4 will:
+- run `pnpm --filter @ottie/app web` (Expo Metro on `localhost:8081`) via
+  Tauri's `beforeDevCommand`,
+- wait for `8081` to return 200,
+- run `cargo run` to build and launch the desktop shell.
 
-## ottie.json service scripts
+The first run downloads ~400 Rust crates (5–10 min on a fresh machine).
+Subsequent runs are incremental and finish in seconds.
 
-Every `scripts` entry with `"type": "service"` receives these environment variables:
+## Daily Development
 
-| Variable                    | Value                                                                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `OTTIE_SERVICE_<NAME>_URL`  | Proxied daemon URL for a declared peer service. Prefer this for peer discovery; it survives peer restarts.                |
-| `OTTIE_SERVICE_<NAME>_PORT` | Raw ephemeral port for a declared peer service. Use only as a bypass escape hatch; it can go stale if that peer restarts. |
-| `OTTIE_URL`                 | Self alias for `OTTIE_SERVICE_<SELF>_URL`.                                                                                |
-| `OTTIE_PORT`                | Self alias for `OTTIE_SERVICE_<SELF>_PORT`.                                                                               |
-| `HOST`                      | Bind host for the service process.                                                                                        |
+| What you changed | What to do |
+|---|---|
+| Frontend (`packages/app`) | nothing — Metro hot-reloads automatically |
+| Tauri Rust (`packages/desktop/src-tauri`) | nothing — `tauri dev` watches and recompiles |
+| Daemon (`packages/server`) | `pnpm build:sidecar`, then restart `pnpm dev:desktop` |
+| Other workspace deps (`@ottie/highlight`, `@ottie/relay`) | rebuild that package, then rebuild sidecar if used |
 
-`<NAME>` is normalized from the script name by uppercasing it, replacing each run of non-`A-Z0-9` characters with `_`, and trimming leading or trailing `_`. For example, `app-server` and `app.server` both normalize to `APP_SERVER`; that collision fails at spawn time with an actionable error.
-
-`PORT` is not injected by default. If a framework requires `PORT`, set it in the command:
-
-```json
-{
-  "scripts": {
-    "web": {
-      "type": "service",
-      "command": "PORT=$OTTIE_PORT npm run dev:web"
-    }
-  }
-}
-```
-
-## Build sync gotchas
-
-### Relay → Daemon
-
-When changing `packages/relay/src/*`, rebuild before running the daemon:
+Run repo-wide checks before pushing:
 
 ```bash
-npm run build --workspace=@ottie/relay
+pnpm typecheck
+pnpm lint
+pnpm format:check
 ```
 
-The Node daemon imports `@ottie/relay` from `packages/relay/dist/*`, not `src/*`.
+## Production Build
 
-### Server → CLI
-
-When changing `packages/server/src/client/*` (especially `daemon-client.ts`) or shared WS protocol types, rebuild before running CLI commands:
+Not yet verified end-to-end. The intended command is:
 
 ```bash
-npm run build --workspace=@ottie/server
+pnpm build:desktop
+# = pnpm version:sync-internal && pnpm --filter @ottie/app build:web
+#   && pnpm --filter @ottie/desktop build  (= tauri build)
 ```
 
-The CLI imports `@ottie/server` via package exports resolving to `dist/*`. Stale `dist` means the CLI speaks an old protocol and fails with handshake warnings or timeouts.
+## Troubleshooting
 
-## CLI reference
+### `Failed to read icon ... unexpected end of file`
+The icon is empty. Check `packages/desktop/src-tauri/icons/icon.png` — it
+must be a real PNG, not zero-byte. The current placeholder is a 32×32
+transparent PNG; replace with the real Ottie logo when ready.
 
-Use `npm run cli` to run the local CLI (instead of the globally installed `ottie` which points to the main checkout).
+### `ERR_PNPM_FETCH_404 @ottie/expo-two-way-audio` on install
+pnpm v9 ships with `link-workspace-packages=false`. The repo's `.npmrc`
+sets it to `true` — verify the file is intact and re-run `pnpm install`.
+
+### Tauri compile stalls on a single crate
+Usually a network issue when fetching the crate from crates.io. Configure a
+mirror in `~/.cargo/config.toml` (or a corporate proxy) and re-run.
+
+### `Failed to load native module: pty.node` after daemon spawn
+Known issue. `bun build --compile` cannot embed `.node` native modules, so
+the bundled daemon dies the moment it touches `node-pty` (and likely the
+sherpa-onnx / silero VAD assets too). The Tauri shell still opens; the
+daemon just exits with code 1. Tracking item — see "Outstanding work" below.
+
+### Daemon binary missing for sidecar
+Tauri sidecars are looked up by target triple. Confirm your platform's
+binary exists:
 
 ```bash
-npm run cli -- ls -a -g              # List all agents globally
-npm run cli -- ls -a -g --json       # Same, as JSON
-npm run cli -- inspect <id>          # Show detailed agent info
-npm run cli -- logs <id>             # View agent timeline
-npm run cli -- daemon status         # Check daemon status
+rustc -vV | awk '/^host:/ {print $2}'   # e.g. aarch64-apple-darwin
+ls packages/desktop/src-tauri/binaries/  # should contain ottie-daemon-<triple>
 ```
 
-Use `--host <host:port>` to point the CLI at a different daemon:
+If missing, run `pnpm build:sidecar`.
 
-```bash
-npm run cli -- --host localhost:7777 ls -a
-```
+### Port 6767 already in use
+A previously installed Paseo / Ottie daemon is still listening. Stop it
+(`lsof -iTCP:6767 -sTCP:LISTEN` then `kill <pid>`) before starting dev.
 
-## Agent state
+## Outstanding work
 
-Agent data lives at:
-
-```
-$OTTIE_HOME/agents/{cwd-with-dashes}/{agent-id}.json
-```
-
-Find an agent by ID:
-
-```bash
-find $OTTIE_HOME/agents -name "{agent-id}.json"
-```
-
-Find by content:
-
-```bash
-rg -l "some title text" $OTTIE_HOME/agents/
-```
-
-## Provider session files
-
-Get the session ID from the agent JSON (`persistence.sessionId`), then:
-
-**Claude:**
-
-```
-~/.claude/projects/{cwd-with-dashes}/{session-id}.jsonl
-```
-
-**Codex:**
-
-```
-~/.codex/sessions/{YYYY}/{MM}/{DD}/rollout-{timestamp}-{session-id}.jsonl
-```
-
-## Testing with Playwright MCP
-
-Use Playwright MCP connecting to Metro at `http://localhost:8081` for UI testing.
-
-Do NOT use browser history (back/forward). Always navigate by clicking UI elements or using `browser_navigate` with the full URL — the app uses client-side routing and browser history breaks state.
-
-## Expo troubleshooting
-
-```bash
-npx expo-doctor
-```
-
-Diagnoses version mismatches and native module issues.
-
-## Typecheck
-
-Always run typecheck after changes:
-
-```bash
-npm run typecheck
-```
+- The bun-compiled daemon binary cannot load `pty.node` and other native
+  Node modules. Decide between (a) `node-sea` packaging, (b) shipping a
+  Node runtime + script bundle alongside the binary, or (c) excluding the
+  speech / pty features from the bundled daemon. See the latest startup
+  attempt report for context.
+- Linux and Windows prerequisites and bundle steps are not verified yet.
