@@ -4,8 +4,8 @@
   "version": "0.0.1",
   "identifier": "com.ottie.desktop",
   "build": {
-    "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeDevCommand": "pnpm --filter @ottie/app web",
+    "beforeBuildCommand": "pnpm build:web && pnpm build:sidecar",
     "devUrl": "http://localhost:8081",
     "frontendDist": "../../app/dist"
   },
