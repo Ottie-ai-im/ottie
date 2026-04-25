@@ -58,7 +58,8 @@ fn main() {
         .run(|app_handle, event| {
             if let RunEvent::ExitRequested { .. } | RunEvent::Exit = event {
                 let state = app_handle.state::<AppState>();
-                if let Some(handle) = state.daemon.lock().unwrap().take() {
+                let handle = state.daemon.lock().unwrap().take();
+                if let Some(handle) = handle {
                     if let Err(err) = handle.shutdown() {
                         log::warn!("daemon shutdown error: {err}");
                     }
