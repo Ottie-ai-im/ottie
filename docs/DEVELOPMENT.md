@@ -6,10 +6,13 @@ How to go from a fresh checkout to a running Ottie desktop window.
 
 | Tool | Min version | Why | Install |
 |---|---|---|---|
-| Node.js | 20 | runtime for daemon dev mode, app build, scripts | mise / nvm / brew install node |
+| Node.js | 20 | runtime for the daemon (in dev AND when the desktop app spawns it), app build, scripts | mise / nvm / brew install node |
 | pnpm | 9 | monorepo / workspace manager | `curl -fsSL https://get.pnpm.io/install.sh \| sh -` |
 | Rust toolchain | stable | builds the Tauri v2 desktop shell | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| Bun | 1.3+ | bundles the daemon into a single-file sidecar | `curl -fsSL https://bun.sh/install \| bash` |
+
+> The daemon is bundled with esbuild and runs on the user's system Node.
+> No Bun is required at runtime; we may revisit Node packaging for end-user
+> distribution (see "Outstanding work").
 
 ### Tauri system dependencies
 
@@ -39,7 +42,9 @@ pnpm install
 pnpm --filter @ottie/highlight build
 pnpm --filter @ottie/relay build
 
-# 3. Build the daemon as a single-file sidecar (~10 s after Bun warm)
+# 3. Bundle the daemon and stage it as the Tauri sidecar (~30 s)
+#    Runs esbuild + copies native packages + drops the wrapper into
+#    packages/desktop/src-tauri/binaries/.
 pnpm build:sidecar
 
 # 4. Start the desktop dev environment
@@ -97,32 +102,59 @@ sets it to `true` — verify the file is intact and re-run `pnpm install`.
 Usually a network issue when fetching the crate from crates.io. Configure a
 mirror in `~/.cargo/config.toml` (or a corporate proxy) and re-run.
 
-### `Failed to load native module: pty.node` after daemon spawn
-Known issue. `bun build --compile` cannot embed `.node` native modules, so
-the bundled daemon dies the moment it touches `node-pty` (and likely the
-sherpa-onnx / silero VAD assets too). The Tauri shell still opens; the
-daemon just exits with code 1. Tracking item — see "Outstanding work" below.
+### `ottie-daemon-wrapper: cannot find resources/server.mjs`
+The Tauri sidecar wrapper looked for the bundled daemon next to itself and
+its known fallback locations and found nothing. Run `pnpm build:sidecar` to
+re-stage the bundle. If the error persists, set
+`OTTIE_DAEMON_RESOURCES_DIR` to the absolute path of
+`packages/desktop/src-tauri/binaries/resources/`.
+
+### `node: command not found` (from the daemon log)
+The wrapper exec's the system `node`. Install Node 20+ and ensure the
+shell that launched `pnpm dev:desktop` has it on PATH.
 
 ### Daemon binary missing for sidecar
 Tauri sidecars are looked up by target triple. Confirm your platform's
-binary exists:
+files exist:
 
 ```bash
-rustc -vV | awk '/^host:/ {print $2}'   # e.g. aarch64-apple-darwin
-ls packages/desktop/src-tauri/binaries/  # should contain ottie-daemon-<triple>
+rustc -vV | awk '/^host:/ {print $2}'        # e.g. aarch64-apple-darwin
+ls packages/desktop/src-tauri/binaries/      # ottie-daemon-<triple> + resources/
 ```
 
 If missing, run `pnpm build:sidecar`.
 
 ### Port 6767 already in use
-A previously installed Paseo / Ottie daemon is still listening. Stop it
-(`lsof -iTCP:6767 -sTCP:LISTEN` then `kill <pid>`) before starting dev.
+A previously installed Paseo or Ottie daemon is still listening. Find and
+stop it before starting dev:
+
+```bash
+lsof -i:6767                                 # find PID
+kill -9 <PID>                                # then retry pnpm dev:desktop
+```
+
+You can also point the new daemon at an unused port:
+`OTTIE_LISTEN=127.0.0.1:6868 pnpm dev:desktop`.
 
 ## Outstanding work
 
-- The bun-compiled daemon binary cannot load `pty.node` and other native
-  Node modules. Decide between (a) `node-sea` packaging, (b) shipping a
-  Node runtime + script bundle alongside the binary, or (c) excluding the
-  speech / pty features from the bundled daemon. See the latest startup
-  attempt report for context.
-- Linux and Windows prerequisites and bundle steps are not verified yet.
+- **Stage 2: bundle the Node runtime into the Tauri app**. The current
+  pipeline depends on the user's system `node` being on PATH at launch.
+  For end-user distribution we need to either ship a Node binary inside
+  the app bundle (download from nodejs.org per platform) or switch the
+  daemon to a Node SEA build.
+- **Tauri `bundle.resources` for production**. `bundle.resources` is not
+  enabled yet because in dev mode Tauri evaluates the glob before
+  `pnpm build:sidecar` has populated it, which fails the build. For
+  packaged builds the `binaries/resources/` tree must be added so the
+  daemon JS and native modules ship inside the `.app` / `.msi`.
+- **Graceful shutdown via OS signals**. Closing the app window triggers
+  Tauri's `RunEvent::ExitRequested` which calls `daemon.shutdown()` and
+  cleans up. SIGTERM directly to the shell process bypasses that handler
+  and orphans the daemon — install a signal handler if SIGTERM cleanup
+  matters in CI.
+- **381 MB daemon resources tree** (~321 MB native deps + ~22 MB JS).
+  Trim by stripping non-host platform binaries from `onnxruntime-node`,
+  `node-pty`, and the sherpa optional packages.
+- **Linux and Windows** prerequisites and bundle steps are not verified
+  yet.
