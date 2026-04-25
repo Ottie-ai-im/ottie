@@ -1,0 +1,5 @@
+appId: com.ottie
+---
+- launchApp:
+    clearState: true
+- runFlow: flows/dev-client.yaml

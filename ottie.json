@@ -1,0 +1,22 @@
+{
+  "worktree": {
+    "setup": [
+      "npm ci",
+      "npm run build:daemon",
+      "cp \"$OTTIE_SOURCE_CHECKOUT_PATH/packages/server/.env\" \"$OTTIE_WORKTREE_PATH/packages/server/.env\""
+    ]
+  },
+  "scripts": {
+    "daemon": {
+      "type": "service",
+      "command": "OTTIE_LISTEN=0.0.0.0:$OTTIE_PORT ./scripts/dev-daemon.sh"
+    },
+    "app": {
+      "type": "service",
+      "command": "cd packages/app && BROWSER=none EXPO_PUBLIC_LOCAL_DAEMON=\"${OTTIE_SERVICE_DAEMON_URL#http://}\" npx expo start --port $OTTIE_PORT"
+    },
+    "typecheck": {
+      "command": "npm run typecheck"
+    }
+  }
+}
