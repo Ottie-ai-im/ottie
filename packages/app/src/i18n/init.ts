@@ -37,6 +37,11 @@ if (!i18n.isInitialized) {
     interpolation: { escapeValue: false },
     returnNull: false,
     react: { useSuspense: false },
+    // Hermes (the JS engine RN uses) ships without Intl.PluralRules. Without
+    // this flag, i18next logs a "your environment seems not to be Intl API
+    // compatible" error on iOS / Android. v3 plural format works fine for
+    // simple en/zh keys (no plural forms in our locale files yet).
+    compatibilityJSON: "v3",
   });
 
   // Pull persisted language out of AsyncStorage and switch if it's set
