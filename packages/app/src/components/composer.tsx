@@ -22,6 +22,14 @@ import {
   Image as ImageIcon,
   FileText,
   MapPin,
+  Paperclip,
+  Bot,
+  GitBranch,
+  Wrench,
+  FolderTree,
+  Users,
+  Settings as SettingsIcon,
+  Cpu,
 } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
@@ -40,6 +48,9 @@ import { useLocationShare } from "@/hooks/use-location-share";
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
 import { useTranslation } from "react-i18next";
 import { useSessionStore } from "@/stores/session-store";
+import { usePanelStore } from "@/stores/panel-store";
+import { useMobileQuickActionStore } from "@/stores/mobile-quick-action-store";
+import { useRouter } from "expo-router";
 import {
   MessageInput,
   type MessagePayload,
@@ -1015,6 +1026,9 @@ export function Composer({
   const setAgentStreamTail = useSessionStore((state) => state.setAgentStreamTail);
   const setAgentStreamHead = useSessionStore((state) => state.setAgentStreamHead);
 
+  const requestQuickAction = useMobileQuickActionStore((state) => state.request);
+  const router = useRouter();
+
   const isMobile = useIsCompactFormFactor();
   const isDesktopWebBreakpoint = resolveIsDesktopWebBreakpoint(isMobile);
   const messagePlaceholder = resolveMessagePlaceholder(isDesktopWebBreakpoint);
@@ -1522,59 +1536,174 @@ export function Composer({
     onChangeText(value ? `${value}\n${snippet}` : snippet);
   }, [shareLocation, onChangeText, value]);
 
-  const attachmentMenuItems = useMemo<AttachmentMenuItem[]>(
-    () => [
-      {
-        id: "camera",
-        label: t("composer.takePhoto", { defaultValue: "Take photo" }),
-        icon: <Camera size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
-        onSelect: () => {
-          void handleTakePhoto();
-        },
+  const attachmentMenuItems = useMemo<AttachmentMenuItem[]>(() => {
+    const cameraItem: AttachmentMenuItem = {
+      id: "camera",
+      label: t("composer.takePhoto", { defaultValue: "Take photo" }),
+      icon: <Camera size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+      onSelect: () => {
+        void handleTakePhoto();
       },
-      {
-        id: "image",
-        label: t("composer.addImage", { defaultValue: "Add image" }),
-        icon: <ImageIcon size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
-        onSelect: () => {
-          void handlePickImage();
-        },
+    };
+    const imageItem: AttachmentMenuItem = {
+      id: "image",
+      label: t("composer.addImage", { defaultValue: "Add image" }),
+      icon: <ImageIcon size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+      onSelect: () => {
+        void handlePickImage();
       },
-      {
-        id: "file",
-        label: t("composer.addFile", { defaultValue: "Add file" }),
-        icon: <FileText size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
-        onSelect: () => {
-          void handlePickFiles();
-        },
+    };
+    const fileItem: AttachmentMenuItem = {
+      id: "file",
+      label: t("composer.addFile", { defaultValue: "Add file" }),
+      icon: <FileText size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+      onSelect: () => {
+        void handlePickFiles();
       },
-      {
-        id: "location",
-        label: t("composer.shareLocation", { defaultValue: "Share location" }),
-        icon: <MapPin size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
-        onSelect: () => {
-          void handleShareLocation();
-        },
+    };
+    const locationItem: AttachmentMenuItem = {
+      id: "location",
+      label: t("composer.shareLocation", { defaultValue: "Share location" }),
+      icon: <MapPin size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+      onSelect: () => {
+        void handleShareLocation();
       },
-      {
-        id: "github",
-        label: t("composer.addGithub", { defaultValue: "Add issue or PR" }),
-        icon: <Github size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
-        onSelect: () => {
-          setIsGithubPickerOpen(true);
-        },
+    };
+    const githubItem: AttachmentMenuItem = {
+      id: "github",
+      label: t("composer.addGithub", { defaultValue: "Add issue or PR" }),
+      icon: <Github size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+      onSelect: () => {
+        setIsGithubPickerOpen(true);
       },
-    ],
-    [
-      handlePickImage,
-      handleTakePhoto,
-      handlePickFiles,
-      handleShareLocation,
-      t,
-      theme.colors.foregroundMuted,
-      theme.iconSize.md,
-    ],
-  );
+    };
+
+    const flatItems = [cameraItem, imageItem, fileItem, locationItem, githubItem];
+
+    // Desktop keeps the existing flat list — do not change desktop behavior.
+    if (!isMobile) {
+      return flatItems;
+    }
+
+    // Mobile: nested two-level menu. Attachments are one group; pickers and
+    // tools sit alongside so the "+" button doubles as a single entry point
+    // for actions that used to live in the workspace header on desktop.
+    const attachGroup: AttachmentMenuItem = {
+      id: "attach",
+      label: t("composer.menuAttach", { defaultValue: "Attach" }),
+      icon: <Paperclip size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+      children: flatItems,
+    };
+
+    const agentGroup: AttachmentMenuItem = {
+      id: "agent",
+      label: t("composer.menuAgent", { defaultValue: "Agent" }),
+      icon: <Bot size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+      children: [
+        {
+          id: "switch-agent",
+          label: t("composer.switchAgent", { defaultValue: "Switch agent" }),
+          icon: <Users size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+          onSelect: () => {
+            usePanelStore.getState().toggleAgentListForLayout({ isCompact: true });
+          },
+        },
+        {
+          id: "switch-model-hint",
+          label: t("composer.switchModelHint", {
+            defaultValue: "Switch model → tap chips above",
+          }),
+          icon: <Cpu size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+          onSelect: () => {
+            toast.show(
+              t("composer.switchModelHintToast", {
+                defaultValue: "Tap the model chip above the input to switch.",
+              }),
+            );
+          },
+        },
+      ],
+    };
+
+    const gitGroup: AttachmentMenuItem = {
+      id: "git",
+      label: t("composer.menuGit", { defaultValue: "Git" }),
+      icon: <GitBranch size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+      children: [
+        {
+          id: "switch-branch-hint",
+          label: t("composer.switchBranchHint", {
+            defaultValue: "Switch branch → tap the branch in the header",
+          }),
+          icon: <GitBranch size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+          onSelect: () => {
+            toast.show(
+              t("composer.switchBranchHintToast", {
+                defaultValue: "Tap the branch name at the top of the screen to switch.",
+              }),
+            );
+          },
+        },
+      ],
+    };
+
+    const toolsGroup: AttachmentMenuItem = {
+      id: "tools",
+      label: t("composer.menuTools", { defaultValue: "Tools" }),
+      icon: <Wrench size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+      children: [
+        {
+          id: "file-explorer",
+          label: t("composer.fileExplorer", { defaultValue: "File explorer" }),
+          icon: <FolderTree size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+          onSelect: () => {
+            usePanelStore.getState().toggleFileExplorerForCheckout({
+              checkout: { serverId, cwd, isGit: false },
+              isCompact: true,
+            });
+          },
+        },
+        {
+          id: "workspace-settings",
+          label: t("composer.workspaceSettings", { defaultValue: "Workspace settings" }),
+          icon: <SettingsIcon size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+          onSelect: () => {
+            requestQuickAction({ kind: "openWorkspaceSettings", serverId, cwd });
+            toast.show(
+              t("composer.workspaceSettingsComingSoon", {
+                defaultValue: "Workspace settings — wiring up next round",
+              }),
+            );
+          },
+        },
+        {
+          id: "settings",
+          label: t("composer.appSettings", { defaultValue: "App settings" }),
+          icon: <SettingsIcon size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+          onSelect: () => {
+            router.push("/settings");
+          },
+        },
+      ],
+    };
+
+    return [attachGroup, agentGroup, gitGroup, toolsGroup];
+  }, [
+    agentId,
+    cwd,
+    handlePickImage,
+    handleTakePhoto,
+    handlePickFiles,
+    handleShareLocation,
+    isMobile,
+    requestQuickAction,
+    router,
+    serverId,
+    t,
+    theme.colors.foregroundMuted,
+    theme.iconSize.md,
+    toast,
+  ]);
 
   const handleToggleGithubItem = useCallback(
     (item: GitHubSearchItem) => {

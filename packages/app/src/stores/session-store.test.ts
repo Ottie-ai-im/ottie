@@ -25,6 +25,7 @@ function createWorkspace(
     status: input.status ?? "done",
     diffStat: input.diffStat ?? null,
     scripts: input.scripts ?? [],
+    activityAt: input.activityAt ?? null,
   };
 }
 
@@ -106,9 +107,9 @@ describe("normalizeWorkspaceDescriptor", () => {
       workspaceKind: "checkout",
       name: "main",
       status: "done",
-      activityAt: null,
       diffStat: null,
       scripts: [],
+      activityAt: null,
     } as WorkspaceDescriptorPayload;
 
     const workspace = normalizeWorkspaceDescriptor(payload);

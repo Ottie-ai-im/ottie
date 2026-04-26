@@ -126,6 +126,7 @@ import {
 import { findAdjacentPane } from "@/utils/split-navigation";
 import { isAbsolutePath } from "@/utils/path";
 import { useIsCompactFormFactor, supportsDesktopPaneSplits } from "@/constants/layout";
+import { useWorkspaceReadStore } from "@/stores/workspace-read-store";
 import { isWeb, isNative } from "@/constants/platform";
 import { useContainerWidthBelow } from "@/hooks/use-container-width";
 
@@ -1129,6 +1130,17 @@ function WorkspaceScreenContent({
     [workspaceId],
   );
   const workspaceDescriptor = useWorkspace(normalizedServerId, normalizedWorkspaceId);
+
+  // Mark workspace as read whenever it becomes the focused route, and re-mark
+  // each time fresh activity arrives while it stays open. Drives the unread
+  // pill on the sidebar.
+  const workspaceActivityAt = workspaceDescriptor?.activityAt ?? null;
+  useEffect(() => {
+    if (!normalizedServerId || !normalizedWorkspaceId) return;
+    useWorkspaceReadStore
+      .getState()
+      .markRead(normalizedServerId, normalizedWorkspaceId, workspaceActivityAt ?? undefined);
+  }, [normalizedServerId, normalizedWorkspaceId, workspaceActivityAt]);
 
   const workspaceTerminalScopeKey = useMemo(
     () =>

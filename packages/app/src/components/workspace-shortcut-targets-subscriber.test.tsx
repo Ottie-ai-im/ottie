@@ -33,6 +33,7 @@ function workspaceDescriptor(input: {
     status: "done",
     diffStat: null,
     scripts: [],
+    activityAt: null,
   };
 }
 

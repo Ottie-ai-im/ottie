@@ -10,6 +10,7 @@ import {
 } from "@/utils/agent-initialization";
 import { deriveInitialTimelineRequest } from "@/contexts/session-timeline-bootstrap-policy";
 import { isWeb } from "@/constants/platform";
+import { loadCachedTimeline } from "@/stores/timeline-cache-store";
 
 const INIT_TIMEOUT_MS = 5 * 60_000;
 const NATIVE_INITIAL_TIMELINE_LIMIT = 200;
@@ -77,6 +78,24 @@ export function useAgentInitialization({
       attachInitTimeout(key, timeoutId);
 
       setAgentInitializing(agentId, true);
+
+      // Best-effort cold-start prefill: paint last-seen messages from the
+      // local cache before the daemon round-trip resolves. The authoritative
+      // fetch below replaces these in-place via the existing seq-based merge.
+      void (async () => {
+        if (session?.agentStreamTail?.get(agentId)?.length) return;
+        const cached = await loadCachedTimeline(serverId, agentId);
+        if (!cached || cached.length === 0) return;
+        const store = useSessionStore.getState();
+        const tailNow = store.sessions[serverId]?.agentStreamTail?.get(agentId);
+        if (tailNow && tailNow.length > 0) return;
+        store.setAgentStreamTail(serverId, (prev) => {
+          if (prev.get(agentId)?.length) return prev;
+          const next = new Map(prev);
+          next.set(agentId, cached);
+          return next;
+        });
+      })();
 
       if (!client) {
         setAgentInitializing(agentId, false);

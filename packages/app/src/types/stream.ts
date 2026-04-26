@@ -54,12 +54,24 @@ export type StreamItem =
 
 export type UserMessageImageAttachment = AttachmentMetadata;
 
+/**
+ * IM-style delivery confirmation:
+ *   - "pending": optimistic local-only item, no daemon ack yet (single tick)
+ *   - "sent":    daemon ack received OR row reconciled from authoritative timeline (double tick)
+ *   - "failed":  daemon refused or timeout — UI may offer retry
+ *
+ * Older clients without this field are treated as "sent" (legacy rows from the
+ * authoritative timeline are always considered delivered).
+ */
+export type UserMessageDeliveryState = "pending" | "sent" | "failed";
+
 export interface UserMessageItem {
   kind: "user_message";
   id: string;
   text: string;
   timestamp: Date;
   images?: UserMessageImageAttachment[];
+  deliveryState?: UserMessageDeliveryState;
 }
 
 export interface AssistantMessageItem {
@@ -203,12 +215,18 @@ function appendUserMessage(
       ? state[existingIndex]
       : null;
   const preservedImages = existing?.images;
+  // When the authoritative timeline event arrives for an optimistic row, we
+  // promote pending → sent. A row that's already failed sticks (the user
+  // probably never saw the daemon ack); explicit retry transitions it back.
+  const nextDeliveryState: UserMessageDeliveryState =
+    existing?.deliveryState === "failed" ? "failed" : "sent";
 
   const nextItem: UserMessageItem = {
     kind: "user_message",
     id: entryId,
     text: chunk,
     timestamp,
+    deliveryState: nextDeliveryState,
     ...(preservedImages && preservedImages.length > 0 ? { images: preservedImages } : {}),
   };
 

@@ -34,6 +34,7 @@ function workspace(
     status: input.status ?? "done",
     diffStat: input.diffStat ?? null,
     scripts: input.scripts ?? [],
+    activityAt: input.activityAt ?? null,
   };
 }
 

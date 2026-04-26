@@ -85,6 +85,7 @@ function workspace(input: {
     status: input.status ?? "done",
     diffStat: null,
     scripts: input.scripts ?? [],
+    activityAt: null,
   };
 }
 

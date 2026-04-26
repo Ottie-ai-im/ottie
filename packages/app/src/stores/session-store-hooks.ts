@@ -57,9 +57,19 @@ function compareWorkspaceStructureItems(
 }
 
 function compareWorkspaceStructureProjects(
-  left: WorkspaceStructureProject,
-  right: WorkspaceStructureProject,
+  left: WorkspaceStructureProject & { lastActivityAt?: string | null },
+  right: WorkspaceStructureProject & { lastActivityAt?: string | null },
 ): number {
+  // Most-recent-first (WeChat style). null/missing activity sorts after any
+  // dated entry so newly-added projects without history don't jump to the top.
+  const leftAt = left.lastActivityAt ?? null;
+  const rightAt = right.lastActivityAt ?? null;
+  if (leftAt !== rightAt) {
+    if (leftAt === null) return 1;
+    if (rightAt === null) return -1;
+    if (leftAt > rightAt) return -1;
+    if (leftAt < rightAt) return 1;
+  }
   return left.projectName.localeCompare(right.projectName, undefined, {
     numeric: true,
     sensitivity: "base",
@@ -194,6 +204,7 @@ function selectWorkspaceStructureProjects(
     }
   >();
 
+  const lastActivityByProject = new Map<string, string | null>();
   for (const workspace of workspaces.values()) {
     const project =
       byProject.get(workspace.projectId) ??
@@ -215,6 +226,14 @@ function selectWorkspaceStructureProjects(
       workspaceKey: `${serverId}:${workspace.id}`,
     });
     byProject.set(workspace.projectId, project);
+
+    const wsActivity = workspace.activityAt ?? null;
+    if (wsActivity) {
+      const prior = lastActivityByProject.get(workspace.projectId) ?? null;
+      if (prior === null || wsActivity > prior) {
+        lastActivityByProject.set(workspace.projectId, wsActivity);
+      }
+    }
   }
 
   const projects = Array.from(byProject.values()).map(
@@ -227,7 +246,12 @@ function selectWorkspaceStructureProjects(
     },
   );
 
-  projects.sort(compareWorkspaceStructureProjects);
+  projects.sort((a, b) =>
+    compareWorkspaceStructureProjects(
+      Object.assign({}, a, { lastActivityAt: lastActivityByProject.get(a.projectKey) ?? null }),
+      Object.assign({}, b, { lastActivityAt: lastActivityByProject.get(b.projectKey) ?? null }),
+    ),
+  );
   return projects;
 }
 

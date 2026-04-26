@@ -44,8 +44,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ChevronRight, ChevronLeft } from "lucide-react-native";
 import { useWebElementScrollbar } from "@/components/use-web-scrollbar";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { formatShortcut } from "@/utils/format-shortcut";
@@ -70,9 +72,16 @@ export interface MessagePayload {
 export interface AttachmentMenuItem {
   id: string;
   label: string;
-  onSelect: () => void;
+  onSelect?: () => void;
   disabled?: boolean;
   icon?: React.ReactElement | null;
+  /**
+   * Optional nested entries. When provided (mobile only), tapping the item
+   * descends into a second-level list inside the same dropdown sheet.
+   * Desktop renders this as a flat list and ignores `children` — composer is
+   * expected to pass flat items on desktop, grouped items on mobile.
+   */
+  children?: AttachmentMenuItem[];
 }
 
 export interface MessageInputProps {
@@ -214,19 +223,98 @@ function AttachButtonIcon({
 }
 
 function AttachmentMenuList({ items }: { items: AttachmentMenuItem[] }) {
+  const { theme } = useUnistyles();
+  const hasNestedItems = useMemo(
+    () => items.some((item) => Array.isArray(item.children) && item.children.length > 0),
+    [items],
+  );
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+
+  // Reset to top level whenever the items list itself changes (menu reopen).
+  useEffect(() => {
+    setActiveGroupId(null);
+  }, [items]);
+
+  if (!hasNestedItems) {
+    return (
+      <>
+        {items.map((item) => (
+          <DropdownMenuItem
+            key={item.id}
+            testID={`message-input-attachment-menu-item-${item.id}`}
+            disabled={item.disabled}
+            onSelect={item.onSelect}
+            leading={item.icon ?? null}
+          >
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </>
+    );
+  }
+
+  if (activeGroupId !== null) {
+    const activeGroup = items.find((item) => item.id === activeGroupId);
+    const children = activeGroup?.children ?? [];
+    return (
+      <>
+        <DropdownMenuItem
+          testID="message-input-attachment-menu-back"
+          onSelect={() => setActiveGroupId(null)}
+          leading={<ChevronLeft size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />}
+          closeOnSelect={false}
+        >
+          {activeGroup?.label ?? ""}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {children.map((child) => (
+          <DropdownMenuItem
+            key={child.id}
+            testID={`message-input-attachment-menu-item-${child.id}`}
+            disabled={child.disabled}
+            onSelect={child.onSelect}
+            leading={child.icon ?? null}
+          >
+            {child.label}
+          </DropdownMenuItem>
+        ))}
+      </>
+    );
+  }
+
   return (
     <>
-      {items.map((item) => (
-        <DropdownMenuItem
-          key={item.id}
-          testID={`message-input-attachment-menu-item-${item.id}`}
-          disabled={item.disabled}
-          onSelect={item.onSelect}
-          leading={item.icon ?? null}
-        >
-          {item.label}
-        </DropdownMenuItem>
-      ))}
+      {items.map((item) => {
+        const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+        if (hasChildren) {
+          return (
+            <DropdownMenuItem
+              key={item.id}
+              testID={`message-input-attachment-menu-group-${item.id}`}
+              disabled={item.disabled}
+              onSelect={() => setActiveGroupId(item.id)}
+              leading={item.icon ?? null}
+              trailing={
+                <ChevronRight size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+              }
+              closeOnSelect={false}
+            >
+              {item.label}
+            </DropdownMenuItem>
+          );
+        }
+        return (
+          <DropdownMenuItem
+            key={item.id}
+            testID={`message-input-attachment-menu-item-${item.id}`}
+            disabled={item.disabled}
+            onSelect={item.onSelect}
+            leading={item.icon ?? null}
+          >
+            {item.label}
+          </DropdownMenuItem>
+        );
+      })}
     </>
   );
 }
@@ -1944,68 +2032,78 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           ref={inputWrapperRef}
           style={
             isCompact
-              ? [styles.inputWrapper, styles.inputWrapperCompact, inputWrapperStyle, inputAnimatedStyle]
+              ? [
+                  styles.inputWrapper,
+                  styles.inputWrapperCompact,
+                  inputWrapperStyle,
+                  inputAnimatedStyle,
+                ]
               : inputWrapperCombinedStyle
           }
         >
           {isCompact ? (
-            // Mobile WeChat-style: [mic] [input] [+ / send], all on one row.
-            <View style={styles.compactRow}>
-              <Pressable
-                onPressIn={handleVoicePressIn}
-                onPressOut={handleVoicePressOut}
-                disabled={!isDictationStartEnabled}
-                accessibilityRole="button"
-                accessibilityLabel={voiceButtonAccessibilityLabel}
-                style={styles.compactCircleButton}
-              >
-                {renderVoiceButtonIcon({})}
-              </Pressable>
-              <View style={[styles.textInputScrollWrapper, styles.textInputScrollWrapperCompact]}>
-                <TextInput
-                  ref={textInputRef}
-                  value={value}
-                  onChangeText={handleInputChange}
-                  placeholder={placeholder}
-                  placeholderTextColor={theme.colors.surface4}
-                  accessibilityLabel="Message agent..."
-                  onFocus={handleInputFocus}
-                  onBlur={handleInputBlur}
-                  style={textInputStyle}
-                  multiline
-                  scrollEnabled={isWeb ? inputHeight >= MAX_INPUT_HEIGHT : true}
-                  onContentSizeChange={handleContentSizeChange}
-                  editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
-                  onSelectionChange={handleSelectionChange}
-                  autoFocus={isWeb && autoFocus}
-                />
-                {inputScrollbar}
+            // Mobile WeChat-style: status row above + [mic] [input] [+ / send].
+            // The status row hosts AgentStatusBar (model / mode / thinking /
+            // features pickers) — without it those switchers have no entry.
+            <View style={styles.compactColumn}>
+              {leftContent ? <View style={styles.compactStatusRow}>{leftContent}</View> : null}
+              <View style={styles.compactRow}>
+                <Pressable
+                  onPressIn={handleVoicePressIn}
+                  onPressOut={handleVoicePressOut}
+                  disabled={!isDictationStartEnabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={voiceButtonAccessibilityLabel}
+                  style={styles.compactCircleButton}
+                >
+                  {renderVoiceButtonIcon({})}
+                </Pressable>
+                <View style={[styles.textInputScrollWrapper, styles.textInputScrollWrapperCompact]}>
+                  <TextInput
+                    ref={textInputRef}
+                    value={value}
+                    onChangeText={handleInputChange}
+                    placeholder={placeholder}
+                    placeholderTextColor={theme.colors.surface4}
+                    accessibilityLabel="Message agent..."
+                    onFocus={handleInputFocus}
+                    onBlur={handleInputBlur}
+                    style={textInputStyle}
+                    multiline
+                    scrollEnabled={isWeb ? inputHeight >= MAX_INPUT_HEIGHT : true}
+                    onContentSizeChange={handleContentSizeChange}
+                    editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
+                    onSelectionChange={handleSelectionChange}
+                    autoFocus={isWeb && autoFocus}
+                  />
+                  {inputScrollbar}
+                </View>
+                {hasComposerText && shouldShowSendButton ? (
+                  <SendButtonTooltip
+                    shouldShow={shouldShowSendButton}
+                    canPressLoadingButton={canPressLoadingButton}
+                    onSubmitLoadingPress={onSubmitLoadingPress}
+                    onDefaultSendAction={handleDefaultSendAction}
+                    isSendButtonDisabled={isSendButtonDisabled}
+                    submitAccessibilityLabel={submitAccessibilityLabel}
+                    sendButtonCombinedStyle={sendButtonCombinedStyle}
+                    isSubmitLoading={isSubmitLoading}
+                    submitIcon={submitIcon}
+                    buttonIconSize={buttonIconSize}
+                    submitButtonAccessibilityLabel={submitButtonAccessibilityLabel}
+                    defaultActionQueues={defaultActionQueues}
+                    sendKeys={sendKeys}
+                  />
+                ) : (
+                  <AttachmentDropdown
+                    isConnected={isConnected}
+                    disabled={disabled}
+                    attachButtonStyle={attachButtonStyle}
+                    renderAttachButtonIcon={renderAttachButtonIcon}
+                    attachmentMenuItems={attachmentMenuItems}
+                  />
+                )}
               </View>
-              {hasComposerText && shouldShowSendButton ? (
-                <SendButtonTooltip
-                  shouldShow={shouldShowSendButton}
-                  canPressLoadingButton={canPressLoadingButton}
-                  onSubmitLoadingPress={onSubmitLoadingPress}
-                  onDefaultSendAction={handleDefaultSendAction}
-                  isSendButtonDisabled={isSendButtonDisabled}
-                  submitAccessibilityLabel={submitAccessibilityLabel}
-                  sendButtonCombinedStyle={sendButtonCombinedStyle}
-                  isSubmitLoading={isSubmitLoading}
-                  submitIcon={submitIcon}
-                  buttonIconSize={buttonIconSize}
-                  submitButtonAccessibilityLabel={submitButtonAccessibilityLabel}
-                  defaultActionQueues={defaultActionQueues}
-                  sendKeys={sendKeys}
-                />
-              ) : (
-                <AttachmentDropdown
-                  isConnected={isConnected}
-                  disabled={disabled}
-                  attachButtonStyle={attachButtonStyle}
-                  renderAttachButtonIcon={renderAttachButtonIcon}
-                  attachmentMenuItems={attachmentMenuItems}
-                />
-              )}
             </View>
           ) : (
             <>
@@ -2145,11 +2243,22 @@ const styles = StyleSheet.create((theme: Theme) => ({
   // in the middle, attach/send on the right. Override paddings so the row
   // hugs the children instead of stacking like the desktop layout.
   inputWrapperCompact: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
     gap: theme.spacing[2],
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
+  },
+  compactColumn: {
+    flexDirection: "column",
+    gap: theme.spacing[2],
+    width: "100%",
+  },
+  compactStatusRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing[1],
   },
   compactRow: {
     flexDirection: "row",

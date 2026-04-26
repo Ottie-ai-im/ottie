@@ -13,7 +13,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { useTranslation } from "react-i18next";
 import { useQueries } from "@tanstack/react-query";
-import { useProjectLastActivityAt } from "@/hooks/use-project-last-activity";
+import { useProjectLastActivityAt, useProjectUnreadCount } from "@/hooks/use-project-last-activity";
 import { formatRelativeIM } from "@/utils/relative-time";
 import {
   useCallback,
@@ -1232,10 +1232,12 @@ function ProjectHeaderRow({
     [isDragging, selected, isHovered],
   );
 
-  const lastActivityAt = useProjectLastActivityAt(
-    serverId ?? null,
-    project.workspaces.map((w) => w.workspaceId),
+  const workspaceIdsForActivity = useMemo(
+    () => project.workspaces.map((w) => w.workspaceId),
+    [project.workspaces],
   );
+  const lastActivityAt = useProjectLastActivityAt(serverId ?? null, workspaceIdsForActivity);
+  const unreadCount = useProjectUnreadCount(serverId ?? null, workspaceIdsForActivity);
   const subtitleText = useMemo(() => {
     const lang = i18nLanguage === "zh" ? "zh" : "en";
     return formatRelativeIM(lastActivityAt, lang);
@@ -1264,6 +1266,11 @@ function ProjectHeaderRow({
           ) : null}
         </View>
       </View>
+      {unreadCount > 0 ? (
+        <View style={styles.unreadBadge}>
+          <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+        </View>
+      ) : null}
       <ProjectRowTrailingActions
         project={project}
         displayName={displayName}
@@ -2931,6 +2938,23 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.medium,
+    lineHeight: 14,
+  },
+  unreadBadge: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+    backgroundColor: theme.colors.destructive,
+    flexShrink: 0,
+    marginRight: theme.spacing[1],
+  },
+  unreadBadgeText: {
+    color: "#FFFFFF",
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.bold,
     lineHeight: 14,
   },
 }));

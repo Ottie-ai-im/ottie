@@ -40,6 +40,8 @@ import {
   ChevronRight,
   ChevronDown,
   Check,
+  CheckCheck,
+  AlertCircle,
   CheckSquare,
   Copy,
   TriangleAlertIcon,
@@ -106,6 +108,11 @@ interface UserMessageProps {
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
   disableOuterSpacing?: boolean;
+  /**
+   * IM-style send confirmation. Undefined = legacy/historical row (treated as
+   * sent — never show a tick on rehydrated history).
+   */
+  deliveryState?: import("@/types/stream").UserMessageDeliveryState;
 }
 
 const MessageOuterSpacingContext = createContext(false);
@@ -359,6 +366,17 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
   copyButtonVisible: {
     opacity: 1,
   },
+  deliveryIndicator: {
+    alignSelf: "flex-end",
+    marginTop: theme.spacing[1],
+    marginRight: theme.spacing[1],
+    opacity: 0.8,
+  },
+  deliveryIndicatorFailed: {
+    alignSelf: "flex-end",
+    marginTop: theme.spacing[1],
+    marginRight: theme.spacing[1],
+  },
 }));
 
 function UserMessageAttachmentThumbnail({ image }: { image: UserMessageImageAttachment }) {
@@ -377,6 +395,7 @@ export const UserMessage = memo(function UserMessage({
   isFirstInGroup = true,
   isLastInGroup = true,
   disableOuterSpacing,
+  deliveryState,
 }: UserMessageProps) {
   const { theme } = useUnistyles();
   const isCompact = useIsCompactFormFactor();
@@ -450,10 +469,41 @@ export const UserMessage = memo(function UserMessage({
             onHoverChange={setCopyButtonHovered}
           />
         ) : null}
+        <UserMessageDeliveryIndicator state={deliveryState} muted={theme.colors.foregroundMuted} />
       </Pressable>
     </View>
   );
 });
+
+function UserMessageDeliveryIndicator({
+  state,
+  muted,
+}: {
+  state: import("@/types/stream").UserMessageDeliveryState | undefined;
+  muted: string;
+}) {
+  // Hide for legacy / historical rows (no state attached).
+  if (!state) return null;
+  if (state === "pending") {
+    return (
+      <View style={userMessageStylesheet.deliveryIndicator}>
+        <Check size={14} color={muted} />
+      </View>
+    );
+  }
+  if (state === "sent") {
+    return (
+      <View style={userMessageStylesheet.deliveryIndicator}>
+        <CheckCheck size={14} color={muted} />
+      </View>
+    );
+  }
+  return (
+    <View style={userMessageStylesheet.deliveryIndicatorFailed}>
+      <AlertCircle size={14} color="#E11D48" />
+    </View>
+  );
+}
 
 interface AssistantMessageProps {
   message: string;

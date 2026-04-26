@@ -96,6 +96,7 @@ import type { LocalSpeechProviderConfig } from "./speech/providers/local/config.
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
 import { createSpeechService } from "./speech/speech-runtime.js";
 import { AgentManager } from "./agent/agent-manager.js";
+import { DurableAgentTimelineStore } from "./agent/durable-agent-timeline-store.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
@@ -457,6 +458,9 @@ export async function createOttieDaemon(
       github,
     },
   });
+  const durableTimelineStore = new DurableAgentTimelineStore({
+    rootDir: path.join(config.ottieHome, "timeline"),
+  });
   const agentManager = new AgentManager({
     clients: {
       ...createAllClients(logger, {
@@ -469,6 +473,7 @@ export async function createOttieDaemon(
     },
     registry: agentStorage,
     logger,
+    durableTimelineStore,
   });
   const providerRegistry = buildProviderRegistry(logger, {
     runtimeSettings: config.agentProviderSettings,

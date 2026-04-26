@@ -24,6 +24,7 @@ function workspace(input: {
     diffStat: null,
     scripts: [],
     hasRunningScripts: false,
+    activityAt: null,
   };
 }
 
@@ -34,6 +35,7 @@ function project(projectKey: string, workspaces: SidebarWorkspaceEntry[]): Sideb
     projectKind: "git",
     iconWorkingDir: workspaces[0]?.workspaceDirectory ?? "",
     workspaces,
+    lastActivityAt: null,
   };
 }
 

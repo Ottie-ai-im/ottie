@@ -6,7 +6,7 @@ import { useClientActivity } from "@/hooks/use-client-activity";
 import { usePushTokenRegistration } from "@/hooks/use-push-token-registration";
 import { clearArchiveAgentPending } from "@/hooks/use-archive-agent";
 import { prefetchProvidersSnapshot } from "@/hooks/use-providers-snapshot";
-import { generateMessageId, type StreamItem } from "@/types/stream";
+import { generateMessageId, type StreamItem, type UserMessageDeliveryState } from "@/types/stream";
 import {
   createSessionAgentStreamReducerQueue,
   processTimelineResponse,
@@ -1654,6 +1654,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         id: messageId,
         text: message,
         timestamp: new Date(),
+        deliveryState: "pending",
       };
 
       // Append to head if streaming (keeps the user message with the current
@@ -1662,7 +1663,8 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       const currentHead = useSessionStore
         .getState()
         .sessions[serverId]?.agentStreamHead?.get(agentId);
-      if (currentHead && currentHead.length > 0) {
+      const isHead = Boolean(currentHead && currentHead.length > 0);
+      if (isHead) {
         setAgentStreamHead(serverId, (prev) => {
           const head = prev.get(agentId) || [];
           const updated = new Map(prev);
@@ -1678,9 +1680,33 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         });
       }
 
+      const updateDeliveryState = (state: UserMessageDeliveryState) => {
+        const setter = isHead ? setAgentStreamHead : setAgentStreamTail;
+        setter(serverId, (prev) => {
+          const current = prev.get(agentId);
+          if (!current) return prev;
+          const idx = current.findIndex(
+            (item) => item.kind === "user_message" && item.id === messageId,
+          );
+          if (idx < 0) return prev;
+          const target = current[idx];
+          if (target.kind !== "user_message") return prev;
+          // No-op if the row was already reconciled into "sent" by the
+          // authoritative timeline event before our promise resolved.
+          if (target.deliveryState === state) return prev;
+          if (target.deliveryState === "sent" && state !== "failed") return prev;
+          const next = [...current];
+          next[idx] = { ...target, deliveryState: state };
+          const updated = new Map(prev);
+          updated.set(agentId, next);
+          return updated;
+        });
+      };
+
       const imagesData = await encodeImages(images);
       if (!client) {
         console.warn("[Session] sendAgentMessage skipped: daemon unavailable");
+        updateDeliveryState("failed");
         return;
       }
       void client
@@ -1689,8 +1715,12 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
           ...(attachments && attachments.length > 0 ? { attachments } : {}),
         })
+        .then(() => {
+          updateDeliveryState("sent");
+        })
         .catch((error) => {
           console.error("[Session] Failed to send agent message:", error);
+          updateDeliveryState("failed");
         });
     },
     [serverId, client, setAgentStreamTail, setAgentStreamHead],

@@ -41,6 +41,7 @@ function workspace(input: Partial<WorkspaceDescriptor> & Pick<WorkspaceDescripto
     status: input.status ?? "done",
     diffStat: input.diffStat ?? null,
     scripts: input.scripts ?? [],
+    activityAt: input.activityAt ?? null,
   } satisfies WorkspaceDescriptor;
 }
 

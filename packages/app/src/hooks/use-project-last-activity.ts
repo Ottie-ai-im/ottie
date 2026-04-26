@@ -4,6 +4,7 @@
 // refresh — no extra round trips.
 
 import { useSessionStore } from "@/stores/session-store";
+import { useWorkspaceReadStore } from "@/stores/workspace-read-store";
 
 export function useProjectLastActivityAt(
   serverId: string | null,
@@ -32,4 +33,30 @@ export function useWorkspaceActivityAt(
     if (!serverId || !workspaceId) return null;
     return state.sessions[serverId]?.workspaces.get(workspaceId)?.activityAt ?? null;
   });
+}
+
+/**
+ * Counts how many workspaces in this project have activity newer than the
+ * user's last-read timestamp. Reactively recomputes when either store changes.
+ */
+export function useProjectUnreadCount(
+  serverId: string | null,
+  workspaceIds: readonly string[],
+): number {
+  const activitySnapshot = useSessionStore((state) => {
+    if (!serverId) return null;
+    return state.sessions[serverId]?.workspaces ?? null;
+  });
+  const lastReadByKey = useWorkspaceReadStore((state) => state.lastReadAtByWorkspaceKey);
+  if (!serverId || !activitySnapshot) return 0;
+  let count = 0;
+  for (const id of workspaceIds) {
+    const at = activitySnapshot.get(id)?.activityAt ?? null;
+    if (!at) continue;
+    const lastRead = lastReadByKey[`${serverId}:${id}`] ?? null;
+    if (lastRead === null || at > lastRead) {
+      count += 1;
+    }
+  }
+  return count;
 }

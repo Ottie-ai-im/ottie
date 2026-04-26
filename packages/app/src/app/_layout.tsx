@@ -77,6 +77,7 @@ import {
 } from "@/stores/navigation-active-workspace-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSessionStore } from "@/stores/session-store";
+import { useTimelineCacheSync } from "@/hooks/use-timeline-cache-sync";
 import { THEME_TO_UNISTYLES, type ThemeName } from "@/styles/theme";
 import type { HostProfile } from "@/types/host-connection";
 import { resolveActiveHost } from "@/utils/active-host";
@@ -889,6 +890,7 @@ function NavigationActiveWorkspaceObserver() {
 }
 
 function AppShell() {
+  useTimelineCacheSync();
   return (
     <SidebarAnimationProvider>
       <HorizontalScrollProvider>

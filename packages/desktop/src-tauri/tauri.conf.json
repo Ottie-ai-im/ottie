@@ -5,7 +5,7 @@
   "identifier": "com.ottie.desktop",
   "build": {
     "beforeDevCommand": "pnpm --filter @ottie/app web",
-    "beforeBuildCommand": "pnpm build:web && pnpm build:sidecar",
+    "beforeBuildCommand": "pnpm --filter @ottie/app build:web && pnpm -w build:sidecar",
     "devUrl": "http://localhost:8081",
     "frontendDist": "../../app/dist"
   },
@@ -27,11 +27,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [
-      "icons/icon.png"
-    ],
-    "externalBin": [
-      "binaries/ottie-daemon"
-    ]
+    "icon": ["icons/icon.png"],
+    "externalBin": ["binaries/ottie-daemon"]
   }
 }

@@ -21,6 +21,7 @@ function workspace(overrides: Partial<SidebarWorkspaceEntry> = {}): SidebarWorks
     diffStat: null,
     scripts: [],
     hasRunningScripts: false,
+    activityAt: null,
     ...overrides,
   };
 }
@@ -32,6 +33,7 @@ function project(overrides: Partial<SidebarProjectEntry> = {}): SidebarProjectEn
     projectKind: "git",
     iconWorkingDir: "/repo",
     workspaces: [workspace()],
+    lastActivityAt: null,
     ...overrides,
   };
 }

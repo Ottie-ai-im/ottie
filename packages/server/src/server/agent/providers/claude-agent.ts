@@ -2884,10 +2884,13 @@ class ClaudeAgentSession implements AgentSession {
         this.appendUserMessageEvents(message, events);
         break;
       case "assistant": {
-        const timelineItems = this.mapBlocksToTimeline(message.message.content, {
-          suppressAssistantText: options?.suppressAssistantText ?? false,
-          suppressReasoning: options?.suppressReasoning ?? false,
-        });
+        const timelineItems = this.mapBlocksToTimeline(
+          message.message.content as unknown as ClaudeContentChunk[],
+          {
+            suppressAssistantText: options?.suppressAssistantText ?? false,
+            suppressReasoning: options?.suppressReasoning ?? false,
+          },
+        );
         for (const item of timelineItems) {
           events.push({ type: "timeline", item, provider: "claude" });
         }
@@ -3014,7 +3017,11 @@ class ClaudeAgentSession implements AgentSession {
       return;
     }
     if (Array.isArray(content)) {
-      this.appendUserContentArrayEvents(content, messageId, events);
+      this.appendUserContentArrayEvents(
+        content as unknown as ClaudeContentChunk[],
+        messageId,
+        events,
+      );
     }
   }
 

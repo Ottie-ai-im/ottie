@@ -68,6 +68,12 @@ export default {
       supportsTablet: true,
       infoPlist: {
         NSMicrophoneUsageDescription: "This app needs access to the microphone for voice commands.",
+        NSLocationWhenInUseUsageDescription:
+          "Ottie uses your location when you tap 'Share location' so you can include it in messages to your agents.",
+        NSCameraUsageDescription:
+          "Ottie uses the camera when you tap 'Take photo' to attach images to messages.",
+        NSPhotoLibraryUsageDescription:
+          "Ottie reads your photo library when you tap 'Add image' to attach images to messages.",
         ITSAppUsesNonExemptEncryption: false,
       },
       bundleIdentifier: variant.packageId,

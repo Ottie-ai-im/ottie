@@ -8,7 +8,6 @@
   "license": "AGPL-3.0-or-later",
   "author": "TODO",
   "repository": "TODO",
-  "packageManager": "pnpm@9.12.0",
   "scripts": {
     "dev": "./scripts/dev.sh",
     "dev:win": "powershell ./scripts/dev.ps1",
@@ -71,6 +70,7 @@
     "release:major": "pnpm run release:check && pnpm run version:all:major && pnpm run release:publish && pnpm run release:push"
   },
   "devDependencies": {
+    "@types/react-dom": "^19",
     "@types/ws": "^8.5.14",
     "@typescript/native-preview": "7.0.0-dev.20260423.1",
     "concurrently": "^9.2.1",
@@ -84,6 +84,7 @@
     "typescript": "^5.9.3",
     "ws": "^8.20.0"
   },
+  "packageManager": "pnpm@9.12.0",
   "pnpm": {
     "overrides": {
       "lightningcss": "1.30.1",
