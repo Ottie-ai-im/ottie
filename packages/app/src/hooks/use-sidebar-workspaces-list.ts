@@ -30,6 +30,12 @@ export interface SidebarWorkspaceEntry {
   diffStat: { additions: number; deletions: number } | null;
   scripts: WorkspaceDescriptor["scripts"];
   hasRunningScripts: boolean;
+  /**
+   * ISO timestamp of the last activity in this workspace (agent run, message,
+   * etc.) — surfaced from the daemon's `activityAt` field. Drives IM-style
+   * "Tue 14:32" / "5m" subtitles in the sidebar.
+   */
+  activityAt: string | null;
 }
 
 export interface SidebarProjectEntry {
@@ -38,6 +44,11 @@ export interface SidebarProjectEntry {
   projectKind: WorkspaceDescriptor["projectKind"];
   iconWorkingDir: string;
   workspaces: SidebarWorkspaceEntry[];
+  /**
+   * Derived: max(activityAt) across this project's workspaces. Used to sort
+   * projects most-recent-first in the sidebar (WeChat-style).
+   */
+  lastActivityAt: string | null;
 }
 
 export interface SidebarWorkspacesListResult {
@@ -66,6 +77,7 @@ function createStructuralWorkspaceEntry(input: {
     diffStat: null,
     scripts: [],
     hasRunningScripts: false,
+    activityAt: null,
   };
 }
 
@@ -86,6 +98,7 @@ export function createSidebarWorkspaceEntry(input: {
     diffStat: input.workspace.diffStat,
     scripts: input.workspace.scripts,
     hasRunningScripts: input.workspace.scripts.some((script) => script.lifecycle === "running"),
+    activityAt: input.workspace.activityAt ?? null,
   };
 }
 
@@ -109,7 +122,17 @@ export function buildSidebarProjectsFromStructure(input: {
         workspaceId,
       }),
     ),
+    lastActivityAt: null,
   }));
+}
+
+export function deriveProjectLastActivityAt(workspaces: SidebarWorkspaceEntry[]): string | null {
+  let max: string | null = null;
+  for (const w of workspaces) {
+    if (!w.activityAt) continue;
+    if (max === null || w.activityAt > max) max = w.activityAt;
+  }
+  return max;
 }
 
 export function applyStoredOrdering<T>(input: {

@@ -13,6 +13,8 @@ import {
 import * as Haptics from "expo-haptics";
 import { useTranslation } from "react-i18next";
 import { useQueries } from "@tanstack/react-query";
+import { useProjectLastActivityAt } from "@/hooks/use-project-last-activity";
+import { formatRelativeIM } from "@/utils/relative-time";
 import {
   useCallback,
   useMemo,
@@ -1187,6 +1189,8 @@ function ProjectHeaderRow({
   dragHandleProps,
 }: ProjectHeaderRowProps) {
   const { theme } = useUnistyles();
+  const { i18n: i18nInstance } = useTranslation();
+  const i18nLanguage = i18nInstance.language;
   const [isHovered, setIsHovered] = useState(false);
   const isMobileBreakpoint = useIsCompactFormFactor();
   const handleBeginWorkspaceSetup = useCallback(() => {
@@ -1228,6 +1232,15 @@ function ProjectHeaderRow({
     [isDragging, selected, isHovered],
   );
 
+  const lastActivityAt = useProjectLastActivityAt(
+    serverId ?? null,
+    project.workspaces.map((w) => w.workspaceId),
+  );
+  const subtitleText = useMemo(() => {
+    const lang = i18nLanguage === "zh" ? "zh" : "en";
+    return formatRelativeIM(lastActivityAt, lang);
+  }, [lastActivityAt, i18nLanguage]);
+
   const rowChildren = (
     <>
       <View style={styles.projectRowLeft}>
@@ -1244,6 +1257,11 @@ function ProjectHeaderRow({
           <Text style={styles.projectTitle} numberOfLines={1}>
             {displayName}
           </Text>
+          {subtitleText ? (
+            <Text style={styles.projectSubtitle} numberOfLines={1}>
+              {subtitleText}
+            </Text>
+          ) : null}
         </View>
       </View>
       <ProjectRowTrailingActions
@@ -2651,11 +2669,18 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   projectTitleGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
+    // IM-style: title + subtitle stack vertically so each row reads like a
+    // chat conversation entry (name on top, last activity beneath).
+    flexDirection: "column",
+    justifyContent: "center",
+    gap: 2,
     flex: 1,
     minWidth: 0,
+  },
+  projectSubtitle: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.normal,
   },
   projectIcon: {
     width: "100%",
