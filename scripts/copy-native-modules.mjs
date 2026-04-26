@@ -44,8 +44,9 @@ const PLATFORM_OPTIONALS = [
 // directory so pnpm's per-package node_modules can be walked.
 const resolveFromPaths = new Set(REQUIRE_ROOTS);
 
-function tryResolvePackageJson(name) {
-  for (const from of resolveFromPaths) {
+function tryResolvePackageJson(name, fromOverride) {
+  const fromList = fromOverride ? [fromOverride] : Array.from(resolveFromPaths);
+  for (const from of fromList) {
     const req = createRequire(from);
     // Fast path: subpath import. Fails for packages with restrictive
     // `exports` fields (Node returns ERR_PACKAGE_PATH_NOT_EXPORTED).
@@ -67,14 +68,22 @@ function tryResolvePackageJson(name) {
   return null;
 }
 
-function copyPackage(name, packageJsonPath) {
+function copyPackage(name, packageJsonPath, destRoot = DEST_NM) {
   const src = dirname(packageJsonPath);
-  const dest = join(DEST_NM, name);
+  const dest = join(destRoot, name);
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dirname(dest), { recursive: true });
   // dereference: true follows symlinks (pnpm uses them); preserveTimestamps
   // helps reproducibility a little.
   cpSync(src, dest, { recursive: true, dereference: true });
+}
+
+function readPackageVersion(packageJsonPath) {
+  try {
+    return JSON.parse(readFileSync(packageJsonPath, "utf-8")).version;
+  } catch {
+    return null;
+  }
 }
 
 function readDeps(packageJsonPath) {
@@ -86,39 +95,66 @@ function readDeps(packageJsonPath) {
   }
 }
 
-const seen = new Set();
-const queue = [...EXTERNALS, ...PLATFORM_OPTIONALS];
+// Map<topLevelPkgName, version> — what we've already placed at dist/node_modules/<name>.
+// When a transitive dep needs a *different* version of a package already at
+// the top level, we nest it under its parent's node_modules instead.
+const topLevelVersions = new Map();
+const queue = [...EXTERNALS.map((n) => ({ name: n, parentDir: null, parentDest: null })),
+                ...PLATFORM_OPTIONALS.map((n) => ({ name: n, parentDir: null, parentDest: null }))];
 const missing = [];
 const optionalSet = new Set(PLATFORM_OPTIONALS);
 
 let copiedCount = 0;
 while (queue.length > 0) {
-  const name = queue.shift();
-  if (seen.has(name)) continue;
-  seen.add(name);
+  const { name, parentDir, parentDest } = queue.shift();
 
-  const pkgJson = tryResolvePackageJson(name);
+  // Resolve the package — prefer the parent's directory so transitive
+  // version conflicts (which@5 → isexe@3 vs hoisted isexe@2) pick the
+  // version this parent actually depends on.
+  const pkgJson = tryResolvePackageJson(name, parentDir);
   if (!pkgJson) {
     if (!optionalSet.has(name)) missing.push(name);
     continue;
   }
 
-  copyPackage(name, pkgJson);
-  copiedCount++;
-  const tag = optionalSet.has(name) ? " (platform optional)" : "";
-  process.stdout.write(`  ✓ ${name}${tag}\n`);
+  const version = readPackageVersion(pkgJson) ?? "0.0.0";
+  const existingVersion = topLevelVersions.get(name);
+  let destRoot = DEST_NM;
+  let nested = false;
 
-  // After copying, register the source package's REAL path (deref symlink)
-  // as a future resolution root so transitive deps reachable through pnpm's
-  // per-package node_modules can be found.
-  try {
-    resolveFromPaths.add(realpathSync(pkgJson));
-  } catch {
-    resolveFromPaths.add(pkgJson);
+  if (existingVersion === undefined) {
+    // First time we see this package — place it at the top level.
+    topLevelVersions.set(name, version);
+  } else if (existingVersion === version) {
+    // Same version already placed — skip the copy.
+    continue;
+  } else if (parentDest) {
+    // Conflict: a different version is at the top level. Nest a copy
+    // under the parent's own node_modules so Node's resolver picks it.
+    destRoot = join(parentDest, "node_modules");
+    nested = true;
+  } else {
+    // No parent context (top-level external itself) — keep top-level wins.
+    continue;
   }
 
+  copyPackage(name, pkgJson, destRoot);
+  copiedCount++;
+  const tag = optionalSet.has(name) ? " (platform optional)" : nested ? " (nested)" : "";
+  process.stdout.write(`  ✓ ${name}@${version}${tag}\n`);
+
+  const copiedDest = join(destRoot, name);
+  const realPkgJson = (() => {
+    try { return realpathSync(pkgJson); } catch { return pkgJson; }
+  })();
+  resolveFromPaths.add(realPkgJson);
+
   for (const dep of readDeps(pkgJson)) {
-    if (!seen.has(dep)) queue.push(dep);
+    queue.push({
+      name: dep,
+      parentDir: realPkgJson,
+      parentDest: copiedDest,
+    });
   }
 }
 

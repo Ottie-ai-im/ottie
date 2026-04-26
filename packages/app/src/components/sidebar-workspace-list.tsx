@@ -1165,6 +1165,22 @@ function useLongPressDragInteraction(input: {
   };
 }
 
+function stripDragHandleButtonRole(
+  attributes: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!attributes) return {};
+  // dnd-kit's useSortable.attributes carries `role: "button"`. RN 0.81's web
+  // bridge honors raw `role` and emits a real <button>, which collides with
+  // any inner <button> (kebab, etc). Drop it; tabIndex + aria-* still keep
+  // the wrapper keyboard-accessible.
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(attributes)) {
+    if (key === "role") continue;
+    next[key] = value;
+  }
+  return next;
+}
+
 function ProjectHeaderRow({
   project,
   displayName,
@@ -1291,10 +1307,17 @@ function ProjectHeaderRow({
     </>
   );
 
+  // dnd-kit injects `role: "button"` into attributes; on RN-web the View
+  // then renders as <button>, which collides with the inner kebab <button>
+  // (HTML doesn't allow nested buttons). Strip role so the wrapper stays a
+  // <div role=... we control>; the activator stays keyboard-accessible via
+  // tabIndex + listeners.
+  const dragAttributes = stripDragHandleButtonRole(dragHandleProps?.attributes);
+
   if (menuController) {
     return (
       <View
-        {...dragHandleProps?.attributes}
+        {...dragAttributes}
         {...dragHandleProps?.listeners}
         ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
         onPointerEnter={handlePointerEnter}
@@ -1317,7 +1340,7 @@ function ProjectHeaderRow({
 
   return (
     <View
-      {...dragHandleProps?.attributes}
+      {...dragAttributes}
       {...dragHandleProps?.listeners}
       ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
       onPointerEnter={handlePointerEnter}
@@ -1414,7 +1437,7 @@ function WorkspaceRowInner({
   return (
     <WorkspaceHoverCard workspace={workspace} prHint={prHint} isDragging={isDragging}>
       <View
-        {...dragHandleProps?.attributes}
+        {...stripDragHandleButtonRole(dragHandleProps?.attributes)}
         {...dragHandleProps?.listeners}
         ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
         style={styles.workspaceRowContainer}
