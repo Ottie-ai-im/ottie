@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useTranslation } from "react-i18next";
 import type { ComponentType, ReactNode } from "react";
+import { setLanguage, type SupportedLanguage } from "@/i18n";
 import {
   Alert,
   Pressable,
@@ -223,15 +225,39 @@ function GeneralSection({
   handleSendBehaviorChange,
 }: GeneralSectionProps) {
   const { theme } = useUnistyles();
+  const { t, i18n } = useTranslation();
   const iconSize = theme.iconSize.md;
   const iconColor = theme.colors.foregroundMuted;
 
+  const currentLanguage: SupportedLanguage = i18n.language === "zh" ? "zh" : "en";
+  const languageOptions = useMemo(
+    () => [
+      { value: "en" as const, label: t("settings.languageEnglish") },
+      { value: "zh" as const, label: t("settings.languageChinese") },
+    ],
+    [t],
+  );
+  const handleLanguageChange = useCallback((value: SupportedLanguage) => {
+    void setLanguage(value);
+  }, []);
+
   return (
-    <SettingsSection title="General">
+    <SettingsSection title={t("settings.general")}>
       <View style={settingsStyles.card}>
         <View style={settingsStyles.row}>
           <View style={settingsStyles.rowContent}>
-            <Text style={settingsStyles.rowTitle}>Theme</Text>
+            <Text style={settingsStyles.rowTitle}>{t("settings.language")}</Text>
+          </View>
+          <SegmentedControl
+            size="sm"
+            value={currentLanguage}
+            onValueChange={handleLanguageChange}
+            options={languageOptions}
+          />
+        </View>
+        <View style={ROW_WITH_BORDER_STYLE}>
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowTitle}>{t("settings.theme")}</Text>
           </View>
           <DropdownMenu>
             <DropdownMenuTrigger style={themeTriggerStyle}>

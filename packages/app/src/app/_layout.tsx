@@ -1,4 +1,5 @@
 import "@/styles/unistyles";
+import "@/i18n/init";
 import { PortalProvider } from "@gorhom/portal";
 import { QueryClientProvider } from "@tanstack/react-query";
 import * as Linking from "expo-linking";

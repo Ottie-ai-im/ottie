@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -157,6 +158,7 @@ export interface WelcomeScreenProps {
 
 export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const appVersion = resolveAppVersion();
@@ -206,7 +208,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
     ? [
         {
           key: "direct-connection",
-          label: "Direct connection",
+          label: t("welcome.openOnDesktop"),
           testID: "welcome-direct-connection",
           primary: true,
           icon: Link2,
@@ -214,7 +216,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
         },
         {
           key: "paste-pairing-link",
-          label: "Paste pairing link",
+          label: t("welcome.pasteLink"),
           testID: "welcome-paste-pairing-link",
           primary: false,
           icon: ClipboardPaste,
@@ -224,7 +226,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
     : [
         {
           key: "scan-qr",
-          label: "Scan QR code",
+          label: t("welcome.scanQr"),
           testID: "welcome-scan-qr",
           primary: true,
           icon: QrCode,
@@ -232,7 +234,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
         },
         {
           key: "direct-connection",
-          label: "Direct connection",
+          label: t("welcome.openOnDesktop"),
           testID: "welcome-direct-connection",
           primary: false,
           icon: Link2,
@@ -240,7 +242,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
         },
         {
           key: "paste-pairing-link",
-          label: "Paste pairing link",
+          label: t("welcome.pasteLink"),
           testID: "welcome-paste-pairing-link",
           primary: false,
           icon: ClipboardPaste,
@@ -267,11 +269,11 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
           <OttieLogo size={96} />
           <View style={styles.copyBlock}>
             {isConnectingToSavedHosts ? (
-              <Text style={styles.subtitle}>Connecting…</Text>
+              <Text style={styles.subtitle}>{t("common.loading")}</Text>
             ) : (
               <>
-                <Text style={styles.title}>Welcome to Ottie</Text>
-                <Text style={styles.subtitle}>Connect your computer to get started</Text>
+                <Text style={styles.title}>{t("welcome.title")}</Text>
+                <Text style={styles.subtitle}>{t("welcome.subtitle")}</Text>
                 {isNative ? (
                   <Pressable style={styles.setupLink} onPress={handleOpenOttieSite}>
                     <Text style={styles.setupLinkText}>ottie.app</Text>

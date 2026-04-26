@@ -1,0 +1,88 @@
+{
+  "common": {
+    "send": "发送",
+    "cancel": "取消",
+    "save": "保存",
+    "retry": "重试",
+    "open": "打开",
+    "close": "关闭",
+    "delete": "删除",
+    "remove": "移除",
+    "confirm": "确认",
+    "ok": "好",
+    "loading": "加载中…",
+    "error": "错误",
+    "back": "返回",
+    "next": "下一步",
+    "done": "完成",
+    "settings": "设置",
+    "search": "搜索",
+    "edit": "编辑",
+    "copy": "复制",
+    "paste": "粘贴",
+    "copied": "已复制"
+  },
+  "welcome": {
+    "title": "欢迎使用 Ottie",
+    "subtitle": "连接你的电脑以开始使用",
+    "scanQr": "扫描二维码",
+    "pasteLink": "粘贴配对链接",
+    "openOnDesktop": "在电脑上打开 Ottie",
+    "needHelp": "需要帮助？"
+  },
+  "sidebar": {
+    "sessions": "会话",
+    "addProject": "添加项目",
+    "noProjectsYet": "暂无项目",
+    "noProjectsHint": "添加项目以开始使用",
+    "projects": "项目",
+    "spaces": "空间"
+  },
+  "project": {
+    "addProject": "添加项目",
+    "openInFinder": "在 Finder 中打开",
+    "openInTerminal": "在终端中打开",
+    "removeProject": "移除项目",
+    "newWorkspace": "新建工作区",
+    "projectActions": "项目操作"
+  },
+  "agent": {
+    "selectModel": "选择模型",
+    "messageThePrompt": "给 agent 发消息、@文件、或使用 /commands 和 /skills",
+    "send": "发送",
+    "stop": "停止",
+    "newAgent": "新建 agent",
+    "running": "运行中",
+    "idle": "空闲",
+    "needsInput": "需要输入",
+    "errored": "出错"
+  },
+  "errors": {
+    "somethingWentWrong": "出错了",
+    "localServerFailedToStart": "本地服务启动失败。如果问题持续，请在 GitHub 上反馈并附上下方日志。",
+    "daemonNotConnected": "未连接到 daemon",
+    "workspaceDirectoryNotFound": "找不到工作区目录",
+    "pathDoesNotExist": "路径不存在",
+    "unableToConnect": "无法连接",
+    "selectAModel": "请选择模型",
+    "copyLogs": "复制日志",
+    "openGithubIssue": "在 GitHub 提 issue",
+    "docs": "文档"
+  },
+  "settings": {
+    "title": "设置",
+    "general": "通用",
+    "appearance": "外观",
+    "devices": "设备",
+    "about": "关于",
+    "language": "语言",
+    "languageEnglish": "English",
+    "languageChinese": "中文",
+    "theme": "主题",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "version": "版本",
+    "pairDevice": "配对设备",
+    "scanThisQr": "用手机端 Ottie 扫描下方二维码，或复制下方链接。"
+  }
+}

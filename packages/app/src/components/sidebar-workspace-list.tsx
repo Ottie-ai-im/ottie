@@ -11,6 +11,7 @@ import {
   type PressableStateCallbackType,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useTranslation } from "react-i18next";
 import { useQueries } from "@tanstack/react-query";
 import {
   useCallback,
@@ -2278,6 +2279,7 @@ export function SidebarWorkspaceList({
     [pathname],
   );
   const selectionEnabled = isWorkspaceRoute;
+  const { t } = useTranslation();
 
   const projectIconRequests = useMemo(() => {
     if (!serverId) {
@@ -2521,10 +2523,10 @@ export function SidebarWorkspaceList({
     <>
       {projects.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>No projects yet</Text>
-          <Text style={styles.emptyText}>Add a project to get started</Text>
+          <Text style={styles.emptyTitle}>{t("sidebar.noProjectsYet")}</Text>
+          <Text style={styles.emptyText}>{t("sidebar.noProjectsHint")}</Text>
           <Button variant="ghost" size="sm" leftIcon={Plus} onPress={onAddProject}>
-            Add project
+            {t("sidebar.addProject")}
           </Button>
         </View>
       ) : (

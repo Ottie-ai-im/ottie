@@ -1,0 +1,88 @@
+{
+  "common": {
+    "send": "Send",
+    "cancel": "Cancel",
+    "save": "Save",
+    "retry": "Retry",
+    "open": "Open",
+    "close": "Close",
+    "delete": "Delete",
+    "remove": "Remove",
+    "confirm": "Confirm",
+    "ok": "OK",
+    "loading": "Loading…",
+    "error": "Error",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "settings": "Settings",
+    "search": "Search",
+    "edit": "Edit",
+    "copy": "Copy",
+    "paste": "Paste",
+    "copied": "Copied"
+  },
+  "welcome": {
+    "title": "Welcome to Ottie",
+    "subtitle": "Connect your computer to get started",
+    "scanQr": "Scan QR code",
+    "pasteLink": "Paste pairing link",
+    "openOnDesktop": "Open Ottie on your computer",
+    "needHelp": "Need help?"
+  },
+  "sidebar": {
+    "sessions": "Sessions",
+    "addProject": "Add project",
+    "noProjectsYet": "No projects yet",
+    "noProjectsHint": "Add a project to get started",
+    "projects": "Projects",
+    "spaces": "Spaces"
+  },
+  "project": {
+    "addProject": "Add project",
+    "openInFinder": "Open in Finder",
+    "openInTerminal": "Open in terminal",
+    "removeProject": "Remove project",
+    "newWorkspace": "New workspace",
+    "projectActions": "Project actions"
+  },
+  "agent": {
+    "selectModel": "Select a model",
+    "messageThePrompt": "Message the agent, tag @files, or use /commands and /skills",
+    "send": "Send",
+    "stop": "Stop",
+    "newAgent": "New agent",
+    "running": "Running",
+    "idle": "Idle",
+    "needsInput": "Needs input",
+    "errored": "Errored"
+  },
+  "errors": {
+    "somethingWentWrong": "Something went wrong",
+    "localServerFailedToStart": "The local server failed to start. If this keeps happening, please report the issue on GitHub and include the logs below.",
+    "daemonNotConnected": "Daemon not connected",
+    "workspaceDirectoryNotFound": "Workspace directory not found",
+    "pathDoesNotExist": "Path does not exist",
+    "unableToConnect": "Unable to connect",
+    "selectAModel": "Select a model",
+    "copyLogs": "Copy logs",
+    "openGithubIssue": "Open GitHub issue",
+    "docs": "Docs"
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "appearance": "Appearance",
+    "devices": "Devices",
+    "about": "About",
+    "language": "Language",
+    "languageEnglish": "English",
+    "languageChinese": "中文",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "version": "Version",
+    "pairDevice": "Pair Device",
+    "scanThisQr": "Scan this QR code with Ottie on your phone, or copy the link below."
+  }
+}
