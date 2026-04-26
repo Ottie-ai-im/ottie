@@ -1,9 +1,10 @@
 name = "ottie-relay"
-account_id = "10ed39a1dbf316e30abd0c409bed40d6"
 main = "src/cloudflare-adapter.ts"
 compatibility_date = "2024-12-01"
 
-routes = [{ pattern = "relay.ottie.app", custom_domain = true }]
+# Bind to your own subdomain. Cloudflare will auto-issue an HTTPS cert
+# the first time `wrangler deploy` runs against this route.
+routes = [{ pattern = "relay.claws.company", custom_domain = true }]
 
 [observability]
 enabled = true

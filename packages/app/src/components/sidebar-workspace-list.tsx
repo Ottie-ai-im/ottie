@@ -129,7 +129,7 @@ function getWorkspacePrIconColor(
 ) {
   switch (state) {
     case "merged":
-      return theme.colors.palette.purple[500];
+      return theme.colors.palette.zinc[400];
     case "open":
       return theme.colors.palette.green[500];
     case "closed":
@@ -2612,9 +2612,9 @@ const styles = StyleSheet.create((theme) => ({
     textAlign: "center",
   },
   projectRow: {
-    minHeight: 36,
+    minHeight: 44,
     paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
     borderRadius: theme.borderRadius.lg,
     marginBottom: theme.spacing[1],
     flexDirection: "row",
@@ -2622,6 +2622,10 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     gap: theme.spacing[2],
     userSelect: "none",
+    // 3px transparent left "accent rail" reserved up front so the row width
+    // doesn't shift when an item becomes selected (selected state fills it).
+    borderLeftWidth: 3,
+    borderLeftColor: "transparent",
   },
   projectRowHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,
@@ -2654,12 +2658,12 @@ const styles = StyleSheet.create((theme) => ({
   projectIcon: {
     width: "100%",
     height: "100%",
-    borderRadius: theme.borderRadius.sm,
+    borderRadius: theme.borderRadius.md,
   },
   projectLeadingVisualSlot: {
     position: "relative",
-    width: theme.iconSize.md,
-    height: theme.iconSize.md,
+    width: 24,
+    height: 24,
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
@@ -2667,20 +2671,22 @@ const styles = StyleSheet.create((theme) => ({
   projectIconFallback: {
     width: "100%",
     height: "100%",
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    // Tinted brand background + no border = squircle "app icon" feel.
+    backgroundColor:
+      theme.colorScheme === "light" ? "rgba(31, 168, 85, 0.12)" : "rgba(37, 211, 102, 0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
   projectIconFallbackText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: 9,
+    color: theme.colors.accent,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.semibold,
   },
   projectTitle: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
-    fontWeight: "400",
+    fontWeight: theme.fontWeight.medium,
     minWidth: 0,
     flexShrink: 1,
   },
@@ -2802,7 +2808,11 @@ const styles = StyleSheet.create((theme) => ({
     ...theme.shadow.md,
   },
   sidebarRowSelected: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
+    // WhatsApp / IM style: tinted brand background + left accent rail so the
+    // active conversation pops without dominating the sidebar.
+    backgroundColor:
+      theme.colorScheme === "light" ? "rgba(31, 168, 85, 0.10)" : "rgba(37, 211, 102, 0.16)",
+    borderLeftColor: theme.colors.accent,
   },
   workspaceRowContainer: {
     position: "relative",

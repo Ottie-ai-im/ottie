@@ -443,9 +443,9 @@ function getModeIconColor(
   colorTier: AgentModeColorTier | undefined,
   palette: {
     blue: { 500: string };
-    green: { 500: string };
+    green: { 400: string; 500: string };
     red: { 500: string };
-    purple: { 500: string };
+    zinc: { 400: string };
   },
 ): string {
   switch (colorTier) {
@@ -456,7 +456,7 @@ function getModeIconColor(
     case "dangerous":
       return palette.red[500];
     case "planning":
-      return palette.purple[500];
+      return palette.zinc[400];
     default:
       return palette.blue[500];
   }

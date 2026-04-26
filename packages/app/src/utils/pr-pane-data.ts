@@ -42,14 +42,14 @@ type PullRequestTimeline = PullRequestTimelineResponse["payload"];
 type PullRequestTimelineItem = PullRequestTimeline["items"][number];
 
 const AVATAR_COLORS = [
-  "#8b5cf6",
-  "#f97316",
-  "#0ea5e9",
-  "#10b981",
-  "#ef4444",
-  "#eab308",
-  "#ec4899",
-  "#6366f1",
+  "#1FA855",
+  "#22C55E",
+  "#16A34A",
+  "#15803D",
+  "#52525B",
+  "#71717A",
+  "#3F3F46",
+  "#27272A",
 ];
 
 export function mapPrPaneData(

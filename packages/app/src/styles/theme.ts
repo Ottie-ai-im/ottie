@@ -91,12 +91,6 @@ export const baseColors = {
     400: "#fbbf24",
   },
 
-  // Purple scale
-  purple: {
-    500: "#a855f7",
-    600: "#9333ea",
-  },
-
   // Orange scale
   orange: {
     500: "#f97316",
@@ -124,14 +118,14 @@ const lightStatusColors = {
   statusSuccess: "#15803d", // green-700
   statusDanger: "#b91c1c", // red-700
   statusWarning: "#d97706", // amber-600
-  statusMerged: "#7c3aed", // purple-600
+  statusMerged: "#52525b", // zinc-600 (gray for merged)
 };
 
 const darkStatusColors = {
   statusSuccess: "#16a34a", // green-600
   statusDanger: "#dc2626", // red-600
   statusWarning: "#f59e0b", // amber-500
-  statusMerged: "#9333ea", // purple-600
+  statusMerged: "#a1a1aa", // zinc-400 (gray for merged)
 };
 
 // Semantic color tokens - Layer-based system
@@ -158,11 +152,11 @@ const lightSemanticColors = {
   border: "#e4e4e7", // (was zinc-200, now zinc-200 - keep for contrast)
   borderAccent: "#ececf1", // Softer accent border for low-emphasis outlines
 
-  // Brand — WhatsApp-leaning green. accent is the calmer "deep" green
-  // used for buttons/active states; accentBright is the full saturation
-  // hue used for hover, focus rings, online indicators.
+  // Brand — messenger green. accent is the calmer base used for
+  // buttons/active states; accentBright is the brighter highlight for
+  // hover, focus rings, and online indicators.
   accent: "#1FA855",
-  accentBright: "#25D366",
+  accentBright: "#22C55E",
   accentForeground: "#ffffff",
 
   // Semantic
@@ -198,10 +192,10 @@ const lightSemanticColors = {
 
     black: "#1a1a1e",
     red: "#dc2626",
-    green: "#16a34a",
+    green: "#1FA855",
     yellow: "#ca8a04",
     blue: "#2563eb",
-    magenta: "#9333ea",
+    magenta: "#475569",
     cyan: "#0891b2",
     white: "#ffffff",
 
@@ -210,7 +204,7 @@ const lightSemanticColors = {
     brightGreen: "#22c55e",
     brightYellow: "#f59e0b",
     brightBlue: "#3b82f6",
-    brightMagenta: "#a855f7",
+    brightMagenta: "#64748b",
     brightCyan: "#06b6d4",
     brightWhite: "#fafafa",
   },
@@ -242,14 +236,14 @@ const darkTerminalAnsi = {
   green: "#5dba80",
   yellow: "#d4a44a",
   blue: "#6a9de0",
-  magenta: "#b07ad0",
+  magenta: "#94a3b8",
   cyan: "#4aabb8",
   white: "#d4d4d8",
   brightRed: "#e89090",
   brightGreen: "#7ecf9a",
   brightYellow: "#e0be6e",
   brightBlue: "#8ab4e8",
-  brightMagenta: "#c49ae0",
+  brightMagenta: "#cbd5e1",
   brightCyan: "#6ec2cc",
   brightWhite: "#f0f0f2",
 } as const;
@@ -318,25 +312,25 @@ function buildDarkSemanticColors(tint: DarkThemeConfig) {
 // Dark tint definitions
 // ---------------------------------------------------------------------------
 
-// Ottie — subtle teal-green tint with WhatsApp-leaning brand green (default)
+// Ottie — neutral dark with subtle warm gray + messenger green accent (default)
 const ottieDarkColors = buildDarkSemanticColors({
-  surface0: "#181B1A",
-  surface1: "#1E2120",
+  surface0: "#1A1C1B",
+  surface1: "#202221",
   surface2: "#272A29",
-  surface3: "#434645",
-  surface4: "#595B5B",
-  surfaceDiffEmpty: "#252827",
-  surfaceSidebar: "#141716",
-  surfaceSidebarHover: "#1c1f1e",
-  foregroundMuted: "#A1A5A4",
-  scrollbarHandle: "#717574",
-  border: "#252B2A",
-  borderAccent: "#2F3534",
+  surface3: "#3A3D3C",
+  surface4: "#54595A",
+  surfaceDiffEmpty: "#242625",
+  surfaceSidebar: "#141615",
+  surfaceSidebarHover: "#1D201F",
+  foregroundMuted: "#A0A4A2",
+  scrollbarHandle: "#6E7270",
+  border: "#252827",
+  borderAccent: "#2E3231",
   accent: "#1FA855",
-  accentBright: "#25D366",
+  accentBright: "#22C55E",
 });
 
-// Zinc — neutral gray, no tint, but inherits Ottie brand green for accents
+// Zinc — pure neutral gray with messenger green accent
 const zincDarkColors = buildDarkSemanticColors({
   surface0: "#18181b",
   surface1: "#1f1f22",
@@ -351,61 +345,61 @@ const zincDarkColors = buildDarkSemanticColors({
   border: "#27272a",
   borderAccent: "#303036",
   accent: "#1FA855",
-  accentBright: "#25D366",
+  accentBright: "#22C55E",
 });
 
-// Midnight — subtle blue tint
+// Midnight — cool slate gray with messenger green accent
 const midnightDarkColors = buildDarkSemanticColors({
-  surface0: "#161820",
-  surface1: "#1c1e27",
-  surface2: "#252731",
-  surface3: "#3c3e4c",
-  surface4: "#535564",
-  surfaceDiffEmpty: "#222430",
-  surfaceSidebar: "#121420",
-  surfaceSidebarHover: "#1a1c28",
-  foregroundMuted: "#9a9db0",
-  scrollbarHandle: "#6b6e82",
-  border: "#242636",
-  borderAccent: "#2e3040",
-  accent: "#3b6fcf",
-  accentBright: "#7eaaeb",
+  surface0: "#161A1C",
+  surface1: "#1C2123",
+  surface2: "#252A2D",
+  surface3: "#3A4045",
+  surface4: "#4F555A",
+  surfaceDiffEmpty: "#22272A",
+  surfaceSidebar: "#111517",
+  surfaceSidebarHover: "#1A1F22",
+  foregroundMuted: "#9099A0",
+  scrollbarHandle: "#5F676D",
+  border: "#242A2D",
+  borderAccent: "#2D3439",
+  accent: "#1FA855",
+  accentBright: "#22C55E",
 });
 
-// Claude — warm neutral with subtle orange undertone
+// Claude slot — kept for compatibility; warm neutral gray + messenger green (no orange brand color)
 const claudeDarkColors = buildDarkSemanticColors({
-  surface0: "#1f1f1e",
-  surface1: "#262523",
-  surface2: "#2f2d2b",
-  surface3: "#4a4745",
-  surface4: "#605d5b",
-  surfaceDiffEmpty: "#2a2826",
-  surfaceSidebar: "#1a1918",
-  surfaceSidebarHover: "#222120",
-  foregroundMuted: "#ada9a5",
-  scrollbarHandle: "#78746f",
-  border: "#2c2a27",
-  borderAccent: "#36332f",
-  accent: "#d97757",
-  accentBright: "#e89a7f",
+  surface0: "#1d1d1f",
+  surface1: "#252527",
+  surface2: "#2c2c2e",
+  surface3: "#3a3a3c",
+  surface4: "#48484a",
+  surfaceDiffEmpty: "#252527",
+  surfaceSidebar: "#161618",
+  surfaceSidebarHover: "#202022",
+  foregroundMuted: "#a8a8ad",
+  scrollbarHandle: "#6e6e73",
+  border: "#2a2a2c",
+  borderAccent: "#34343a",
+  accent: "#1FA855",
+  accentBright: "#22C55E",
 });
 
-// Ghostty — blue-tinted dark based on Ghostty default background
+// Ghostty slot — kept for compatibility; cool gray-green dark with messenger green accent
 const ghosttyDarkColors = buildDarkSemanticColors({
-  surface0: "#282c34",
-  surface1: "#2f333d",
-  surface2: "#383c48",
-  surface3: "#4a4f5e",
-  surface4: "#5b6175",
-  surfaceDiffEmpty: "#323643",
-  surfaceSidebar: "#21252d",
-  surfaceSidebarHover: "#292d36",
-  foregroundMuted: "#c8ccd8",
-  scrollbarHandle: "#a0a4b2",
-  border: "#353a47",
-  borderAccent: "#3f4454",
-  accent: "#89b4fa",
-  accentBright: "#b4d0fc",
+  surface0: "#1F2422",
+  surface1: "#262B29",
+  surface2: "#2D3331",
+  surface3: "#3F4644",
+  surface4: "#535B59",
+  surfaceDiffEmpty: "#292E2C",
+  surfaceSidebar: "#181C1B",
+  surfaceSidebarHover: "#212523",
+  foregroundMuted: "#A4ABA8",
+  scrollbarHandle: "#6F7775",
+  border: "#272D2B",
+  borderAccent: "#313835",
+  accent: "#1FA855",
+  accentBright: "#22C55E",
 });
 
 const commonTheme = {
@@ -572,8 +566,8 @@ export const THEME_TO_UNISTYLES: Record<ThemeName, UnistylesThemeKey> = {
 export const THEME_SWATCHES: Record<ThemeName, string> = {
   light: "#ffffff",
   dark: "#1FA855",
-  zinc: "#808080",
-  midnight: "#4A6BA8",
-  claude: "#D97757",
-  ghostty: "#8caaee",
+  zinc: "#71717a",
+  midnight: "#3A4045",
+  claude: "#48484a",
+  ghostty: "#22C55E",
 };
