@@ -46,6 +46,16 @@
     "newWorkspace": "New workspace",
     "projectActions": "Project actions"
   },
+  "composer": {
+    "takePhoto": "Take photo",
+    "addImage": "Add image",
+    "addFile": "Add file",
+    "shareLocation": "Share location",
+    "addGithub": "Add issue or PR",
+    "holdToTalk": "Hold to talk",
+    "releaseToSend": "Release to send",
+    "cancelHint": "Slide up to cancel"
+  },
   "agent": {
     "selectModel": "Select a model",
     "messageThePrompt": "Message the agent, tag @files, or use /commands and /skills",

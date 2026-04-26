@@ -46,6 +46,16 @@
     "newWorkspace": "新建工作区",
     "projectActions": "项目操作"
   },
+  "composer": {
+    "takePhoto": "拍照",
+    "addImage": "从相册添加",
+    "addFile": "添加文件",
+    "shareLocation": "发送位置",
+    "addGithub": "添加 issue 或 PR",
+    "holdToTalk": "按住 说话",
+    "releaseToSend": "松开 发送",
+    "cancelHint": "上滑 取消"
+  },
   "agent": {
     "selectModel": "选择模型",
     "messageThePrompt": "给 agent 发消息、@文件、或使用 /commands 和 /skills",

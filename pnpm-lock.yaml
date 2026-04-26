@@ -151,6 +151,9 @@ importers:
       expo-dev-client:
         specifier: ^6.0.15
         version: 6.0.20(expo@54.0.33)
+      expo-document-picker:
+        specifier: ^55.0.13
+        version: 55.0.13(expo@54.0.33)
       expo-file-system:
         specifier: ~19.0.17
         version: 19.0.21(expo@54.0.33)(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))
@@ -172,6 +175,9 @@ importers:
       expo-localization:
         specifier: ^55.0.13
         version: 55.0.13(expo@54.0.33)(react@19.1.4)
+      expo-location:
+        specifier: ^55.1.8
+        version: 55.1.8(expo@54.0.33)(typescript@5.9.3)
       expo-notifications:
         specifier: ^0.32.16
         version: 0.32.16(expo@54.0.33)(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4)(typescript@5.9.3)
@@ -6728,6 +6734,11 @@ packages:
     peerDependencies:
       expo: '*'
 
+  expo-document-picker@55.0.13:
+    resolution: {integrity: sha512-IhswJElhdzs3fKDEKW8KXYRoFkWGEsXRMYAZT46Yo56zqqy8yQXrczo33RSwD2hFzNQBdLT97SJL9N311UyS3g==}
+    peerDependencies:
+      expo: '*'
+
   expo-eas-client@1.0.8:
     resolution: {integrity: sha512-5or11NJhSeDoHHI6zyvQDW2cz/yFyE+1Cz8NTs5NK8JzC7J0JrkUgptWtxyfB6Xs/21YRNifd3qgbBN3hfKVgA==}
 
@@ -6790,6 +6801,11 @@ packages:
     peerDependencies:
       expo: '*'
       react: 19.1.4
+
+  expo-location@55.1.8:
+    resolution: {integrity: sha512-mEExFf84nmWLwi14GFfUsFLrCm10gbcqFn9EPXpuruQ28YMtJWgCD+jJtESYPQkYF44N21fVok3T28fLuCqydA==}
+    peerDependencies:
+      expo: '*'
 
   expo-manifests@1.0.10:
     resolution: {integrity: sha512-oxDUnURPcL4ZsOBY6X1DGWGuoZgVAFzp6PISWV7lPP2J0r8u1/ucuChBgpK7u1eLGFp6sDIPwXyEUCkI386XSQ==}
@@ -19270,6 +19286,10 @@ snapshots:
       expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(graphql@16.8.1)(react-native-webview@13.16.1(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4))(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4)(typescript@5.9.3)
       expo-dev-menu-interface: 2.0.0(expo@54.0.33)
 
+  expo-document-picker@55.0.13(expo@54.0.33):
+    dependencies:
+      expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(graphql@16.8.1)(react-native-webview@13.16.1(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4))(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4)(typescript@5.9.3)
+
   expo-eas-client@1.0.8: {}
 
   expo-file-system@19.0.21(expo@54.0.33)(react-native@0.81.6(@babel/core@7.29.0)(@types/react@18.3.28)(react@19.1.4)):
@@ -19350,6 +19370,14 @@ snapshots:
       expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(graphql@16.8.1)(react-native-webview@13.16.1(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4))(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4)(typescript@5.9.3)
       react: 19.1.4
       rtl-detect: 1.1.2
+
+  expo-location@55.1.8(expo@54.0.33)(typescript@5.9.3):
+    dependencies:
+      '@expo/image-utils': 0.8.13(typescript@5.9.3)
+      expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(graphql@16.8.1)(react-native-webview@13.16.1(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4))(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4)(typescript@5.9.3)
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
 
   expo-manifests@1.0.10(expo@54.0.33):
     dependencies:

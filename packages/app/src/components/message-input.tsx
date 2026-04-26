@@ -2,6 +2,7 @@ import {
   View,
   Text,
   TextInput,
+  Pressable,
   ActivityIndicator,
   NativeSyntheticEvent,
   TextInputContentSizeChangeEventData,
@@ -53,6 +54,7 @@ import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 import { isImeComposingKeyboardEvent } from "@/utils/keyboard-ime";
 import { markScrollInvestigationEvent, markScrollInvestigationRender } from "@/utils/scroll-jank";
 import { isWeb } from "@/constants/platform";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { useComposerHeightMirror } from "./composer-height-mirror";
 
 export type ImageAttachment = AttachmentMetadata;
@@ -1582,6 +1584,22 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       await cancelDictation();
     }, [cancelDictation]);
 
+    // Press-and-hold mic gesture (mobile/compact only): press to start
+    // dictation, release to commit the transcript into the input field.
+    const handleVoicePressIn = useCallback(() => {
+      if (!isDictating && isDictationStartEnabled) {
+        void startDictationIfAvailable();
+      }
+    }, [isDictating, isDictationStartEnabled, startDictationIfAvailable]);
+    const handleVoicePressOut = useCallback(() => {
+      if (isDictatingRef.current) {
+        void confirmDictation();
+      }
+    }, [confirmDictation, isDictatingRef]);
+
+    const isCompact = useIsCompactFormFactor();
+    const hasComposerText = value.trim().length > 0;
+
     const handleAcceptRecording = useCallback(async () => {
       sendAfterTranscriptRef.current = false;
       await confirmDictation();
@@ -1922,81 +1940,150 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     return (
       <View ref={rootRef} style={styles.container} testID="message-input-root">
-        {/* Regular input */}
-        <Animated.View ref={inputWrapperRef} style={inputWrapperCombinedStyle}>
-          {/* Text input */}
-          <View style={styles.textInputScrollWrapper}>
-            <TextInput
-              ref={textInputRef}
-              value={value}
-              onChangeText={handleInputChange}
-              placeholder={placeholder}
-              placeholderTextColor={theme.colors.surface4}
-              accessibilityLabel="Message agent..."
-              onFocus={handleInputFocus}
-              onBlur={handleInputBlur}
-              style={textInputStyle}
-              multiline
-              scrollEnabled={isWeb ? inputHeight >= MAX_INPUT_HEIGHT : true}
-              onContentSizeChange={handleContentSizeChange}
-              editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
-              onKeyPress={shouldHandleDesktopSubmit ? handleDesktopKeyPress : undefined}
-              onSelectionChange={handleSelectionChange}
-              autoFocus={isWeb && autoFocus}
-            />
-            {inputScrollbar}
-            <FocusHint
-              visible={isWeb && isPaneFocused && !isInputFocused && !value}
-              focusInputKeys={focusInputKeys}
-            />
-          </View>
-
-          {/* Button row */}
-          <View style={styles.buttonRow}>
-            {/* Left: attachment button + leftContent slot */}
-            <View style={styles.leftButtonGroup}>
-              <AttachmentDropdown
-                isConnected={isConnected}
-                disabled={disabled}
-                attachButtonStyle={attachButtonStyle}
-                renderAttachButtonIcon={renderAttachButtonIcon}
-                attachmentMenuItems={attachmentMenuItems}
-              />
-              {leftContent}
+        <Animated.View
+          ref={inputWrapperRef}
+          style={
+            isCompact
+              ? [styles.inputWrapper, styles.inputWrapperCompact, inputWrapperStyle, inputAnimatedStyle]
+              : inputWrapperCombinedStyle
+          }
+        >
+          {isCompact ? (
+            // Mobile WeChat-style: [mic] [input] [+ / send], all on one row.
+            <View style={styles.compactRow}>
+              <Pressable
+                onPressIn={handleVoicePressIn}
+                onPressOut={handleVoicePressOut}
+                disabled={!isDictationStartEnabled}
+                accessibilityRole="button"
+                accessibilityLabel={voiceButtonAccessibilityLabel}
+                style={styles.compactCircleButton}
+              >
+                {renderVoiceButtonIcon({})}
+              </Pressable>
+              <View style={[styles.textInputScrollWrapper, styles.textInputScrollWrapperCompact]}>
+                <TextInput
+                  ref={textInputRef}
+                  value={value}
+                  onChangeText={handleInputChange}
+                  placeholder={placeholder}
+                  placeholderTextColor={theme.colors.surface4}
+                  accessibilityLabel="Message agent..."
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
+                  style={textInputStyle}
+                  multiline
+                  scrollEnabled={isWeb ? inputHeight >= MAX_INPUT_HEIGHT : true}
+                  onContentSizeChange={handleContentSizeChange}
+                  editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
+                  onSelectionChange={handleSelectionChange}
+                  autoFocus={isWeb && autoFocus}
+                />
+                {inputScrollbar}
+              </View>
+              {hasComposerText && shouldShowSendButton ? (
+                <SendButtonTooltip
+                  shouldShow={shouldShowSendButton}
+                  canPressLoadingButton={canPressLoadingButton}
+                  onSubmitLoadingPress={onSubmitLoadingPress}
+                  onDefaultSendAction={handleDefaultSendAction}
+                  isSendButtonDisabled={isSendButtonDisabled}
+                  submitAccessibilityLabel={submitAccessibilityLabel}
+                  sendButtonCombinedStyle={sendButtonCombinedStyle}
+                  isSubmitLoading={isSubmitLoading}
+                  submitIcon={submitIcon}
+                  buttonIconSize={buttonIconSize}
+                  submitButtonAccessibilityLabel={submitButtonAccessibilityLabel}
+                  defaultActionQueues={defaultActionQueues}
+                  sendKeys={sendKeys}
+                />
+              ) : (
+                <AttachmentDropdown
+                  isConnected={isConnected}
+                  disabled={disabled}
+                  attachButtonStyle={attachButtonStyle}
+                  renderAttachButtonIcon={renderAttachButtonIcon}
+                  attachmentMenuItems={attachmentMenuItems}
+                />
+              )}
             </View>
+          ) : (
+            <>
+              {/* Text input */}
+              <View style={styles.textInputScrollWrapper}>
+                <TextInput
+                  ref={textInputRef}
+                  value={value}
+                  onChangeText={handleInputChange}
+                  placeholder={placeholder}
+                  placeholderTextColor={theme.colors.surface4}
+                  accessibilityLabel="Message agent..."
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
+                  style={textInputStyle}
+                  multiline
+                  scrollEnabled={isWeb ? inputHeight >= MAX_INPUT_HEIGHT : true}
+                  onContentSizeChange={handleContentSizeChange}
+                  editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
+                  onKeyPress={shouldHandleDesktopSubmit ? handleDesktopKeyPress : undefined}
+                  onSelectionChange={handleSelectionChange}
+                  autoFocus={isWeb && autoFocus}
+                />
+                {inputScrollbar}
+                <FocusHint
+                  visible={isWeb && isPaneFocused && !isInputFocused && !value}
+                  focusInputKeys={focusInputKeys}
+                />
+              </View>
 
-            {/* Right: voice button, contextual button (realtime/send/cancel) */}
-            <View style={styles.rightButtonGroup}>
-              {beforeVoiceContent}
-              <VoiceButtonTooltip
-                onVoicePress={handleVoicePress}
-                isDictationStartEnabled={isDictationStartEnabled}
-                voiceButtonAccessibilityLabel={voiceButtonAccessibilityLabel}
-                voiceButtonStyle={voiceButtonStyle}
-                renderVoiceButtonIcon={renderVoiceButtonIcon}
-                voiceTooltipText={voiceTooltipText}
-                isRealtimeVoiceForCurrentAgent={isRealtimeVoiceForCurrentAgent}
-                voiceMuteToggleKeys={voiceMuteToggleKeys}
-                dictationToggleKeys={dictationToggleKeys}
-              />
-              {rightContent}
-              <SendButtonTooltip
-                shouldShow={shouldShowSendButton}
-                canPressLoadingButton={canPressLoadingButton}
-                onSubmitLoadingPress={onSubmitLoadingPress}
-                onDefaultSendAction={handleDefaultSendAction}
-                isSendButtonDisabled={isSendButtonDisabled}
-                submitAccessibilityLabel={submitAccessibilityLabel}
-                sendButtonCombinedStyle={sendButtonCombinedStyle}
-                isSubmitLoading={isSubmitLoading}
-                submitIcon={submitIcon}
-                buttonIconSize={buttonIconSize}
-                submitButtonAccessibilityLabel={submitButtonAccessibilityLabel}
-                defaultActionQueues={defaultActionQueues}
-                sendKeys={sendKeys}
-              />
-            </View>
-          </View>
+              {/* Button row */}
+              <View style={styles.buttonRow}>
+                {/* Left: attachment button + leftContent slot */}
+                <View style={styles.leftButtonGroup}>
+                  <AttachmentDropdown
+                    isConnected={isConnected}
+                    disabled={disabled}
+                    attachButtonStyle={attachButtonStyle}
+                    renderAttachButtonIcon={renderAttachButtonIcon}
+                    attachmentMenuItems={attachmentMenuItems}
+                  />
+                  {leftContent}
+                </View>
+
+                {/* Right: voice button, contextual button (realtime/send/cancel) */}
+                <View style={styles.rightButtonGroup}>
+                  {beforeVoiceContent}
+                  <VoiceButtonTooltip
+                    onVoicePress={handleVoicePress}
+                    isDictationStartEnabled={isDictationStartEnabled}
+                    voiceButtonAccessibilityLabel={voiceButtonAccessibilityLabel}
+                    voiceButtonStyle={voiceButtonStyle}
+                    renderVoiceButtonIcon={renderVoiceButtonIcon}
+                    voiceTooltipText={voiceTooltipText}
+                    isRealtimeVoiceForCurrentAgent={isRealtimeVoiceForCurrentAgent}
+                    voiceMuteToggleKeys={voiceMuteToggleKeys}
+                    dictationToggleKeys={dictationToggleKeys}
+                  />
+                  {rightContent}
+                  <SendButtonTooltip
+                    shouldShow={shouldShowSendButton}
+                    canPressLoadingButton={canPressLoadingButton}
+                    onSubmitLoadingPress={onSubmitLoadingPress}
+                    onDefaultSendAction={handleDefaultSendAction}
+                    isSendButtonDisabled={isSendButtonDisabled}
+                    submitAccessibilityLabel={submitAccessibilityLabel}
+                    sendButtonCombinedStyle={sendButtonCombinedStyle}
+                    isSubmitLoading={isSubmitLoading}
+                    submitIcon={submitIcon}
+                    buttonIconSize={buttonIconSize}
+                    submitButtonAccessibilityLabel={submitButtonAccessibilityLabel}
+                    defaultActionQueues={defaultActionQueues}
+                    sendKeys={sendKeys}
+                  />
+                </View>
+              </View>
+            </>
+          )}
         </Animated.View>
 
         <Animated.View style={overlayContainerStyle}>
@@ -2053,6 +2140,34 @@ const styles = StyleSheet.create((theme: Theme) => ({
           transitionTimingFunction: "ease-in-out",
         }
       : {}),
+  },
+  // Mobile WeChat-style horizontal layout: mic on the left, input flexing
+  // in the middle, attach/send on the right. Override paddings so the row
+  // hugs the children instead of stacking like the desktop layout.
+  inputWrapperCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
+  },
+  compactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    width: "100%",
+  },
+  compactCircleButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  textInputScrollWrapperCompact: {
+    flex: 1,
+    minWidth: 0,
   },
   textInputScrollWrapper: {
     position: "relative",

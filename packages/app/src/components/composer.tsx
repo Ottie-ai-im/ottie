@@ -18,7 +18,10 @@ import {
   CircleDot,
   GitPullRequest,
   Github,
-  Paperclip,
+  Camera,
+  Image as ImageIcon,
+  FileText,
+  MapPin,
 } from "lucide-react-native";
 import Animated from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
@@ -31,7 +34,11 @@ import {
 } from "./agent-status-bar";
 import { ContextWindowMeter } from "./context-window-meter";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
+import { useCameraAttachmentPicker } from "@/hooks/use-camera-attachment-picker";
+import { useFileAttachmentPicker } from "@/hooks/use-file-attachment-picker";
+import { useLocationShare } from "@/hooks/use-location-share";
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
+import { useTranslation } from "react-i18next";
 import { useSessionStore } from "@/stores/session-store";
 import {
   MessageInput,
@@ -1056,6 +1063,10 @@ export function Composer({
   }, [userInput.length]);
 
   const { pickImages } = useImageAttachmentPicker();
+  const { takePhoto } = useCameraAttachmentPicker();
+  const { pickFiles } = useFileAttachmentPicker();
+  const { shareLocation } = useLocationShare();
+  const { t } = useTranslation();
   const agentIdRef = useRef(agentId);
   const sendAgentMessageRef = useRef<
     ((agentId: string, text: string, attachments: ComposerAttachment[]) => Promise<void>) | null
@@ -1486,26 +1497,83 @@ export function Composer({
     [githubSearchItems, githubSearchQueryTrimmed],
   );
 
+  const handleTakePhoto = useCallback(async () => {
+    const captured = await pickAndPersistImages(takePhoto);
+    if (captured.length === 0) return;
+    addImages(captured);
+  }, [addImages, takePhoto]);
+
+  const handlePickFiles = useCallback(async () => {
+    const picked = await pickAndPersistImages(pickFiles);
+    if (picked.length === 0) return;
+    addImages(picked);
+  }, [addImages, pickFiles]);
+
+  const handleShareLocation = useCallback(async () => {
+    const loc = await shareLocation();
+    if (!loc) return;
+    // No location attachment type in the daemon protocol yet, so we
+    // append a human-readable Google Maps link to the draft text. When the
+    // IM-side schema lands, replace this with a structured attachment.
+    const mapsUrl = `https://www.google.com/maps/?q=${loc.latitude.toFixed(6)},${loc.longitude.toFixed(6)}`;
+    const accuracySuffix =
+      loc.accuracyMeters !== null ? ` (±${Math.round(loc.accuracyMeters)} m)` : "";
+    const snippet = `📍 ${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}${accuracySuffix}\n${mapsUrl}`;
+    onChangeText(value ? `${value}\n${snippet}` : snippet);
+  }, [shareLocation, onChangeText, value]);
+
   const attachmentMenuItems = useMemo<AttachmentMenuItem[]>(
     () => [
       {
+        id: "camera",
+        label: t("composer.takePhoto", { defaultValue: "Take photo" }),
+        icon: <Camera size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+        onSelect: () => {
+          void handleTakePhoto();
+        },
+      },
+      {
         id: "image",
-        label: "Add image",
-        icon: <Paperclip size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+        label: t("composer.addImage", { defaultValue: "Add image" }),
+        icon: <ImageIcon size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
         onSelect: () => {
           void handlePickImage();
         },
       },
       {
+        id: "file",
+        label: t("composer.addFile", { defaultValue: "Add file" }),
+        icon: <FileText size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+        onSelect: () => {
+          void handlePickFiles();
+        },
+      },
+      {
+        id: "location",
+        label: t("composer.shareLocation", { defaultValue: "Share location" }),
+        icon: <MapPin size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
+        onSelect: () => {
+          void handleShareLocation();
+        },
+      },
+      {
         id: "github",
-        label: "Add issue or PR",
+        label: t("composer.addGithub", { defaultValue: "Add issue or PR" }),
         icon: <Github size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
         onSelect: () => {
           setIsGithubPickerOpen(true);
         },
       },
     ],
-    [handlePickImage, theme.colors.foregroundMuted, theme.iconSize.md],
+    [
+      handlePickImage,
+      handleTakePhoto,
+      handlePickFiles,
+      handleShareLocation,
+      t,
+      theme.colors.foregroundMuted,
+      theme.iconSize.md,
+    ],
   );
 
   const handleToggleGithubItem = useCallback(
