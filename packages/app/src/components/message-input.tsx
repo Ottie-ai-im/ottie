@@ -2032,14 +2032,18 @@ const styles = StyleSheet.create((theme: Theme) => ({
     gap: theme.spacing[3],
     backgroundColor: theme.colors.surface1,
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.borderAccent,
-    borderRadius: theme.borderRadius["2xl"],
+    borderColor: theme.colors.border,
+    // Larger radius gives the IM-style "pill / chat bubble" feel; combined
+    // with a soft shadow it lifts the composer off the page like WhatsApp /
+    // Slack input docks.
+    borderRadius: 24,
+    ...theme.shadow.sm,
     paddingVertical: {
       xs: theme.spacing[2],
       md: theme.spacing[4],
     },
     paddingHorizontal: {
-      xs: theme.spacing[3],
+      xs: theme.spacing[4],
       md: theme.spacing[4],
     },
     ...(isWeb

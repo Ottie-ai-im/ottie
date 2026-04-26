@@ -2761,7 +2761,7 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: theme.colors.borderAccent,
   },
   workspaceRow: {
-    minHeight: 36,
+    minHeight: 40,
     marginBottom: theme.spacing[1],
     paddingVertical: theme.spacing[2],
     paddingLeft: theme.spacing[3] + theme.spacing[3],
@@ -2772,6 +2772,10 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     gap: theme.spacing[1],
     userSelect: "none",
+    // Reserve a 3px transparent left rail (matches projectRow) so workspaces
+    // and projects share the same selected-state visual language.
+    borderLeftWidth: 3,
+    borderLeftColor: "transparent",
   },
   workspaceRowMain: {
     flexDirection: "row",
