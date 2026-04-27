@@ -66,6 +66,10 @@ export default {
     // back to this config.
     ios: {
       supportsTablet: true,
+      // CFBundleVersion. App Store Connect rejects re-uploads of the same
+      // (version, buildNumber) pair, so the release script bumps this via
+      // IOS_BUILD_NUMBER each run. Falls back to "1" for local dev builds.
+      buildNumber: process.env.IOS_BUILD_NUMBER ?? "1",
       infoPlist: {
         NSMicrophoneUsageDescription: "This app needs access to the microphone for voice commands.",
         NSLocationWhenInUseUsageDescription:
