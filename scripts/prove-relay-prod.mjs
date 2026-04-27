@@ -23,8 +23,8 @@ const args = parseArgs(process.argv);
 const serverId = args["server-id"] ?? process.env.OTTIE_SERVER_ID;
 const daemonPublicKeyB64 = args["daemon-public-key-b64"] ?? process.env.OTTIE_DAEMON_PUBLIC_KEY_B64;
 const relayEndpoint =
-  args["relay-endpoint"] ?? process.env.OTTIE_RELAY_ENDPOINT ?? "relay.ottie.app:443";
-const baseUrl = args["base-url"] ?? process.env.OTTIE_APP_URL ?? "https://app.ottie.app";
+  args["relay-endpoint"] ?? process.env.OTTIE_RELAY_ENDPOINT ?? "relay.claws.company:443";
+const baseUrl = args["base-url"] ?? process.env.OTTIE_APP_URL ?? "https://app.claws.company";
 const timeoutMs = Number(args["timeout-ms"] ?? process.env.OTTIE_PROVE_TIMEOUT_MS ?? 60_000);
 const stabilityMs = Number(args["stability-ms"] ?? process.env.OTTIE_PROVE_STABILITY_MS ?? 30_000);
 

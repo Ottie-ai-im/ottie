@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { View, Text } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { FolderOpen, Smartphone } from "lucide-react-native";
+import { FolderOpen, FolderPlus, Smartphone } from "lucide-react-native";
 import { OttieLogo } from "@/components/icons/ottie-logo";
 import { Button } from "@/components/ui/button";
 import { MenuHeader } from "@/components/headers/menu-header";
+import { NewTaskModal } from "@/components/new-task-modal";
 import { useOpenProjectPicker } from "@/hooks/use-open-project-picker";
+import { useAppSettings } from "@/hooks/use-settings";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useHasWorkspaces } from "@/stores/session-store-hooks";
@@ -20,12 +23,18 @@ import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { PairDeviceModal } from "@/desktop/components/pair-device-modal";
 
 export function OpenProjectScreen({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
   const openDesktopAgentList = usePanelStore((s) => s.openDesktopAgentList);
   const openProjectPicker = useOpenProjectPicker(serverId);
+  const { settings } = useAppSettings();
   const hasHydrated = useSessionStore((s) => s.sessions[serverId]?.hasHydratedWorkspaces ?? false);
   const hasProjects = useHasWorkspaces(serverId);
   const isLocalDaemon = useIsLocalDaemon(serverId);
   const [isPairDeviceOpen, setIsPairDeviceOpen] = useState(false);
+  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
+
+  const defaultWorkspaceRoot = settings.defaultWorkspaceRoot?.trim() ?? "";
+  const hasDefaultWorkspaceRoot = defaultWorkspaceRoot.length > 0;
 
   const isCompactLayout = useIsCompactFormFactor();
 
@@ -41,6 +50,8 @@ export function OpenProjectScreen({ serverId }: { serverId: string }) {
 
   const handleOpenPairDevice = useCallback(() => setIsPairDeviceOpen(true), []);
   const handleClosePairDevice = useCallback(() => setIsPairDeviceOpen(false), []);
+  const handleOpenNewTask = useCallback(() => setIsNewTaskOpen(true), []);
+  const handleCloseNewTask = useCallback(() => setIsNewTaskOpen(false), []);
 
   return (
     <View style={styles.container}>
@@ -51,21 +62,29 @@ export function OpenProjectScreen({ serverId }: { serverId: string }) {
           <OttieLogo size={56} />
         </View>
         <View style={styles.headingGroup}>
-          <Text style={styles.heading}>What shall we build today?</Text>
+          <Text style={styles.heading}>{t("project.emptyHeading")}</Text>
           {hasHydrated && !hasProjects ? (
-            <Text style={styles.subtitle}>
-              Add a project folder to start running agents on your codebase
-            </Text>
+            <Text style={styles.subtitle}>{t("project.emptySubtitle")}</Text>
           ) : null}
         </View>
         <View style={styles.cta}>
+          {hasDefaultWorkspaceRoot ? (
+            <Button
+              variant="default"
+              leftIcon={FolderPlus}
+              onPress={handleOpenNewTask}
+              testID="open-project-new-task"
+            >
+              {t("project.newTaskCta")}
+            </Button>
+          ) : null}
           <Button
-            variant="default"
+            variant={hasDefaultWorkspaceRoot ? "outline" : "default"}
             leftIcon={FolderOpen}
             onPress={handleOpenPicker}
             testID="open-project-submit"
           >
-            Add a project
+            {t("project.addProjectCta")}
           </Button>
           {isLocalDaemon ? (
             <Button
@@ -74,7 +93,7 @@ export function OpenProjectScreen({ serverId }: { serverId: string }) {
               onPress={handleOpenPairDevice}
               testID="open-project-pair-device"
             >
-              Pair device
+              {t("project.pairDevice")}
             </Button>
           ) : null}
         </View>
@@ -84,6 +103,14 @@ export function OpenProjectScreen({ serverId }: { serverId: string }) {
         onClose={handleClosePairDevice}
         testID="open-project-pair-device-modal"
       />
+      {hasDefaultWorkspaceRoot ? (
+        <NewTaskModal
+          visible={isNewTaskOpen}
+          onClose={handleCloseNewTask}
+          serverId={serverId}
+          defaultWorkspaceRoot={defaultWorkspaceRoot}
+        />
+      ) : null}
     </View>
   );
 }

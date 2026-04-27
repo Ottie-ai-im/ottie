@@ -1129,7 +1129,13 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   async respondToPermission(requestId: string, response: AgentPermissionResponse): Promise<void> {
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) {
-      throw new Error(`No pending permission request with id '${requestId}'`);
+      // Already resolved (typically interrupt/close cleared it). Silently
+      // ignore so the user's late click doesn't surface as an error.
+      this.logger?.warn?.(
+        { requestId, behavior: response.behavior },
+        "Permission response received for already-resolved request; ignoring",
+      );
+      return;
     }
 
     this.pendingPermissions.delete(requestId);

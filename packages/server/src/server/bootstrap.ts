@@ -354,7 +354,7 @@ export async function createOttieDaemon(
         relayEndpoint: config.relayEndpoint ?? "relay.claws.company:443",
         relayPublicEndpoint:
           config.relayPublicEndpoint ?? config.relayEndpoint ?? "relay.claws.company:443",
-        appBaseUrl: config.appBaseUrl ?? "https://app.ottie.app",
+        appBaseUrl: config.appBaseUrl ?? "https://app.claws.company",
         includeQr: true,
       });
       res.json({
@@ -747,7 +747,7 @@ export async function createOttieDaemon(
           const relayEnabled = config.relayEnabled ?? true;
           const relayEndpoint = config.relayEndpoint ?? "relay.claws.company:443";
           const relayPublicEndpoint = config.relayPublicEndpoint ?? relayEndpoint;
-          const appBaseUrl = config.appBaseUrl ?? "https://app.ottie.app";
+          const appBaseUrl = config.appBaseUrl ?? "https://app.claws.company";
 
           if (boundListenTarget.type === "tcp") {
             logger.info(

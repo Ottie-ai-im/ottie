@@ -220,6 +220,16 @@ function SessionRow({
     [theme.fontSize.xs, theme.colors.foregroundMuted],
   );
 
+  const previewLine = useMemo(() => {
+    const parts: string[] = [];
+    if (projectPath) parts.push(projectPath);
+    if (statusLabel) parts.push(statusLabel);
+    if (!isMobile && agent.serverLabel) parts.push(agent.serverLabel);
+    return parts.join(" · ");
+  }, [projectPath, statusLabel, agent.serverLabel, isMobile]);
+
+  const showAttentionDot = showAttentionIndicator && Boolean(agent.requiresAttention);
+
   return (
     <Pressable
       style={pressableStyle}
@@ -227,11 +237,14 @@ function SessionRow({
       onLongPress={handleLongPress}
       testID={`agent-row-${agent.serverId}-${agent.id}`}
     >
+      <View style={styles.avatarWrap}>
+        <View style={styles.avatarCircle}>
+          <ProviderIcon size={18} color={theme.colors.foreground} />
+        </View>
+        {showAttentionDot ? <View style={styles.avatarAttentionDot} /> : null}
+      </View>
       <View style={styles.rowContent}>
         <View style={styles.rowTitleRow}>
-          <View style={styles.providerIconWrap}>
-            <ProviderIcon size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-          </View>
           <Text style={sessionTitleStyle} numberOfLines={1}>
             {agent.title || "New session"}
           </Text>
@@ -239,44 +252,19 @@ function SessionRow({
           {(agent.pendingPermissionCount ?? 0) > 0 ? (
             <SessionBadge label={`${agent.pendingPermissionCount} pending`} tone="warning" />
           ) : null}
-          {!isMobile && showAttentionIndicator && agent.requiresAttention ? (
-            <SessionBadge label="Attention" tone="danger" />
-          ) : null}
         </View>
-        {isMobile && (
-          <View style={styles.rowMetaRow}>
-            <Text style={styles.sessionMetaText} numberOfLines={1}>
-              {projectPath}
-            </Text>
-            <Text style={styles.sessionMetaSeparator}>·</Text>
-            <Text style={styles.sessionMetaText}>{statusLabel}</Text>
-            <Text style={styles.sessionMetaSeparator}>·</Text>
-            <Text style={styles.sessionMetaText}>{timeAgo}</Text>
-            {agent.serverLabel ? (
-              <>
-                <Text style={styles.sessionMetaSeparator}>·</Text>
-                <Text style={styles.sessionMetaText} numberOfLines={1}>
-                  {agent.serverLabel}
-                </Text>
-              </>
-            ) : null}
-          </View>
-        )}
-      </View>
-      {!isMobile && (
-        <>
-          <Text style={styles.columnMeta} numberOfLines={1}>
-            {projectPath}
+        {previewLine ? (
+          <Text style={styles.previewText} numberOfLines={1}>
+            {previewLine}
           </Text>
-          <Text style={styles.columnMetaFixed}>{statusLabel}</Text>
-          <Text style={styles.columnMetaFixed}>{timeAgo}</Text>
-        </>
-      )}
-      {isMobile && showAttentionIndicator && agent.requiresAttention ? (
-        <View style={styles.rowTrailing}>
-          <SessionBadge label="Attention" tone="danger" />
-        </View>
-      ) : null}
+        ) : null}
+      </View>
+      <View style={styles.trailingColumn}>
+        <Text style={styles.trailingTime} numberOfLines={1}>
+          {timeAgo}
+        </Text>
+        {showAttentionDot ? <View style={styles.unreadDot} /> : <View style={styles.unreadDotPlaceholder} />}
+      </View>
     </Pressable>
   );
 }
@@ -524,20 +512,19 @@ const styles = StyleSheet.create((theme) => ({
   row: {
     flexDirection: "row",
     alignItems: "center",
+    gap: theme.spacing[3],
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[3],
-    borderRadius: {
-      xs: theme.borderRadius.lg,
-      md: 0,
-    },
+    borderRadius: theme.borderRadius.card,
     marginBottom: {
       xs: theme.spacing[1],
-      md: 0,
+      md: 2,
     },
   },
   rowContent: {
     flex: 1,
     minWidth: 0,
+    gap: 2,
   },
   rowTitleRow: {
     flexDirection: "row",
@@ -545,64 +532,73 @@ const styles = StyleSheet.create((theme) => ({
     flexWrap: "wrap",
     gap: theme.spacing[2],
   },
-  providerIconWrap: {
-    width: theme.iconSize.md,
+  avatarWrap: {
+    position: "relative",
+    width: 40,
+    height: 40,
+  },
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.surface2,
     alignItems: "center",
     justifyContent: "center",
   },
-  rowMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: theme.spacing[1],
-    marginTop: 2,
-  },
-  rowTrailing: {
-    marginLeft: theme.spacing[2],
+  avatarAttentionDot: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: 10,
+    height: 10,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.accentBright,
+    borderWidth: 2,
+    borderColor: theme.colors.surfaceSidebar,
   },
   rowSelected: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceSidebarHover,
   },
   rowHovered: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceSidebarHover,
   },
   rowPressed: {
     backgroundColor: theme.colors.surface2,
   },
   sessionTitle: {
     flexShrink: 1,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "400",
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
     color: theme.colors.foreground,
-    opacity: 0.86,
   },
   sessionTitleHighlighted: {
-    opacity: 1,
+    color: theme.colors.foreground,
   },
-  sessionMetaText: {
-    maxWidth: "100%",
+  previewText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
+    lineHeight: 18,
   },
-  sessionMetaSeparator: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.foregroundMuted,
-    opacity: 0.7,
+  trailingColumn: {
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    minHeight: 36,
+    paddingTop: 2,
+    gap: theme.spacing[1],
   },
-  columnMeta: {
-    fontSize: theme.fontSize.sm,
+  trailingTime: {
+    fontSize: theme.fontSize.xs,
     color: theme.colors.foregroundMuted,
-    flexShrink: 1,
-    minWidth: 60,
-    maxWidth: 200,
-    marginLeft: theme.spacing[4],
   },
-  columnMetaFixed: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.foregroundMuted,
-    flexShrink: 0,
-    width: 72,
-    textAlign: "right" as const,
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.accentBright,
+  },
+  unreadDotPlaceholder: {
+    width: 8,
+    height: 8,
   },
   badge: {
     flexDirection: "row",

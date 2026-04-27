@@ -661,7 +661,8 @@ export function LocalDaemonSection() {
   );
 }
 
-const ADVANCED_DAEMON_SETTINGS_URL = "https://ottie.app/docs/configuration";
+const ADVANCED_DAEMON_SETTINGS_URL =
+  "https://github.com/Wendell-Guan/ottie/blob/main/docs/CUSTOM-PROVIDERS.md";
 
 const styles = StyleSheet.create((theme) => ({
   actionGroup: {

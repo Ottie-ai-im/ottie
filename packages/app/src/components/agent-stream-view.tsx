@@ -1175,7 +1175,7 @@ function PermissionRequestCard({
 const stylesheet = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: theme.colors.surfaceChat,
   },
   contentWrapper: {
     width: "100%",
@@ -1229,11 +1229,10 @@ const stylesheet = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    paddingHorizontal: 0,
-    paddingVertical: theme.spacing[1],
-    paddingLeft: theme.spacing[2],
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: "transparent",
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.pill,
+    backgroundColor: theme.colors.bubbleOther,
     borderWidth: 0,
     alignSelf: "flex-start",
   },

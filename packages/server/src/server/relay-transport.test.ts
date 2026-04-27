@@ -166,7 +166,8 @@ describe("relay-transport control lifecycle", () => {
     expect(hasLogMessage(logger.warn, "relay_control_ready_timeout_terminating")).toBe(true);
     expect(firstControl.terminateCalls).toBe(1);
 
-    vi.advanceTimersByTime(1_000);
+    // Reconnect backoff is base 1000ms × ±25% jitter, so up to 1250ms.
+    vi.advanceTimersByTime(2_000);
     expect(MockWebSocket.instances.length).toBeGreaterThanOrEqual(2);
   });
 

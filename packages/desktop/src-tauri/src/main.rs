@@ -66,7 +66,7 @@ fn main() {
         .manage(AppState { daemon: Mutex::new(None) })
         .manage(bridge::PendingOpenProject(Mutex::new(initial_open_project)))
         .manage(bridge::DaemonInfoState(Mutex::new(bridge::DaemonInfo {
-            listen: env::var("OTTIE_LISTEN").unwrap_or_else(|_| "127.0.0.1:6767".into()),
+            listen: env::var("OTTIE_LISTEN").unwrap_or_else(|_| "127.0.0.1:6868".into()),
             home: env::var("OTTIE_HOME").unwrap_or_else(|_| {
                 env::var("HOME")
                     .map(|h| format!("{h}/.ottie"))

@@ -19,6 +19,10 @@ export interface AppSettings {
   manageBuiltInDaemon: boolean;
   sendBehavior: SendBehavior;
   releaseChannel: ReleaseChannel;
+  // Absolute path on the daemon's machine. When set, "New task" creates a
+  // sandboxed subfolder here so each task is isolated. Null = no default,
+  // user picks a folder per project (legacy behavior).
+  defaultWorkspaceRoot: string | null;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -26,6 +30,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   manageBuiltInDaemon: true,
   sendBehavior: "interrupt",
   releaseChannel: "stable",
+  defaultWorkspaceRoot: null,
 };
 
 export interface UseAppSettingsReturn {
@@ -91,6 +96,13 @@ export async function loadSettingsFromStorage(): Promise<AppSettings> {
       }
       if (parsed.releaseChannel && !VALID_RELEASE_CHANNELS.has(parsed.releaseChannel)) {
         parsed.releaseChannel = DEFAULT_APP_SETTINGS.releaseChannel;
+      }
+      if (
+        parsed.defaultWorkspaceRoot !== undefined &&
+        parsed.defaultWorkspaceRoot !== null &&
+        typeof parsed.defaultWorkspaceRoot !== "string"
+      ) {
+        parsed.defaultWorkspaceRoot = null;
       }
       return { ...DEFAULT_APP_SETTINGS, ...parsed };
     }

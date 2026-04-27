@@ -8,7 +8,7 @@ import { useStableEvent } from "@/hooks/use-stable-event";
 import { openExternalUrl } from "@/utils/open-external-url";
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000;
-const CHANGELOG_URL = "https://ottie.app/changelog";
+const CHANGELOG_URL = "https://github.com/Wendell-Guan/ottie/blob/main/CHANGELOG.md";
 
 function resolveUpdateCalloutTitle(args: {
   isInstalled: boolean;

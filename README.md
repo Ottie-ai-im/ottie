@@ -6,6 +6,15 @@ Ottie bridges external IM platforms and lets AI agents participate in conversati
 
 Repo: https://github.com/Wendell-Guan/ottie
 
+> **Heads up about `claws.company`.** Out of the box, the daemon connects to the
+> maintainer's personal Cloudflare Worker at `relay.claws.company` and points
+> pairing URLs at `app.claws.company`. This is a single-maintainer side-project
+> instance — not a hosted SaaS. Anyone serious about privacy or uptime should
+> self-host the relay (`packages/relay`, one `wrangler deploy` away) and override
+> the defaults via `OTTIE_RELAY_ENDPOINT` / `OTTIE_APP_URL` env vars or
+> `~/.ottie/config.json`. Source defaults live in
+> [`packages/server/src/server/config.ts`](packages/server/src/server/config.ts).
+
 ---
 
 ## Table of contents
@@ -87,7 +96,7 @@ pnpm dev:desktop
 Or run pieces individually:
 
 ```bash
-pnpm dev:server   # daemon only (port 6767)
+pnpm dev:server   # daemon only (port 6868)
 pnpm dev:app      # Expo Metro bundler (web + native)
 pnpm dev          # daemon + Expo together in tmux
 ```
@@ -251,7 +260,7 @@ Run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` and `sudo 
 **iOS run crashes with `NSLocation*UsageDescription` missing**
 Re-run `npx expo prebuild --platform ios --clean` so the new Info.plist keys in `app.config.js` get baked into the native project.
 
-**Port 6767 already in use**
+**Port 6868 already in use**
 Another daemon is running. Stop it: `pkill -9 -f "ottie-desktop|server.mjs"` then `rm -f ~/.ottie/ottie.pid`.
 
 **GitHub push rejected with "secret detected"**

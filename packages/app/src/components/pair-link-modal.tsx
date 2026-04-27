@@ -183,7 +183,7 @@ export function PairLinkModal({ visible, onClose, onCancel, onSaved }: PairLinkM
           nativeID="pair-link-input"
           accessibilityLabel="pair-link-input"
           onChangeText={handleChangeOfferUrl}
-          placeholder="https://app.ottie.app/#offer=..."
+          placeholder="https://app.claws.company/#offer=..."
           placeholderTextColor={theme.colors.foregroundMuted}
           style={styles.input}
           autoFocus

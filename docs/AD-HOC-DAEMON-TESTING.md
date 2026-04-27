@@ -30,8 +30,8 @@ const daemon = await createOttieDaemon(
     agentClients: {},
     agentStoragePath: path.join(ottieHome, "agents"),
     relayEnabled: false,
-    relayEndpoint: "relay.ottie.app:443",
-    appBaseUrl: "https://app.ottie.app",
+    relayEndpoint: "relay.claws.company:443",
+    appBaseUrl: "https://app.claws.company",
     // Add custom config here, e.g.:
     // providerOverrides: { ... },
   },

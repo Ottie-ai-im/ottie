@@ -506,6 +506,8 @@ export interface InspectScheduleOptions {
 type ListAvailableEditorsPayload = ListAvailableEditorsResponseMessage["payload"];
 type OpenInEditorPayload = OpenInEditorResponseMessage["payload"];
 type OpenProjectPayload = OpenProjectResponseMessage["payload"];
+type CheckPathPayload = Extract<SessionOutboundMessage, { type: "check_path_response" }>["payload"];
+export type CheckPathResult = CheckPathPayload;
 type ArchiveWorkspacePayload = ArchiveWorkspaceResponseMessage["payload"];
 type WorkspaceSetupStatusPayload = WorkspaceSetupStatusResponseMessage["payload"];
 export type EditorTargetDescriptor = ListAvailableEditorsPayload["editors"][number];
@@ -953,6 +955,29 @@ export class DaemonClient {
       return;
     }
     void this.connect();
+  }
+
+  /**
+   * Force the next reconnect to happen immediately and reset the backoff
+   * counter. Use when an external signal (mobile foreground, network change)
+   * suggests waiting out the queued backoff is wasteful. No-op when already
+   * connected/connecting, disposed, or after explicit close().
+   */
+  reconnectNow(): void {
+    if (this.connectionState.status === "disposed") return;
+    if (!this.shouldReconnect || this.config.reconnect?.enabled === false) return;
+    if (
+      this.connectionState.status === "connected" ||
+      this.connectionState.status === "connecting"
+    ) {
+      return;
+    }
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    this.reconnectAttempt = 0;
+    this.attemptConnect();
   }
 
   getConnectionState(): ConnectionState {
@@ -1426,15 +1451,28 @@ export class DaemonClient {
     });
   }
 
-  async openProject(cwd: string, requestId?: string): Promise<OpenProjectPayload> {
+  async openProject(
+    cwd: string,
+    options?: { requestId?: string; createIfMissing?: boolean },
+  ): Promise<OpenProjectPayload> {
     return this.sendCorrelatedSessionRequest({
-      requestId,
+      requestId: options?.requestId,
       message: {
         type: "open_project_request",
         cwd,
+        ...(options?.createIfMissing ? { createIfMissing: true } : {}),
       },
       responseType: "open_project_response",
       timeout: 10000,
+    });
+  }
+
+  async checkPath(path: string, requestId?: string): Promise<CheckPathPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "check_path_request", path },
+      responseType: "check_path_response",
+      timeout: 5000,
     });
   }
 

@@ -297,16 +297,16 @@ const CONFIG_FILENAME = "config.json";
 const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
   version: 1,
   daemon: {
-    listen: "127.0.0.1:6767",
+    listen: "127.0.0.1:6868",
     cors: {
-      allowedOrigins: ["https://app.ottie.app"],
+      allowedOrigins: ["https://app.claws.company"],
     },
     relay: {
       enabled: true,
     },
   },
   app: {
-    baseUrl: "https://app.ottie.app",
+    baseUrl: "https://app.claws.company",
   },
 }) as PersistedConfig;
 

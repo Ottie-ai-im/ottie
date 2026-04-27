@@ -20,8 +20,8 @@ interface StartupSplashScreenProps {
   };
 }
 
-const GITHUB_ISSUE_URL = "https://github.com/ottie/ottie/issues/new";
-const DOCS_URL = "https://ottie.app/docs";
+const GITHUB_ISSUE_URL = "https://github.com/Wendell-Guan/ottie/issues/new";
+const DOCS_URL = "https://github.com/Wendell-Guan/ottie/tree/main/docs";
 
 function openGithubIssue(): void {
   void openExternalUrl(GITHUB_ISSUE_URL);

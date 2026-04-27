@@ -1350,6 +1350,25 @@ export const OpenProjectRequestSchema = z.object({
   type: z.literal("open_project_request"),
   cwd: z.string(),
   requestId: z.string(),
+  // When true, daemon mkdir -p the cwd before registering. Used by the
+  // "New task in default workspace" flow. Optional for backward compat:
+  // older clients omit it and the daemon behaves as before.
+  createIfMissing: z.boolean().optional(),
+});
+
+export const CheckPathStatusSchema = z.enum([
+  "ok",
+  "missing_will_create",
+  "not_directory",
+  "not_writable",
+  "error",
+]);
+export type CheckPathStatus = z.infer<typeof CheckPathStatusSchema>;
+
+export const CheckPathRequestSchema = z.object({
+  type: z.literal("check_path_request"),
+  requestId: z.string(),
+  path: z.string(),
 });
 
 export const ArchiveWorkspaceRequestSchema = z.object({
@@ -1628,6 +1647,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ListAvailableEditorsRequestSchema,
   OpenInEditorRequestSchema,
   OpenProjectRequestSchema,
+  CheckPathRequestSchema,
   ArchiveWorkspaceRequestSchema,
   FileExplorerRequestSchema,
   ProjectIconRequestSchema,
@@ -2233,6 +2253,16 @@ export const OpenProjectResponseMessageSchema = z.object({
   payload: z.object({
     requestId: z.string(),
     workspace: WorkspaceDescriptorPayloadSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const CheckPathResponseMessageSchema = z.object({
+  type: z.literal("check_path_response"),
+  payload: z.object({
+    requestId: z.string(),
+    path: z.string(),
+    status: CheckPathStatusSchema,
     error: z.string().nullable(),
   }),
 });
@@ -3152,6 +3182,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   FetchAgentHistoryResponseMessageSchema,
   FetchWorkspacesResponseMessageSchema,
   OpenProjectResponseMessageSchema,
+  CheckPathResponseMessageSchema,
   StartWorkspaceScriptResponseMessageSchema,
   ListAvailableEditorsResponseMessageSchema,
   OpenInEditorResponseMessageSchema,

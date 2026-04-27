@@ -141,6 +141,14 @@ const lightSemanticColors = {
   surfaceSidebarHover: "#e9e9ec", // Sidebar hover (darker in light mode)
   surfaceWorkspace: "#ffffff", // Workspace main background
 
+  // Chat surfaces — IM-style message area, distinct from workspace pure-white
+  surfaceChat: "#f7f7f8", // Chat main background — soft warm gray
+  bubbleSelf: "#dcfce7", // Own message bubble — accent-tinted
+  bubbleSelfForeground: "#14532d", // green-900 on bubbleSelf
+  bubbleOther: "#f4f4f5", // Agent / counterpart message bubble
+  bubbleOtherForeground: "#1a1a1e",
+  bubbleMeta: "#71717a", // Timestamps, delivery marks, sender names
+
   // Text
   foreground: "#1a1a1e",
   foregroundMuted: "#71717a",
@@ -259,6 +267,14 @@ function buildDarkSemanticColors(tint: DarkThemeConfig) {
     surfaceSidebar: tint.surfaceSidebar,
     surfaceSidebarHover: tint.surfaceSidebarHover,
     surfaceWorkspace: tint.surface1,
+
+    // Chat surfaces — IM-style message area
+    surfaceChat: tint.surface0,
+    bubbleSelf: "rgba(31, 168, 85, 0.20)",
+    bubbleSelfForeground: "#e8f8ee",
+    bubbleOther: tint.surface2,
+    bubbleOtherForeground: "#fafafa",
+    bubbleMeta: tint.foregroundMuted,
 
     foreground: "#fafafa",
     foregroundMuted: tint.foregroundMuted,
@@ -457,6 +473,12 @@ const commonTheme = {
     xl: 12,
     "2xl": 16,
     full: 9999,
+    // IM-style semantic radii — use these for chat surfaces so we keep
+    // existing UI radii stable while migrating phase-by-phase.
+    card: 12,
+    bubble: 18,
+    sheet: 16,
+    pill: 9999,
   },
 
   borderWidth: {

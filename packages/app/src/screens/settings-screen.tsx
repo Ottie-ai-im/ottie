@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import type { ComponentType, ReactNode } from "react";
 import { setLanguage, type SupportedLanguage } from "@/i18n";
@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
   type PressableStateCallbackType,
 } from "react-native";
@@ -38,7 +39,13 @@ import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { useAppSettings, type AppSettings, type SendBehavior } from "@/hooks/use-settings";
 import { THEME_SWATCHES } from "@/styles/theme";
-import { getHostRuntimeStore, isHostRuntimeConnected, useHosts } from "@/runtime/host-runtime";
+import {
+  getHostRuntimeStore,
+  isHostRuntimeConnected,
+  useHostRuntimeClient,
+  useHosts,
+} from "@/runtime/host-runtime";
+import type { CheckPathStatus } from "@server/shared/messages";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { useWindowControlsPadding } from "@/utils/desktop-window";
 import { confirmDialog } from "@/utils/confirm-dialog";
@@ -181,6 +188,8 @@ interface GeneralSectionProps {
   settings: AppSettings;
   handleThemeChange: (theme: AppSettings["theme"]) => void;
   handleSendBehaviorChange: (behavior: SendBehavior) => void;
+  handleDefaultWorkspaceRootChange: (root: string | null) => void;
+  probeServerId: string | null;
 }
 
 interface ThemeMenuItemProps {
@@ -217,6 +226,8 @@ function GeneralSection({
   settings,
   handleThemeChange,
   handleSendBehaviorChange,
+  handleDefaultWorkspaceRootChange,
+  probeServerId,
 }: GeneralSectionProps) {
   const { theme } = useUnistyles();
   const { t, i18n } = useTranslation();
@@ -303,8 +314,130 @@ function GeneralSection({
             options={sendBehaviorOptions}
           />
         </View>
+        <DefaultWorkspaceRootRow
+          value={settings.defaultWorkspaceRoot}
+          onChange={handleDefaultWorkspaceRootChange}
+          probeServerId={probeServerId}
+        />
       </View>
     </SettingsSection>
+  );
+}
+
+interface DefaultWorkspaceRootRowProps {
+  value: string | null;
+  onChange: (root: string | null) => void;
+  probeServerId: string | null;
+}
+
+type RootProbe =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "result"; status: CheckPathStatus; error: string | null };
+
+function pickStatusStyle(tone: "ok" | "err" | "info") {
+  if (tone === "ok") return styles.defaultWorkspaceStatusOk;
+  if (tone === "err") return styles.defaultWorkspaceStatusError;
+  return styles.defaultWorkspaceClearText;
+}
+
+function DefaultWorkspaceRootRow({ value, onChange, probeServerId }: DefaultWorkspaceRootRowProps) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const [draft, setDraft] = useState(value ?? "");
+  const [probe, setProbe] = useState<RootProbe>({ kind: "idle" });
+  const client = useHostRuntimeClient(probeServerId ?? "");
+
+  // Debounced probe whenever the typed-in path changes. We probe even before
+  // save so the user gets immediate "✓ Folder exists" / "Will be created" /
+  // "Not writable" feedback without having to dismiss focus.
+  useEffect(() => {
+    const trimmed = draft.trim();
+    if (!trimmed || !client) {
+      setProbe({ kind: "idle" });
+      return;
+    }
+    setProbe({ kind: "checking" });
+    const handle = setTimeout(() => {
+      void client
+        .checkPath(trimmed)
+        .then((result) => setProbe({ kind: "result", status: result.status, error: result.error }))
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          setProbe({ kind: "result", status: "error", error: msg });
+        });
+    }, 600);
+    return () => clearTimeout(handle);
+  }, [client, draft]);
+
+  const handleBlur = useCallback(() => {
+    const trimmed = draft.trim();
+    const next = trimmed.length === 0 ? null : trimmed;
+    if (next !== value) {
+      onChange(next);
+    }
+  }, [draft, onChange, value]);
+
+  const handleClear = useCallback(() => {
+    setDraft("");
+    setProbe({ kind: "idle" });
+    onChange(null);
+  }, [onChange]);
+
+  const statusText = useMemo(() => {
+    if (probe.kind === "idle") return null;
+    if (probe.kind === "checking") {
+      return { text: t("settings.defaultWorkspaceRootChecking"), tone: "info" as const };
+    }
+    switch (probe.status) {
+      case "ok":
+        return { text: t("settings.defaultWorkspaceRootOk"), tone: "ok" as const };
+      case "missing_will_create":
+        return {
+          text: t("settings.defaultWorkspaceRootWillCreate"),
+          tone: "info" as const,
+        };
+      case "not_directory":
+        return { text: t("settings.defaultWorkspaceRootNotDirectory"), tone: "err" as const };
+      case "not_writable":
+        return { text: t("settings.defaultWorkspaceRootNotWritable"), tone: "err" as const };
+      default:
+        return {
+          text: probe.error ?? t("settings.defaultWorkspaceRootError"),
+          tone: "err" as const,
+        };
+    }
+  }, [probe, t]);
+
+  return (
+    <View style={ROW_WITH_BORDER_STYLE}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t("settings.defaultWorkspaceRoot")}</Text>
+        <Text style={settingsStyles.rowHint}>{t("settings.defaultWorkspaceRootHint")}</Text>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          onBlur={handleBlur}
+          placeholder={t("settings.defaultWorkspaceRootPlaceholder")}
+          placeholderTextColor={theme.colors.foregroundMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          style={styles.defaultWorkspaceInput}
+          testID="settings-default-workspace-root-input"
+        />
+        {statusText ? (
+          <Text style={pickStatusStyle(statusText.tone)}>{statusText.text}</Text>
+        ) : null}
+        {value ? (
+          <Pressable onPress={handleClear} testID="settings-default-workspace-root-clear">
+            <Text style={styles.defaultWorkspaceClearText}>
+              {t("settings.defaultWorkspaceRootClear")}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -762,6 +895,13 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
     [updateSettings],
   );
 
+  const handleDefaultWorkspaceRootChange = useCallback(
+    (root: string | null) => {
+      void updateSettings({ defaultWorkspaceRoot: root });
+    },
+    [updateSettings],
+  );
+
   const handlePlaybackTest = useCallback(async () => {
     if (!voiceAudioEngine || isPlaybackTestRunning) {
       return;
@@ -933,6 +1073,8 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
               settings={settings}
               handleThemeChange={handleThemeChange}
               handleSendBehaviorChange={handleSendBehaviorChange}
+              handleDefaultWorkspaceRootChange={handleDefaultWorkspaceRootChange}
+              probeServerId={anyOnlineServerId}
             />
           );
         case "shortcuts":
@@ -1130,6 +1272,32 @@ const styles = StyleSheet.create((theme) => ({
   themeTriggerText: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
+  },
+  defaultWorkspaceInput: {
+    marginTop: theme.spacing[2],
+    backgroundColor: theme.colors.surface2,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    color: theme.colors.foreground,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    fontSize: theme.fontSize.sm,
+  },
+  defaultWorkspaceClearText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    marginTop: theme.spacing[2],
+  },
+  defaultWorkspaceStatusOk: {
+    color: theme.colors.accent,
+    fontSize: theme.fontSize.sm,
+    marginTop: theme.spacing[2],
+  },
+  defaultWorkspaceStatusError: {
+    color: theme.colors.destructive,
+    fontSize: theme.fontSize.sm,
+    marginTop: theme.spacing[2],
   },
 }));
 

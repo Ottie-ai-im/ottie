@@ -17,7 +17,7 @@ export function startCommand(): Command {
   return new Command("start")
     .description("Start the local Ottie daemon")
     .option("--listen <listen>", "Listen target (host:port, port, or unix socket path)")
-    .option("--port <port>", "Port to listen on (default: 6767)")
+    .option("--port <port>", "Port to listen on (default: 6868)")
     .option("--home <path>", "Ottie home directory (default: ~/.ottie)")
     .option("--foreground", "Run in foreground (don't daemonize)")
     .option("--no-relay", "Disable relay connection")

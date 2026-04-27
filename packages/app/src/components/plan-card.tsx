@@ -246,7 +246,7 @@ const styles = StyleSheet.create((theme) => ({
   container: {
     marginVertical: theme.spacing[3],
     padding: theme.spacing[3],
-    borderRadius: theme.spacing[2],
+    borderRadius: theme.borderRadius.card,
     borderWidth: 1,
     gap: theme.spacing[2],
   },

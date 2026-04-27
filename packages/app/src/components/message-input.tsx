@@ -2347,13 +2347,14 @@ const styles = StyleSheet.create((theme: Theme) => ({
     backgroundColor: theme.colors.destructive,
   },
   sendButton: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     borderRadius: theme.borderRadius.full,
     backgroundColor: theme.colors.accent,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: theme.spacing[1],
+    ...theme.shadow.sm,
   },
   iconButtonHovered: {
     backgroundColor: theme.colors.surface2,

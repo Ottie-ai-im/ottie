@@ -31,7 +31,7 @@ export async function generateLocalPairingOffer(args: {
 
   const relayEndpoint = args.relayEndpoint ?? "relay.claws.company:443";
   const relayPublicEndpoint = args.relayPublicEndpoint ?? relayEndpoint;
-  const appBaseUrl = args.appBaseUrl ?? "https://app.ottie.app";
+  const appBaseUrl = args.appBaseUrl ?? "https://app.claws.company";
   const serverId = getOrCreateServerId(args.ottieHome, { logger: args.logger });
   const daemonKeyPair = await loadOrCreateDaemonKeyPair(args.ottieHome, args.logger);
   const offer = await createConnectionOfferV2({

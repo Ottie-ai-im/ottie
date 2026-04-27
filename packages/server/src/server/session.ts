@@ -3,7 +3,9 @@ import { v4 as uuidv4 } from "uuid";
 import { TTLCache } from "@isaacs/ttlcache";
 import pMemoize from "p-memoize";
 import type { FSWatcher } from "node:fs";
-import { resolve, sep } from "path";
+import { constants as fsConstants } from "node:fs";
+import { access, mkdir, stat } from "node:fs/promises";
+import { dirname, resolve, sep } from "path";
 import { homedir } from "node:os";
 import { z } from "zod";
 import type { ToolSet } from "ai";
@@ -1898,6 +1900,8 @@ export class Session {
         return this.handleOpenInEditorRequest(msg);
       case "open_project_request":
         return this.handleOpenProjectRequest(msg);
+      case "check_path_request":
+        return this.handleCheckPathRequest(msg);
       case "archive_workspace_request":
         return this.handleArchiveWorkspaceRequest(msg);
       case "file_explorer_request":
@@ -6733,10 +6737,68 @@ export class Session {
     }
   }
 
+  private async handleCheckPathRequest(
+    request: Extract<SessionInboundMessage, { type: "check_path_request" }>,
+  ): Promise<void> {
+    const trimmed = request.path.trim();
+    const emit = (
+      status: "ok" | "missing_will_create" | "not_directory" | "not_writable" | "error",
+      error: string | null = null,
+    ) => {
+      this.emit({
+        type: "check_path_response",
+        payload: { requestId: request.requestId, path: trimmed, status, error },
+      });
+    };
+
+    if (!trimmed) {
+      emit("error", "Empty path");
+      return;
+    }
+
+    try {
+      const info = await stat(trimmed);
+      if (!info.isDirectory()) {
+        emit("not_directory", `Path exists but is not a directory: ${trimmed}`);
+        return;
+      }
+      try {
+        await access(trimmed, fsConstants.W_OK);
+        emit("ok");
+      } catch (writeErr) {
+        const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
+        emit("not_writable", msg);
+      }
+    } catch (statErr) {
+      const code = (statErr as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        // Path doesn't exist — check if parent is writable so we know whether
+        // mkdir -p would succeed when the user creates a task here.
+        const parent = dirname(trimmed);
+        try {
+          await access(parent, fsConstants.W_OK);
+          emit("missing_will_create");
+        } catch (parentErr) {
+          const msg = parentErr instanceof Error ? parentErr.message : String(parentErr);
+          emit("not_writable", msg);
+        }
+        return;
+      }
+      const msg = statErr instanceof Error ? statErr.message : String(statErr);
+      emit("error", msg);
+    }
+  }
+
   private async handleOpenProjectRequest(
     request: Extract<SessionInboundMessage, { type: "open_project_request" }>,
   ): Promise<void> {
     try {
+      if (request.createIfMissing && request.cwd) {
+        // Soft sandbox: create the directory tree if a client asks. The
+        // daemon does not enforce a parent root — clients (UI) are expected
+        // to compose paths under a user-chosen default workspace root.
+        await mkdir(request.cwd, { recursive: true });
+      }
       const workspace = await this.findOrCreateWorkspaceForDirectory(request.cwd);
       await this.emitWorkspaceUpdateForCwd(workspace.cwd);
       const descriptor = await this.describeWorkspaceRecordWithGitData(workspace);

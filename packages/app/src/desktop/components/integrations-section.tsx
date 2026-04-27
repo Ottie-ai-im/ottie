@@ -17,8 +17,8 @@ import {
   type InstallStatus,
 } from "@/desktop/daemon/desktop-daemon";
 
-const CLI_DOCS_URL = "https://ottie.app/docs/cli";
-const SKILLS_DOCS_URL = "https://ottie.app/docs/skills";
+const CLI_DOCS_URL = "https://github.com/Wendell-Guan/ottie/tree/main/packages/cli";
+const SKILLS_DOCS_URL = "https://github.com/Wendell-Guan/ottie/tree/main/skills";
 const ROW_WITH_BORDER_STYLE = [settingsStyles.row, settingsStyles.rowBorder];
 
 export function IntegrationsSection() {

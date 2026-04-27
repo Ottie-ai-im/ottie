@@ -23,6 +23,7 @@ interface OpenProjectDirectlyInput {
   setHasHydratedWorkspaces: (serverId: string, hydrated: boolean) => void;
   openDraftTab: (workspaceKey: string) => string | null;
   replaceRoute: (route: string) => void;
+  createIfMissing?: boolean;
 }
 
 export async function openProjectDirectly(input: OpenProjectDirectlyInput): Promise<boolean> {
@@ -32,7 +33,10 @@ export async function openProjectDirectly(input: OpenProjectDirectlyInput): Prom
     return false;
   }
 
-  const payload = await input.client.openProject(trimmedPath);
+  const payload = await input.client.openProject(
+    trimmedPath,
+    input.createIfMissing ? { createIfMissing: true } : undefined,
+  );
   if (payload.error || !payload.workspace) {
     return false;
   }
@@ -54,7 +58,9 @@ export async function openProjectDirectly(input: OpenProjectDirectlyInput): Prom
   return true;
 }
 
-export function useOpenProject(serverId: string | null): (path: string) => Promise<boolean> {
+export function useOpenProject(
+  serverId: string | null,
+): (path: string, options?: { createIfMissing?: boolean }) => Promise<boolean> {
   const normalizedServerId = serverId?.trim() ?? "";
   const client = useHostRuntimeClient(normalizedServerId);
   const isConnected = useHostRuntimeIsConnected(normalizedServerId);
@@ -62,7 +68,7 @@ export function useOpenProject(serverId: string | null): (path: string) => Promi
   const setHasHydratedWorkspaces = useSessionStore((state) => state.setHasHydratedWorkspaces);
 
   return useCallback(
-    async (path: string) => {
+    async (path: string, options?: { createIfMissing?: boolean }) => {
       return openProjectDirectly({
         serverId: normalizedServerId,
         projectPath: path,
@@ -70,6 +76,7 @@ export function useOpenProject(serverId: string | null): (path: string) => Promi
         client,
         mergeWorkspaces,
         setHasHydratedWorkspaces,
+        ...(options?.createIfMissing ? { createIfMissing: true } : {}),
         openDraftTab: (workspaceKey: string) =>
           useWorkspaceLayoutStore.getState().openTabFocused(workspaceKey, {
             kind: "draft",

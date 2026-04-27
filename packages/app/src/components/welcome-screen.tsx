@@ -181,7 +181,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
   );
 
   const handleOpenOttieSite = useCallback(() => {
-    void openExternalUrl("https://ottie.app");
+    void openExternalUrl("https://github.com/Wendell-Guan/ottie");
   }, []);
 
   const handleOpenSettings = useCallback(() => {

@@ -594,6 +594,10 @@ export class HostRuntimeController {
     this.activeClient?.ensureConnected();
   }
 
+  reconnectNow(): void {
+    this.activeClient?.reconnectNow();
+  }
+
   markAgentDirectorySyncLoading(): void {
     const status = this.snapshot.hasEverLoadedAgentDirectory ? "revalidating" : "initial_loading";
     this.updateSnapshot({
@@ -1148,7 +1152,7 @@ export class HostRuntimeController {
 }
 
 const REGISTRY_STORAGE_KEY = "@ottie:daemon-registry";
-const DEFAULT_LOCALHOST_ENDPOINT = process.env.EXPO_PUBLIC_LOCAL_DAEMON?.trim() || "localhost:6767";
+const DEFAULT_LOCALHOST_ENDPOINT = process.env.EXPO_PUBLIC_LOCAL_DAEMON?.trim() || "localhost:6868";
 const DEFAULT_LOCALHOST_BOOTSTRAP_TIMEOUT_MS = 2500;
 const CONNECTION_ONLINE_TIMEOUT_MS = 15_000;
 const E2E_STORAGE_KEY = "@ottie:e2e";
@@ -1787,6 +1791,16 @@ export class HostRuntimeStore {
     return Promise.all(
       Array.from(this.controllers.values(), (controller) => controller.runProbeCycleNow()),
     ).then(() => undefined);
+  }
+
+  reconnectNow(serverId?: string): void {
+    if (serverId) {
+      this.controllers.get(serverId)?.reconnectNow();
+      return;
+    }
+    for (const controller of this.controllers.values()) {
+      controller.reconnectNow();
+    }
   }
 
   async refreshAgentDirectory(input: {

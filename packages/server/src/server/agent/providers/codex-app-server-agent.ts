@@ -3184,7 +3184,14 @@ class CodexAppServerAgentSession implements AgentSession {
   ): Promise<AgentPermissionResult | void> {
     const pending = this.pendingPermissionHandlers.get(requestId);
     if (!pending) {
-      throw new Error(`No pending Codex app-server permission request with id '${requestId}'`);
+      // Already resolved (typically by close/interrupt). Silently ignore so
+      // late clicks don't surface as errors. The client should have cleared
+      // the card via a permission_resolved event.
+      this.logger.warn(
+        { requestId, behavior: response.behavior },
+        "Permission response received for already-resolved Codex request; ignoring",
+      );
+      return;
     }
     const pendingRequest = this.pendingPermissions.get(requestId) ?? null;
 

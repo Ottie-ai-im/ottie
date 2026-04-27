@@ -1795,7 +1795,15 @@ class ClaudeAgentSession implements AgentSession {
   async respondToPermission(requestId: string, response: AgentPermissionResponse): Promise<void> {
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) {
-      throw new Error(`No pending permission request with id '${requestId}'`);
+      // The request was already resolved (typically by abortHandler when the
+      // agent's turn ended). Treat as no-op so the user's late click doesn't
+      // bubble up as an error. The client's card was already cleared by the
+      // permission_resolved event we emitted at abort time.
+      this.logger.warn(
+        { requestId, behavior: response.behavior },
+        "Permission response received for already-resolved request; ignoring",
+      );
+      return;
     }
     this.pendingPermissions.delete(requestId);
     pending.cleanup?.();
@@ -3342,6 +3350,19 @@ class ClaudeAgentSession implements AgentSession {
       };
 
       const abortHandler = () => {
+        // Notify the client UI that this permission was canceled (turn
+        // ended, agent crashed, etc.) so the card is removed. Without this
+        // event, the card stays visible and any later user click fails
+        // with "No pending permission request" — see respondToPermission.
+        this.pushEvent({
+          type: "permission_resolved",
+          provider: "claude",
+          requestId,
+          resolution: {
+            behavior: "deny",
+            message: "Permission canceled — the agent's turn ended before you responded.",
+          },
+        });
         this.pendingPermissions.delete(requestId);
         cleanup();
         reject(new Error("Permission request aborted"));

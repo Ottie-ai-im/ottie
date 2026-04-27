@@ -286,9 +286,9 @@ function printNextSteps(pairingUrl: string | null, ottieHome: string, richUi: bo
     pairingUrl
       ? "1. Open Ottie and scan the QR code above, or paste the pairing link."
       : "1. Open Ottie and connect to your daemon.",
-    "2. Web app: https://app.ottie.app",
-    "3. Desktop app: https://github.com/ottie/ottie/releases/latest",
-    "4. Docs: https://ottie.app/docs",
+    "2. Web app: https://app.claws.company",
+    "3. Desktop app: https://github.com/Wendell-Guan/ottie/releases/latest",
+    "4. Docs: https://github.com/Wendell-Guan/ottie/tree/main/docs",
     '5. Example: ottie run --output-schema schema.json "extract fields"',
   ];
   const quickReferenceLines = [
@@ -321,7 +321,7 @@ export function onboardCommand(): Command {
   return new Command("onboard")
     .description("Run first-time setup, start daemon, and print pairing instructions")
     .option("--listen <listen>", "Listen target (host:port, port, or unix socket path)")
-    .option("--port <port>", "Port to listen on (default: 6767)")
+    .option("--port <port>", "Port to listen on (default: 6868)")
     .option("--home <path>", "Ottie home directory (default: ~/.ottie)")
     .option("--no-relay", "Disable relay connection")
     .option("--no-mcp", "Disable the Agent MCP HTTP endpoint")

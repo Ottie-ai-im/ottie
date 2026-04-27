@@ -21,7 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { View } from "react-native";
+import { AppState, type AppStateStatus, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { Extrapolation, interpolate, runOnJS, useSharedValue } from "react-native-reanimated";
@@ -369,6 +369,22 @@ function HostRuntimeBootstrapProvider({ children }: { children: ReactNode }) {
       cancelAnyOnline?.();
     };
   }, [retryToken]);
+
+  // Mobile/web come back from background with stale sockets and a long
+  // reconnect backoff already queued. On foreground, kick the timer to fire
+  // now and re-probe — same controllers handle the no-op case if healthy.
+  useEffect(() => {
+    const store = getHostRuntimeStore();
+    let prev: AppStateStatus = AppState.currentState;
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active" && prev !== "active") {
+        store.reconnectNow();
+        void store.runProbeCycleNow();
+      }
+      prev = next;
+    });
+    return () => subscription.remove();
+  }, []);
 
   const state = useMemo<HostRuntimeBootstrapState>(
     () => ({
