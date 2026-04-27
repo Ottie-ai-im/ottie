@@ -91,6 +91,7 @@ import {
   parseImageDataUrl,
 } from "@/attachments/utils";
 import { PlanCard } from "./plan-card";
+import { SelectableTextModal } from "./selectable-text-modal";
 import { useToolCallSheet } from "./tool-call-sheet";
 import { ToolCallDetailsContent } from "./tool-call-details";
 import { useAttachmentPreviewUrl } from "@/attachments/use-attachment-preview-url";
@@ -841,7 +842,7 @@ function MarkdownLink({
   );
   if (isNative) {
     return (
-      <Text accessibilityRole="link" onPress={handlePress} style={style}>
+      <Text selectable accessibilityRole="link" onPress={handlePress} style={style}>
         {children}
       </Text>
     );
@@ -854,7 +855,9 @@ function MarkdownLink({
       onHoverIn={handleHoverIn}
       onHoverOut={handleHoverOut}
     >
-      <Text style={hoveredTextStyle}>{children}</Text>
+      <Text selectable style={hoveredTextStyle}>
+        {children}
+      </Text>
     </Pressable>
   );
 }
@@ -1308,7 +1311,11 @@ function MarkdownInheritedText({
     () => [inheritedStyles, textStyle, overrideStyle],
     [inheritedStyles, textStyle, overrideStyle],
   );
-  return <Text style={style}>{children}</Text>;
+  return (
+    <Text selectable style={style}>
+      {children}
+    </Text>
+  );
 }
 
 interface MarkdownInheritedCodeLinkProps {
@@ -1374,6 +1381,9 @@ export const AssistantMessage = memo(function AssistantMessage({
   spacing = "default",
 }: AssistantMessageProps) {
   const { theme } = useUnistyles();
+  const [selectableModalOpen, setSelectableModalOpen] = useState(false);
+  const handleOpenSelectableModal = useCallback(() => setSelectableModalOpen(true), []);
+  const handleCloseSelectableModal = useCallback(() => setSelectableModalOpen(false), []);
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(
     disableOuterSpacing ?? spacing !== "default",
   );
@@ -1637,7 +1647,13 @@ export const AssistantMessage = memo(function AssistantMessage({
   );
 
   return (
-    <View testID="assistant-message" style={assistantContainerStyle}>
+    <Pressable
+      testID="assistant-message"
+      style={assistantContainerStyle}
+      onLongPress={handleOpenSelectableModal}
+      delayLongPress={350}
+      android_disableSound
+    >
       {keyedBlocks.map(({ key, block }, index) => (
         <AssistantMessageBlockContainer
           key={key}
@@ -1653,7 +1669,12 @@ export const AssistantMessage = memo(function AssistantMessage({
           />
         </AssistantMessageBlockContainer>
       ))}
-    </View>
+      <SelectableTextModal
+        visible={selectableModalOpen}
+        text={message}
+        onClose={handleCloseSelectableModal}
+      />
+    </Pressable>
   );
 });
 
@@ -1712,7 +1733,9 @@ export const SpeakMessage = memo(function SpeakMessage({
         <MicVocal size={14} color={theme.colors.foregroundMuted} />
         <Text style={speakMessageStylesheet.headerLabel}>Spoke</Text>
       </View>
-      <Text style={speakMessageStylesheet.text}>{message}</Text>
+      <Text selectable style={speakMessageStylesheet.text}>
+        {message}
+      </Text>
     </View>
   );
 });
@@ -1876,7 +1899,9 @@ export const ActivityLog = memo(function ActivityLog({
             <IconComponent size={16} color={config.color} />
           </View>
           <View style={activityLogStylesheet.textContainer}>
-            <Text style={messageTextStyle}>{displayMessage}</Text>
+            <Text selectable style={messageTextStyle}>
+              {displayMessage}
+            </Text>
             {metadata && (
               <View style={activityLogStylesheet.detailsRow}>
                 <Text style={activityLogStylesheet.detailsText}>Details</Text>
@@ -1891,7 +1916,7 @@ export const ActivityLog = memo(function ActivityLog({
         </View>
         {isExpanded && metadata && (
           <View style={activityLogStylesheet.metadataContainer}>
-            <Text style={activityLogStylesheet.metadataText}>
+            <Text selectable style={activityLogStylesheet.metadataText}>
               {JSON.stringify(metadata, null, 2)}
             </Text>
           </View>

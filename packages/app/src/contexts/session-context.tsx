@@ -41,6 +41,7 @@ import {
   normalizeWorkspaceDescriptor,
 } from "@/stores/session-store";
 import { useDraftStore } from "@/stores/draft-store";
+import { useUsageStore } from "@/stores/usage-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
 import { sendOsNotification } from "@/utils/os-notifications";
 import { getIsAppActivelyVisible } from "@/utils/app-visibility";
@@ -1194,6 +1195,15 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         voiceRuntime?.onTurnEvent(serverId, agentId, event.type);
       }
 
+      if (event.type === "turn_completed" && event.usage) {
+        useUsageStore.getState().recordTurn({
+          serverId,
+          agentId,
+          provider: event.provider,
+          usage: event.usage,
+        });
+      }
+
       // Attention notification stays in React (not extractable to pure reducer)
       if (event.type === "attention_required") {
         if (event.shouldNotify) {
@@ -1717,6 +1727,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         })
         .then(() => {
           updateDeliveryState("sent");
+          return undefined;
         })
         .catch((error) => {
           console.error("[Session] Failed to send agent message:", error);

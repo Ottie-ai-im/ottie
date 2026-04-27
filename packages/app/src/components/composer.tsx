@@ -836,6 +836,7 @@ function ComposerCancelButton({
   isCancellingAgent,
   agentInterruptKeys,
 }: ComposerCancelButtonProps) {
+  const { t } = useTranslation();
   const accessibilityLabel = isCancellingAgent ? "Canceling agent" : "Stop agent";
   const icon = isCancellingAgent ? (
     <ActivityIndicator size="small" color="white" />
@@ -858,7 +859,7 @@ function ComposerCancelButton({
       </TooltipTrigger>
       <TooltipContent side="top" align="center" offset={8}>
         <View style={styles.tooltipRow}>
-          <Text style={styles.tooltipText}>Interrupt</Text>
+          <Text style={styles.tooltipText}>{t("composer.tooltipInterrupt")}</Text>
           {shortcutNode}
         </View>
       </TooltipContent>
@@ -932,6 +933,7 @@ function ComposerVoiceModeButton({
   theme,
   voiceToggleKeys,
 }: ComposerVoiceModeButtonProps) {
+  const { t } = useTranslation();
   const shortcutNode = voiceToggleKeys ? (
     <Shortcut chord={voiceToggleKeys} style={styles.tooltipShortcut} />
   ) : null;
@@ -950,7 +952,7 @@ function ComposerVoiceModeButton({
       <TooltipTrigger
         onPress={handleToggleRealtimeVoice}
         disabled={!isConnected || isVoiceSwitching}
-        accessibilityLabel="Enable Voice mode"
+        accessibilityLabel={t("composer.enableVoiceMode")}
         accessibilityRole="button"
         style={realtimeVoiceButtonStyle}
       >
@@ -958,7 +960,7 @@ function ComposerVoiceModeButton({
       </TooltipTrigger>
       <TooltipContent side="top" align="center" offset={8}>
         <View style={styles.tooltipRow}>
-          <Text style={styles.tooltipText}>Voice mode</Text>
+          <Text style={styles.tooltipText}>{t("composer.tooltipVoiceMode")}</Text>
           {shortcutNode}
         </View>
       </TooltipContent>
@@ -1689,7 +1691,6 @@ export function Composer({
 
     return [attachGroup, agentGroup, gitGroup, toolsGroup];
   }, [
-    agentId,
     cwd,
     handlePickImage,
     handleTakePhoto,

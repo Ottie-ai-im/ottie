@@ -29,7 +29,7 @@ export async function generateLocalPairingOffer(args: {
     };
   }
 
-  const relayEndpoint = args.relayEndpoint ?? "relay.ottie.app:443";
+  const relayEndpoint = args.relayEndpoint ?? "relay.claws.company:443";
   const relayPublicEndpoint = args.relayPublicEndpoint ?? relayEndpoint;
   const appBaseUrl = args.appBaseUrl ?? "https://app.ottie.app";
   const serverId = getOrCreateServerId(args.ottieHome, { logger: args.logger });

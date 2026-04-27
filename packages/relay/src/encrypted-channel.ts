@@ -75,6 +75,7 @@ function buildInvalidHelloError(rawText: string, parsed?: unknown): Error {
 }
 
 const HANDSHAKE_RETRY_MS = 1000;
+const HANDSHAKE_TIMEOUT_MS = 60_000;
 const MAX_PENDING_SENDS = 200;
 
 /**
@@ -103,6 +104,7 @@ export async function createClientChannel(
   const helloText = JSON.stringify(hello);
 
   let retry: ReturnType<typeof setInterval> | null = null;
+  let handshakeDeadline: ReturnType<typeof setTimeout> | null = null;
   const emitSendError = (error: unknown) => {
     const err = error instanceof Error ? error : new Error(String(error));
     events.onerror?.(err);
@@ -118,26 +120,40 @@ export async function createClientChannel(
       return false;
     }
   };
-  const clearRetry = () => {
+  const clearTimers = () => {
     if (retry) {
       clearInterval(retry);
       retry = null;
     }
+    if (handshakeDeadline) {
+      clearTimeout(handshakeDeadline);
+      handshakeDeadline = null;
+    }
   };
 
-  channel.onTransitionToOpen(() => clearRetry());
-  channel.onClose(() => clearRetry());
+  channel.onTransitionToOpen(() => clearTimers());
+  channel.onClose(() => clearTimers());
 
   sendHello();
   retry = setInterval(() => {
     if (channel.isOpen()) {
-      clearRetry();
+      clearTimers();
       return;
     }
     sendHello();
   }, HANDSHAKE_RETRY_MS);
   // Avoid keeping Node processes alive (e.g. tests) if the handshake is stuck.
   (retry as unknown as { unref?: () => void }).unref?.();
+
+  // Bound the handshake so a never-responding daemon doesn't trap the channel
+  // in retry-forever. The outer reconnect logic will re-establish a fresh one.
+  handshakeDeadline = setTimeout(() => {
+    if (channel.isOpen()) return;
+    clearTimers();
+    emitSendError(new Error(`E2EE handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms`));
+    channel.close(1011, "handshake_timeout");
+  }, HANDSHAKE_TIMEOUT_MS);
+  (handshakeDeadline as unknown as { unref?: () => void }).unref?.();
 
   return channel;
 }

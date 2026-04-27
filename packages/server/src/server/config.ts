@@ -14,7 +14,7 @@ import { resolveSpeechConfig } from "./speech/speech-config-resolver.js";
 import { mergeHostnames, parseHostnamesEnv, type HostnamesConfig } from "./hostnames.js";
 
 const DEFAULT_PORT = 6767;
-const DEFAULT_RELAY_ENDPOINT = "relay.ottie.app:443";
+const DEFAULT_RELAY_ENDPOINT = "relay.claws.company:443";
 const DEFAULT_APP_BASE_URL = "https://app.ottie.app";
 
 function parseBooleanEnv(value: string | undefined): boolean | undefined {

@@ -3971,7 +3971,9 @@ export class DaemonClient {
     const attempt = this.reconnectAttempt;
     const baseDelay = this.config.reconnect?.baseDelayMs ?? DEFAULT_RECONNECT_BASE_DELAY_MS;
     const maxDelay = this.config.reconnect?.maxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS;
-    const delay = Math.min(baseDelay * 2 ** attempt, maxDelay);
+    const target = Math.min(baseDelay * 2 ** attempt, maxDelay);
+    // ±25% jitter so reconnects from many clients don't synchronize.
+    const delay = Math.round(target * (0.75 + Math.random() * 0.5));
     this.reconnectAttempt = attempt + 1;
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;

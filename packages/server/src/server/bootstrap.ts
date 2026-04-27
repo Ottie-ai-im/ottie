@@ -351,9 +351,9 @@ export async function createOttieDaemon(
       const offer = await generateLocalPairingOffer({
         ottieHome: config.ottieHome,
         relayEnabled: config.relayEnabled ?? true,
-        relayEndpoint: config.relayEndpoint ?? "relay.ottie.app:443",
+        relayEndpoint: config.relayEndpoint ?? "relay.claws.company:443",
         relayPublicEndpoint:
-          config.relayPublicEndpoint ?? config.relayEndpoint ?? "relay.ottie.app:443",
+          config.relayPublicEndpoint ?? config.relayEndpoint ?? "relay.claws.company:443",
         appBaseUrl: config.appBaseUrl ?? "https://app.ottie.app",
         includeQr: true,
       });
@@ -745,7 +745,7 @@ export async function createOttieDaemon(
             agentManager.setMcpBaseUrl(value ? mcpBaseUrl : null);
           });
           const relayEnabled = config.relayEnabled ?? true;
-          const relayEndpoint = config.relayEndpoint ?? "relay.ottie.app:443";
+          const relayEndpoint = config.relayEndpoint ?? "relay.claws.company:443";
           const relayPublicEndpoint = config.relayPublicEndpoint ?? relayEndpoint;
           const appBaseUrl = config.appBaseUrl ?? "https://app.ottie.app";
 

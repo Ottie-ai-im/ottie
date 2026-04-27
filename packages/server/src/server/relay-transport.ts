@@ -312,7 +312,9 @@ export function startRelayTransport({
     if (reconnectTimeout) return;
 
     reconnectAttempt += 1;
-    const delayMs = Math.min(30000, 1000 * reconnectAttempt);
+    const target = Math.min(30000, 1000 * reconnectAttempt);
+    // ±25% jitter so multiple daemons don't reconnect in lockstep.
+    const delayMs = Math.round(target * (0.75 + Math.random() * 0.5));
     reconnectTimeout = setTimeout(() => {
       reconnectTimeout = null;
       connectControl();

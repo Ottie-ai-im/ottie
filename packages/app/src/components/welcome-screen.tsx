@@ -298,7 +298,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
             style={styles.settingsButton}
             testID="welcome-open-settings"
           >
-            Settings
+            {t("welcome.settingsButton")}
           </Button>
         </View>
         <Text style={styles.versionLabel}>{appVersionText}</Text>
