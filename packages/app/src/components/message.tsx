@@ -50,6 +50,7 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { MathCurveLoader } from "@/components/math-curve-loader";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -2103,6 +2104,9 @@ interface ExpandableBadgeProps {
   label: string;
   secondaryLabel?: string;
   icon?: ComponentType<{ size?: number; color?: string }>;
+  /** When provided, replaces the static icon entirely (e.g. animated thinking
+   *  indicator). Drawn at whatever size the slot itself dictates. */
+  iconSlot?: ReactNode;
   isExpanded: boolean;
   style?: StyleProp<ViewStyle>;
   onToggle?: () => void;
@@ -2267,6 +2271,16 @@ function resolveExpandableBadgeIconColor({
   return theme.colors.mutedForeground;
 }
 
+// Animated icon used inside ExpandableBadge while an agent is actively
+// thinking. Replaces the static brain glyph with a Rose Three curve so the
+// "is the agent doing anything?" question has a visible answer at a glance.
+function ThinkingIconSlot() {
+  const { theme } = useUnistyles();
+  // Brand accent so the heartbeat pops against the muted text — green by
+  // default, follows whatever the active theme defines as `accent`.
+  return <MathCurveLoader curve="rose-three" size={20} color={theme.colors.accent} />;
+}
+
 function renderExpandableBadgeIcon({
   isError,
   iconColor,
@@ -2393,6 +2407,7 @@ const ExpandableBadge = memo(function ExpandableBadge({
   style,
   secondaryLabel,
   icon,
+  iconSlot,
   isExpanded,
   onToggle,
   onDetailHoverChange,
@@ -2620,7 +2635,7 @@ const ExpandableBadge = memo(function ExpandableBadge({
   );
 
   const iconColor = resolveExpandableBadgeIconColor({ isError, isActive, theme });
-  const iconNode = renderExpandableBadgeIcon({ isError, iconColor, icon });
+  const iconNode = iconSlot ?? renderExpandableBadgeIcon({ isError, iconColor, icon });
 
   const pressHandlers = isInteractive
     ? {
@@ -2849,6 +2864,13 @@ export const ToolCall = memo(function ToolCall({
     );
   }, [isMobile, effectiveDetail, errorText, isLoadingDetails]);
 
+  const isActivelyThinking =
+    toolName === "thinking" && (status === "running" || status === "executing");
+  const thinkingIconSlot = useMemo(
+    () => (isActivelyThinking ? <ThinkingIconSlot /> : undefined),
+    [isActivelyThinking],
+  );
+
   if (effectiveDetail?.type === "plan") {
     return (
       <PlanCard
@@ -2865,6 +2887,7 @@ export const ToolCall = memo(function ToolCall({
       label={displayName}
       secondaryLabel={secondaryLabel}
       icon={IconComponent}
+      iconSlot={thinkingIconSlot}
       isExpanded={!isMobile && isExpanded}
       onToggle={canOpenDetails ? handleToggle : undefined}
       renderDetails={canOpenDetails && !isMobile ? renderDetails : undefined}

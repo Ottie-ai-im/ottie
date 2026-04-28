@@ -74,10 +74,10 @@ importers:
         specifier: ^1.0.14
         version: 1.0.14(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4)
       '@ottie/expo-two-way-audio':
-        specifier: 1.1.0
+        specifier: 1.3.0
         version: link:../expo-two-way-audio
       '@ottie/highlight':
-        specifier: 1.1.0
+        specifier: 1.3.0
         version: link:../highlight
       '@react-native-async-storage/async-storage':
         specifier: 2.2.0
@@ -160,6 +160,9 @@ importers:
       expo-file-system:
         specifier: ~19.0.17
         version: 19.0.21(expo@54.0.33)(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))
+      expo-font:
+        specifier: ^55.0.6
+        version: 55.0.6(expo@54.0.33)(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4)
       expo-haptics:
         specifier: ~15.0.7
         version: 15.0.8(expo@54.0.33)
@@ -348,7 +351,7 @@ importers:
         specifier: ^1.0.0
         version: 1.2.0
       '@ottie/server':
-        specifier: 1.1.0
+        specifier: 1.3.0
         version: link:../server
       chalk:
         specifier: ^5.3.0
@@ -523,10 +526,10 @@ importers:
         specifier: 1.2.6
         version: 1.2.6
       '@ottie/highlight':
-        specifier: 1.1.0
+        specifier: 1.3.0
         version: link:../highlight
       '@ottie/relay':
-        specifier: 1.1.0
+        specifier: 1.3.0
         version: link:../relay
       '@sctg/sentencepiece-js':
         specifier: ^1.1.0
@@ -2336,7 +2339,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {node: '>=0.10.0'}
+    engines: {'0': node >=0.10.0}
 
   '@expo/cli@54.0.23':
     resolution: {integrity: sha512-km0h72SFfQCmVycH/JtPFTVy69w6Lx1cHNDmfLfQqgKFYeeHTjx7LVDP4POHCtNxFP2UeRazrygJhlh4zz498g==}
@@ -6796,6 +6799,13 @@ packages:
 
   expo-font@14.0.11:
     resolution: {integrity: sha512-ga0q61ny4s/kr4k8JX9hVH69exVSIfcIc19+qZ7gt71Mqtm7xy2c6kwsPTCyhBW2Ro5yXTT8EaZOpuRi35rHbg==}
+    peerDependencies:
+      expo: '*'
+      react: 19.1.4
+      react-native: '*'
+
+  expo-font@55.0.6:
+    resolution: {integrity: sha512-x9czUA3UQWjIwa0ZUEs/eWJNqB4mAue/m4ltESlNPLZhHL0nWWqIfsyHmklTLFH7mVfcHSJvew6k+pR2FE1zVw==}
     peerDependencies:
       expo: '*'
       react: 19.1.4
@@ -19475,6 +19485,13 @@ snapshots:
       react-native: 0.81.6(@babel/core@7.29.0)(@types/react@18.3.28)(react@19.1.4)
 
   expo-font@14.0.11(expo@54.0.33)(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4):
+    dependencies:
+      expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(graphql@16.8.1)(react-native-webview@13.16.1(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4))(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4)(typescript@5.9.3)
+      fontfaceobserver: 2.3.0
+      react: 19.1.4
+      react-native: 0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4)
+
+  expo-font@55.0.6(expo@54.0.33)(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4):
     dependencies:
       expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(graphql@16.8.1)(react-native-webview@13.16.1(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4))(react-native@0.81.6(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.1.4))(react@19.1.4)(typescript@5.9.3)
       fontfaceobserver: 2.3.0

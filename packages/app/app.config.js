@@ -141,6 +141,18 @@ export default {
       ],
       "expo-audio",
       [
+        "expo-font",
+        {
+          fonts: [
+            "./assets/fonts/JetBrainsMono-Regular.ttf",
+            "./assets/fonts/JetBrainsMono-Bold.ttf",
+            "./assets/fonts/JetBrainsMono-Italic.ttf",
+            "./assets/fonts/JetBrainsMono-BoldItalic.ttf",
+            "./assets/fonts/ArkPixel16px.ttf",
+          ],
+        },
+      ],
+      [
         "expo-build-properties",
         {
           android: {

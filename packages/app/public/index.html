@@ -23,7 +23,7 @@
       @media (prefers-color-scheme: dark) {
         html,
         body {
-          background-color: #1A1C1B;
+          background-color: #1a1c1b;
         }
       }
       /* These styles make the root element full-height */
@@ -34,6 +34,70 @@
       }
     </style>
     <style>
+      /* ─── Fonts ────────────────────────────────────────────────────────
+       * "Hacker / terminal" aesthetic: JetBrains Mono for Latin, Ark Pixel
+       * for CJK. All UI text uses mono — every label / button / message
+       * comes out looking like terminal output. Weights are grouped under
+       * "JetBrains Mono" so font-weight cascading works on web.
+       *
+       * Pixel CJK keeps line-height predictable when mixed with mono — they
+       * both have hard, vertical-grid character bodies.
+       */
+      @font-face {
+        font-family: "JetBrains Mono";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("/fonts/JetBrainsMono-Regular.ttf") format("truetype");
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url("/fonts/JetBrainsMono-Bold.ttf") format("truetype");
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        font-style: italic;
+        font-weight: 400;
+        font-display: swap;
+        src: url("/fonts/JetBrainsMono-Italic.ttf") format("truetype");
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        font-style: italic;
+        font-weight: 700;
+        font-display: swap;
+        src: url("/fonts/JetBrainsMono-BoldItalic.ttf") format("truetype");
+      }
+      @font-face {
+        font-family: "Ark Pixel";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("/fonts/ArkPixel16px.ttf") format("truetype");
+      }
+
+      /* App-wide default. CJK chars fall through to Ark Pixel.
+       *
+       * react-native-web inlines `font-family: System` on every Text/View it
+       * styles, which beats anything we set on `body` via the cascade. We use
+       * !important here to guarantee our terminal/pixel stack wins on every
+       * leaf element — the override is intentional, not a band-aid.
+       */
+      html,
+      body,
+      #root,
+      * {
+        font-family:
+          "JetBrains Mono", "Ark Pixel", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+          monospace !important;
+        font-feature-settings: "calt", "ss01", "ss02", "ss03", "ss19", "ss20", "zero";
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
       button,
       a,
       input,

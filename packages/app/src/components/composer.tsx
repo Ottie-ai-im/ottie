@@ -1,11 +1,5 @@
-import {
-  View,
-  Pressable,
-  Text,
-  ActivityIndicator,
-  Image,
-  type PressableStateCallbackType,
-} from "react-native";
+import { View, Pressable, Text, Image, type PressableStateCallbackType } from "react-native";
+import { MathCurveLoader } from "@/components/math-curve-loader";
 import { useState, useEffect, useRef, useCallback, useMemo, memo, type ReactElement } from "react";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -838,8 +832,9 @@ function ComposerCancelButton({
 }: ComposerCancelButtonProps) {
   const { t } = useTranslation();
   const accessibilityLabel = isCancellingAgent ? "Canceling agent" : "Stop agent";
+  const cancelLoaderSize = Math.round(buttonIconSize * 1.6);
   const icon = isCancellingAgent ? (
-    <ActivityIndicator size="small" color="white" />
+    <MathCurveLoader curve="rose-three" size={cancelLoaderSize} color="white" />
   ) : (
     <Square size={buttonIconSize} color="white" fill="white" />
   );
@@ -937,15 +932,22 @@ function ComposerVoiceModeButton({
   const shortcutNode = voiceToggleKeys ? (
     <Shortcut chord={voiceToggleKeys} style={styles.tooltipShortcut} />
   ) : null;
+  const voiceLoaderSize = Math.round(buttonIconSize * 1.6);
   const renderTriggerContent = useCallback(
     ({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => {
       if (isVoiceSwitching) {
-        return <ActivityIndicator size="small" color="white" />;
+        return <MathCurveLoader curve="rose-three" size={voiceLoaderSize} color="white" />;
       }
       const color = hovered ? theme.colors.foreground : theme.colors.foregroundMuted;
       return <AudioLines size={buttonIconSize} color={color} />;
     },
-    [buttonIconSize, isVoiceSwitching, theme.colors.foreground, theme.colors.foregroundMuted],
+    [
+      buttonIconSize,
+      isVoiceSwitching,
+      voiceLoaderSize,
+      theme.colors.foreground,
+      theme.colors.foregroundMuted,
+    ],
   );
   return (
     <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>

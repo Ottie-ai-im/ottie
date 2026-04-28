@@ -27,27 +27,42 @@ export const Colors = {
   },
 };
 
+// Font family names. The whole UI uses JetBrains Mono (Latin / numerals /
+// punctuation) paired with Ark Pixel (CJK pixel font) — terminal / hacker
+// aesthetic. On web, "JetBrains Mono" is grouped under one family across
+// weights via @font-face declarations in public/index.html so font-weight
+// cascading works. On native, expo-font registers each weight by filename
+// (e.g. "JetBrainsMono-Regular"); we point at the most common weights and
+// let RN's fake-bold handle anything else.
+//
+// CJK fall-through: JetBrains Mono has no Chinese glyphs. The browser /
+// react-native-web walks the family list, so Chinese chars naturally pick
+// up Ark Pixel — giving the whole UI a coherent "terminal × pixel" look.
+const SANS_STACK_WEB =
+  "'JetBrains Mono', 'Ark Pixel', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace";
+const MONO_STACK_WEB =
+  "'JetBrains Mono', 'Ark Pixel', SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+
+const SANS_NATIVE = "JetBrainsMono-Regular";
+const MONO_NATIVE = "JetBrainsMono-Regular";
+
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: "system-ui",
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
+    sans: SANS_NATIVE,
     serif: "ui-serif",
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: "ui-rounded",
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: "ui-monospace",
+    mono: MONO_NATIVE,
   },
   default: {
-    sans: "normal",
+    sans: SANS_NATIVE,
     serif: "serif",
     rounded: "normal",
-    mono: "monospace",
+    mono: MONO_NATIVE,
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    sans: SANS_STACK_WEB,
     serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    rounded: SANS_STACK_WEB,
+    mono: MONO_STACK_WEB,
   },
 });
