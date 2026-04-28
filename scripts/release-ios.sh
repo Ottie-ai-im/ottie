@@ -28,6 +28,11 @@
 #
 set -euo pipefail
 
+# CocoaPods on Ruby 4.x crashes with "Unicode Normalization not appropriate
+# for ASCII-8BIT" unless the locale is UTF-8. Force it for the whole script.
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 APP_DIR="$REPO_ROOT/packages/app"
 EXPORT_OPTIONS="$APP_DIR/ios-export-options/AppStore.plist"
@@ -61,12 +66,16 @@ pod install
 
 echo
 echo "==> 3. xcodebuild archive (generic iOS device)"
+# DEVELOPMENT_TEAM is required for signing; expo prebuild leaves it blank
+# in the generated pbxproj, and a non-interactive xcodebuild can't prompt.
 xcodebuild -workspace Ottie.xcworkspace \
   -scheme Ottie \
   -configuration Release \
   -archivePath "$ARCHIVE_PATH" \
   -destination "generic/platform=iOS" \
   -allowProvisioningUpdates \
+  DEVELOPMENT_TEAM="NYJ9G8WDLK" \
+  CODE_SIGN_STYLE=Automatic \
   archive
 
 echo

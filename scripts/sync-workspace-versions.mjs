@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,7 +8,20 @@ const rootPackagePath = path.join(rootDir, "package.json");
 
 const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8"));
 const rootVersion = rootPackage.version;
-const workspacePaths = Array.isArray(rootPackage.workspaces) ? rootPackage.workspaces : [];
+
+// Resolve workspace member directories. This repo uses pnpm-workspace.yaml,
+// so package.json#workspaces is empty — fall through to scanning packages/*
+// like pnpm itself does.
+function resolveWorkspaceDirs() {
+  const declared = Array.isArray(rootPackage.workspaces) ? rootPackage.workspaces : [];
+  if (declared.length > 0) return declared;
+  const packagesDir = path.join(rootDir, "packages");
+  if (!existsSync(packagesDir)) return [];
+  return readdirSync(packagesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `packages/${entry.name}`);
+}
+const workspacePaths = resolveWorkspaceDirs();
 const sharedMetadata = {
   homepage: rootPackage.homepage,
   repository: rootPackage.repository,
