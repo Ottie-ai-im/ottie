@@ -63,6 +63,16 @@ cp -p "$BUNDLE_DIR/server.mjs" "$OUT_DIR/resources/"
 [[ -f "$BUNDLE_DIR/server.mjs.map" ]] && cp -p "$BUNDLE_DIR/server.mjs.map" "$OUT_DIR/resources/"
 cp -RLp "$BUNDLE_DIR/node_modules" "$OUT_DIR/resources/node_modules"
 
+# The bundled server.mjs resolves runtime assets relative to itself via
+# `new URL("./assets/<file>", import.meta.url)`, so we mirror those assets
+# next to it. silero_vad.onnx is the only one today; new ones can be added
+# under packages/server/src/.../assets/ and they'll get picked up here.
+SHERPA_ASSETS_SRC="$SERVER_DIR/src/server/speech/providers/local/sherpa/assets"
+if [[ -d "$SHERPA_ASSETS_SRC" ]]; then
+  mkdir -p "$OUT_DIR/resources/assets"
+  cp -p "$SHERPA_ASSETS_SRC"/* "$OUT_DIR/resources/assets/"
+fi
+
 # Step 2.5: bundle a pinned Node runtime so the daemon doesn't depend on the
 # user having any specific (or any) Node on PATH. The Node ABI dictates which
 # prebuilt native bindings work at runtime, so we recompile better-sqlite3
