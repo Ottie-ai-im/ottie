@@ -1,6 +1,6 @@
 {
   "name": "@ottie/relay",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Ottie relay for bridging daemon and client connections",
   "files": [
     "dist"

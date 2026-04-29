@@ -1,7 +1,11 @@
 {
   "name": "@ottie/desktop",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
+  "homepage": "TODO",
+  "license": "AGPL-3.0-or-later",
+  "author": "TODO",
+  "repository": "TODO",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
@@ -9,9 +13,5 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
-  },
-  "homepage": "TODO",
-  "repository": "TODO",
-  "author": "TODO",
-  "license": "AGPL-3.0-or-later"
+  }
 }
