@@ -1,0 +1,16 @@
+packages/server/src/server/agent/providers/diagnostic-utils.test.ts
+packages/server/src/server/agent/providers/opencode-agent.full-access.test.ts
+packages/server/src/server/daemon-config-store.test.ts
+packages/server/src/server/daemon-e2e/open-project-worktree-reclassification.e2e.test.ts
+packages/server/src/server/paseo-env.test.ts
+packages/server/src/server/paseo-env.ts
+packages/server/src/server/session.workspace-resolution-invariants.test.ts
+packages/server/src/server/test-utils/paseo-daemon.ts
+packages/server/src/shared/messages.providers-snapshot.test.ts
+packages/server/src/shared/messages.test.ts
+packages/server/src/utils/github-remote.test.ts
+packages/server/src/utils/github-remote.ts
+packages/server/src/utils/paseo-config-file.test.ts
+packages/server/src/utils/paseo-config-file.ts
+packages/server/src/utils/paseo-config-schema.ts
+packages/server/src/utils/windows-command.ts

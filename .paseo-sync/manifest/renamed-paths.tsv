@@ -1,0 +1,5 @@
+packages/server/src/server/paseo-home.ts	packages/server/src/server/ottie-home.ts
+packages/server/src/server/paseo-worktree-archive-service.ts	packages/server/src/server/ottie-worktree-archive-service.ts
+packages/server/src/server/paseo-worktree-service.test.ts	packages/server/src/server/ottie-worktree-service.test.ts
+packages/server/src/server/paseo-worktree-service.ts	packages/server/src/server/ottie-worktree-service.ts
+packages/server/src/terminal/shell-integration/zsh/paseo-integration.zsh	packages/server/src/terminal/shell-integration/zsh/ottie-integration.zsh
