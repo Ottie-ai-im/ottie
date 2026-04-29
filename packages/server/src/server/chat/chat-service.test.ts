@@ -45,8 +45,10 @@ describe("FileBackedChatService", () => {
       code: "chat_room_name_taken",
     });
 
-    const raw = await readFile(path.join(ottieHome, "chat", "rooms.json"), "utf8");
-    expect(raw).toContain("cli-features-epic");
+    // Room metadata persists to the index file; per-room JSONL files are
+    // created lazily on first message dispatch.
+    const indexRaw = await readFile(path.join(ottieHome, "chat", "rooms-index.json"), "utf8");
+    expect(indexRaw).toContain("cli-features-epic");
     expect(created.name).toBe("cli-features-epic");
     expect(created.purpose).toBe("Coordination room");
     expect(created.messageCount).toBe(0);

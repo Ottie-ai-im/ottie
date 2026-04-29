@@ -6,6 +6,7 @@ import type { AgentStorage } from "./agent/agent-storage.js";
 import type { DownloadTokenStore } from "./file-download/token-store.js";
 import type { DaemonConfigStore } from "./daemon-config-store.js";
 import type { FileBackedChatService } from "./chat/chat-service.js";
+import type { ChatSubscriptionManager } from "./chat/chat-subscription-manager.js";
 import type { LoopService } from "./loop-service.js";
 import type { ScheduleService } from "./schedule/service.js";
 import type { CheckoutDiffManager } from "./checkout-diff-manager.js";
@@ -127,6 +128,25 @@ function createServer(logger: ReturnType<typeof createLogger>) {
       })),
       dispose: vi.fn(),
     } as unknown as CheckoutDiffManager,
+    undefined, // scriptRouteStore
+    undefined, // scriptRuntimeStore
+    undefined, // onBranchChanged
+    undefined, // getDaemonTcpPort
+    undefined, // getDaemonTcpHost
+    undefined, // resolveScriptHealth
+    undefined, // workspaceGitService
+    undefined, // github
+    {
+      // Stub chat subscription manager: this test exercises runtime metrics,
+      // not chat subscribe/ack flows.
+      start: vi.fn(),
+      stop: vi.fn(),
+      subscribe: vi.fn(),
+      unsubscribe: vi.fn(),
+      unsubscribeAll: vi.fn(),
+      registerAuthor: vi.fn(),
+      ack: vi.fn(),
+    } as unknown as ChatSubscriptionManager,
   );
 }
 

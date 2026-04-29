@@ -1,23 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import type pino from "pino";
-import { z } from "zod";
+
+import { ChatRoomIndexStore } from "./chat-room-index-store.js";
 import {
   ChatMessageSchema,
   ChatRoomDetailSchema,
-  ChatRoomSchema,
   type ChatMessage,
-  type ChatRoom,
   type ChatRoomDetail,
+  type StoredChatMessage,
+  type StoredChatRoom,
 } from "./chat-types.js";
-
-const ChatStorePayloadSchema = z.object({
-  rooms: z.array(ChatRoomSchema),
-  messages: z.array(ChatMessageSchema),
-});
-
-type ChatStorePayload = z.infer<typeof ChatStorePayloadSchema>;
+import { DurableChatMessageStore } from "./durable-chat-message-store.js";
+import { migrateLegacyChatStore } from "./chat-store-migration.js";
 
 function normalizeRoomName(name: string): string {
   return name.trim().toLocaleLowerCase();
@@ -80,6 +75,12 @@ export interface PostChatMessageInput {
   authorAgentId: string;
   body: string;
   replyToMessageId?: string | null;
+  /**
+   * Client-supplied UUID. If provided, a duplicate post with the same
+   * `clientMessageId` returns the original message instead of creating a new
+   * one — supports safe retries from clients that didn't see the ack.
+   */
+  clientMessageId?: string | null;
 }
 
 export interface ReadChatMessagesInput {
@@ -104,21 +105,65 @@ export interface InspectChatRoomResult {
 }
 
 export class FileBackedChatService {
-  private readonly filePath: string;
   private readonly logger: pino.Logger;
+  private readonly ottieHome: string;
+  private readonly roomIndex: ChatRoomIndexStore;
+  private readonly messageStore: DurableChatMessageStore;
+
+  /**
+   * Per-room in-memory message cache. Backed by the durable JSONL store on
+   * disk; populated on first access for a room and kept in sync with each
+   * append. Reads (readMessages, waitForMessages) hit this cache, not disk.
+   */
+  private readonly messagesByRoomId = new Map<string, StoredChatMessage[]>();
+
+  /** Rooms whose messages we've already loaded from disk into the cache. */
+  private readonly loadedRoomMessages = new Set<string>();
+
+  /** Per-room latest seq, kept in sync with messagesByRoomId. */
+  private readonly latestSeqByRoomId = new Map<string, number>();
+
+  /** Quick clientMessageId → message lookup for retry idempotency. */
+  private readonly messageByClientId = new Map<string, StoredChatMessage>();
+
   private loaded = false;
-  private readonly rooms = new Map<string, ChatRoom>();
-  private readonly messagesByRoomId = new Map<string, ChatMessage[]>();
-  private persistQueue: Promise<void> = Promise.resolve();
   private readonly waitersByRoomId = new Map<string, Set<Waiter>>();
 
+  /**
+   * Optional listener invoked synchronously after a message has been
+   * persisted and the in-memory caches updated, BEFORE notifyWaiters runs.
+   * Used by the subscription manager to broadcast `chat/message` events to
+   * subscribed sessions in real time. Kept as a single function (not a full
+   * EventEmitter) because there is exactly one subscription manager per
+   * daemon and explicit dependency wiring is clearer than pubsub.
+   */
+  private onMessageDispatched: ((message: StoredChatMessage) => void) | null = null;
+
   constructor(options: { ottieHome: string; logger: pino.Logger }) {
-    this.filePath = path.join(options.ottieHome, "chat", "rooms.json");
+    this.ottieHome = options.ottieHome;
     this.logger = options.logger.child({ component: "chat-service" });
+    this.roomIndex = new ChatRoomIndexStore({
+      filePath: path.join(options.ottieHome, "chat", "rooms-index.json"),
+      logger: this.logger,
+    });
+    this.messageStore = new DurableChatMessageStore({
+      rootDir: path.join(options.ottieHome, "chat", "rooms"),
+      logger: this.logger,
+    });
   }
 
   async initialize(): Promise<void> {
     await this.load();
+  }
+
+  /**
+   * Register a listener invoked once per dispatched message after it's been
+   * persisted and the in-memory state has settled. Replaces any previously
+   * registered listener — there's exactly one subscription manager per
+   * daemon. Pass `null` to clear.
+   */
+  setOnMessageDispatched(listener: ((message: StoredChatMessage) => void) | null): void {
+    this.onMessageDispatched = listener;
   }
 
   async createRoom(input: CreateChatRoomInput): Promise<ChatRoomDetail> {
@@ -135,40 +180,59 @@ export class FileBackedChatService {
     }
 
     const now = new Date().toISOString();
-    const room = ChatRoomSchema.parse({
+    const room: StoredChatRoom = {
       id: randomUUID(),
       name,
       purpose: trimToNull(input.purpose),
       createdAt: now,
       updatedAt: now,
-    });
-    this.rooms.set(room.id, room);
-    await this.enqueuePersist();
+      epoch: randomUUID(),
+    };
+    this.roomIndex.put(room);
+    this.messagesByRoomId.set(room.id, []);
+    this.loadedRoomMessages.add(room.id);
+    this.latestSeqByRoomId.set(room.id, 0);
+    await this.roomIndex.flush();
     return this.toRoomDetail(room);
   }
 
   async listRooms(): Promise<ChatRoomDetail[]> {
     await this.load();
-    return Array.from(this.rooms.values())
+    return this.roomIndex
+      .list()
       .map((room) => this.toRoomDetail(room))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
   async inspectRoom(input: InspectChatRoomInput): Promise<InspectChatRoomResult> {
     await this.load();
-    const room = this.resolveRoom(input.room);
-    return {
-      room: this.toRoomDetail(room),
-    };
+    const room = await this.resolveRoom(input.room);
+    return { room: this.toRoomDetail(room) };
   }
 
   async deleteRoom(input: DeleteChatRoomInput): Promise<DeleteChatRoomResult> {
     await this.load();
-    const room = this.resolveRoom(input.room);
+    const room = await this.resolveRoom(input.room);
     const detail = this.toRoomDetail(room);
-    this.rooms.delete(room.id);
-    this.messagesByRoomId.delete(room.id);
-    await this.enqueuePersist();
+
+    // Drop from index first so any in-flight resolveRoom calls fail cleanly.
+    this.roomIndex.delete(room.id);
+    await this.roomIndex.flush();
+
+    // Then drop the message file and in-memory caches.
+    await this.messageStore.deleteRoom(room.id);
+    const cached = this.messagesByRoomId.get(room.id);
+    if (cached) {
+      for (const message of cached) {
+        if (message.clientMessageId) {
+          this.messageByClientId.delete(message.clientMessageId);
+        }
+      }
+      this.messagesByRoomId.delete(room.id);
+    }
+    this.loadedRoomMessages.delete(room.id);
+    this.latestSeqByRoomId.delete(room.id);
+
     this.rejectWaiters(
       room.id,
       new ChatServiceError("chat_room_deleted", `Chat room deleted: ${room.name}`),
@@ -178,7 +242,7 @@ export class FileBackedChatService {
 
   async dispatchMessage(input: PostChatMessageInput): Promise<ChatMessage> {
     await this.load();
-    const room = this.resolveRoom(input.room);
+    const room = await this.resolveRoom(input.room);
     const body = input.body.trim();
     if (body.length === 0) {
       throw new ChatServiceError("invalid_chat_message", "Chat message body is required");
@@ -188,7 +252,20 @@ export class FileBackedChatService {
       throw new ChatServiceError("invalid_chat_author", "Chat message author is required");
     }
 
-    const messages = this.getRoomMessages(room.id);
+    // Retry idempotency: if the caller supplied a clientMessageId we've seen
+    // before for this room, return the original. Stops dup messages when a
+    // client retries after a network blip.
+    const clientMessageId = trimToNull(input.clientMessageId);
+    if (clientMessageId) {
+      const existing = this.messageByClientId.get(clientMessageId);
+      if (existing && existing.roomId === room.id) {
+        return existing;
+      }
+    }
+
+    await this.ensureRoomMessagesLoaded(room.id);
+    const messages = this.messagesByRoomId.get(room.id)!;
+
     const replyToMessageId = trimToNull(input.replyToMessageId);
     if (replyToMessageId) {
       const replyTarget = messages.find((message) => message.id === replyToMessageId);
@@ -201,34 +278,55 @@ export class FileBackedChatService {
     }
 
     const createdAt = new Date().toISOString();
-    const message = ChatMessageSchema.parse({
-      id: randomUUID(),
+    const id = randomUUID();
+    const seq = (this.latestSeqByRoomId.get(room.id) ?? 0) + 1;
+    const message: StoredChatMessage = {
+      id,
       roomId: room.id,
       authorAgentId,
       body,
       replyToMessageId,
       mentionAgentIds: parseMentionAgentIds(body),
       createdAt,
-    });
+      seq,
+      clientMessageId: clientMessageId ?? id,
+    };
+
+    // Persist first; only update in-memory state after disk acks. If
+    // persistence throws we surface the error to the caller before any
+    // observer (waiter, future read) sees the message.
+    await this.messageStore.append(room.id, message);
 
     messages.push(message);
-    this.messagesByRoomId.set(room.id, messages);
-    this.rooms.set(
-      room.id,
-      ChatRoomSchema.parse({
-        ...room,
-        updatedAt: createdAt,
-      }),
-    );
-    await this.enqueuePersist();
+    this.latestSeqByRoomId.set(room.id, seq);
+    this.messageByClientId.set(message.clientMessageId, message);
+
+    // Bump the room's updatedAt and persist the index.
+    const updatedRoom: StoredChatRoom = { ...room, updatedAt: createdAt };
+    this.roomIndex.put(updatedRoom);
+    await this.roomIndex.flush();
+
+    // Fire the dispatch hook BEFORE notifyWaiters so the subscription manager
+    // sees every message, including ones that synchronously satisfy a waiter.
+    // Errors in the listener must not affect the dispatcher's caller — log
+    // and swallow.
+    if (this.onMessageDispatched) {
+      try {
+        this.onMessageDispatched(message);
+      } catch (err) {
+        this.logger.error({ err, messageId: message.id }, "onMessageDispatched listener threw");
+      }
+    }
+
     this.notifyWaiters(room.id);
     return message;
   }
 
   async readMessages(input: ReadChatMessagesInput): Promise<ChatMessage[]> {
     await this.load();
-    const room = this.resolveRoom(input.room);
-    const messages = [...this.getRoomMessages(room.id)];
+    const room = await this.resolveRoom(input.room);
+    await this.ensureRoomMessagesLoaded(room.id);
+    const messages = [...this.messagesByRoomId.get(room.id)!];
     const since = trimToNull(input.since);
     const authorAgentId = trimToNull(input.authorAgentId);
     const limit = this.normalizeLimit(input.limit);
@@ -251,7 +349,8 @@ export class FileBackedChatService {
 
   async waitForMessages(input: WaitForChatMessagesInput): Promise<ChatMessage[]> {
     await this.load();
-    const room = this.resolveRoom(input.room);
+    const room = await this.resolveRoom(input.room);
+    await this.ensureRoomMessagesLoaded(room.id);
     const timeoutMs = Math.max(0, Math.floor(input.timeoutMs ?? 0));
     const afterMessageId = trimToNull(input.afterMessageId);
 
@@ -260,9 +359,9 @@ export class FileBackedChatService {
       if (existing.length > 0) {
         return existing;
       }
-      const knownMessage = this.getRoomMessages(room.id).some(
-        (message) => message.id === afterMessageId,
-      );
+      const knownMessage = this.messagesByRoomId
+        .get(room.id)!
+        .some((message) => message.id === afterMessageId);
       if (!knownMessage) {
         throw new ChatServiceError(
           "chat_message_not_found",
@@ -306,59 +405,43 @@ export class FileBackedChatService {
     });
   }
 
+  // ─── Internals ──────────────────────────────────────────────────────────
+
   private async load(): Promise<void> {
-    if (this.loaded) {
-      return;
-    }
+    if (this.loaded) return;
 
-    this.rooms.clear();
-    this.messagesByRoomId.clear();
+    await this.roomIndex.load();
 
-    try {
-      const raw = await fs.readFile(this.filePath, "utf8");
-      const parsed = ChatStorePayloadSchema.parse(JSON.parse(raw));
-      for (const room of parsed.rooms) {
-        this.rooms.set(room.id, room);
-      }
-      for (const message of parsed.messages) {
-        const messages = this.messagesByRoomId.get(message.roomId) ?? [];
-        messages.push(message);
-        this.messagesByRoomId.set(message.roomId, messages);
-      }
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "ENOENT") {
-        this.logger.error({ err: error, filePath: this.filePath }, "Failed to load chat store");
-      }
-    }
+    // Run the legacy → JSONL migration. No-op if already migrated or if there
+    // never was a legacy file. Migration populates roomIndex + messageStore;
+    // ChatService load proceeds against the post-migration state below.
+    await migrateLegacyChatStore({
+      ottieHome: this.ottieHome,
+      logger: this.logger,
+      roomIndex: this.roomIndex,
+      messageStore: this.messageStore,
+    });
 
     this.loaded = true;
   }
 
-  private async enqueuePersist(): Promise<void> {
-    const nextPersist = this.persistQueue.then(() => this.persist());
-    this.persistQueue = nextPersist.catch(() => {});
-    await nextPersist;
+  private async ensureRoomMessagesLoaded(roomId: string): Promise<void> {
+    if (this.loadedRoomMessages.has(roomId)) return;
+    const messages = await this.messageStore.getMessages(roomId);
+    this.messagesByRoomId.set(roomId, messages);
+    const lastSeq = messages.length > 0 ? messages[messages.length - 1]!.seq : 0;
+    this.latestSeqByRoomId.set(roomId, lastSeq);
+    for (const message of messages) {
+      if (message.clientMessageId) {
+        this.messageByClientId.set(message.clientMessageId, message);
+      }
+    }
+    this.loadedRoomMessages.add(roomId);
   }
 
-  private async persist(): Promise<void> {
-    const payload: ChatStorePayload = {
-      rooms: Array.from(this.rooms.values()).sort((left, right) =>
-        left.createdAt.localeCompare(right.createdAt),
-      ),
-      messages: Array.from(this.messagesByRoomId.values())
-        .flat()
-        .sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
-    };
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
-    await fs.writeFile(tempPath, JSON.stringify(payload, null, 2), "utf8");
-    await fs.rename(tempPath, this.filePath);
-  }
-
-  private findRoomByName(name: string): ChatRoom | null {
+  private findRoomByName(name: string): StoredChatRoom | null {
     const normalizedName = normalizeRoomName(name);
-    for (const room of this.rooms.values()) {
+    for (const room of this.roomIndex.list()) {
       if (normalizeRoomName(room.name) === normalizedName) {
         return room;
       }
@@ -366,12 +449,12 @@ export class FileBackedChatService {
     return null;
   }
 
-  private resolveRoom(roomSelector: string): ChatRoom {
+  private async resolveRoom(roomSelector: string): Promise<StoredChatRoom> {
     const selector = roomSelector.trim();
     if (selector.length === 0) {
       throw new ChatServiceError("invalid_chat_room", "Chat room name or ID is required");
     }
-    const byId = this.rooms.get(selector);
+    const byId = this.roomIndex.get(selector);
     if (byId) {
       return byId;
     }
@@ -382,16 +465,15 @@ export class FileBackedChatService {
     throw new ChatServiceError("chat_room_not_found", `Chat room not found: ${selector}`);
   }
 
-  private getRoomMessages(roomId: string): ChatMessage[] {
-    return this.messagesByRoomId.get(roomId) ?? [];
-  }
-
-  private toRoomDetail(room: ChatRoom): ChatRoomDetail {
-    const messages = this.getRoomMessages(room.id);
+  private toRoomDetail(room: StoredChatRoom): ChatRoomDetail {
+    const messages = this.messagesByRoomId.get(room.id);
+    const messageCount = messages?.length ?? 0;
+    const lastMessageAt =
+      messages && messages.length > 0 ? messages[messages.length - 1]!.createdAt : null;
     return ChatRoomDetailSchema.parse({
       ...room,
-      messageCount: messages.length,
-      lastMessageAt: messages[messages.length - 1]?.createdAt ?? null,
+      messageCount,
+      lastMessageAt,
     });
   }
 
@@ -399,12 +481,11 @@ export class FileBackedChatService {
     if (limit === undefined) {
       return 20;
     }
-    const normalized = Math.max(0, Math.floor(limit));
-    return normalized;
+    return Math.max(0, Math.floor(limit));
   }
 
   private selectMessagesAfter(roomId: string, afterMessageId: string): ChatMessage[] {
-    const messages = this.getRoomMessages(roomId);
+    const messages = this.messagesByRoomId.get(roomId) ?? [];
     const index = messages.findIndex((message) => message.id === afterMessageId);
     if (index === -1) {
       return [];
@@ -414,14 +495,12 @@ export class FileBackedChatService {
 
   private notifyWaiters(roomId: string): void {
     const waiters = this.waitersByRoomId.get(roomId);
-    if (!waiters || waiters.size === 0) {
-      return;
-    }
+    if (!waiters || waiters.size === 0) return;
 
     for (const waiter of Array.from(waiters)) {
       const messages =
         waiter.afterMessageId === null
-          ? this.getRoomMessages(roomId).slice(-1)
+          ? (this.messagesByRoomId.get(roomId) ?? []).slice(-1)
           : this.selectMessagesAfter(roomId, waiter.afterMessageId);
       if (messages.length === 0) {
         continue;
@@ -432,9 +511,7 @@ export class FileBackedChatService {
 
   private removeWaiter(waiter: Waiter): void {
     const waiters = this.waitersByRoomId.get(waiter.roomId);
-    if (!waiters) {
-      return;
-    }
+    if (!waiters) return;
     waiters.delete(waiter);
     if (waiters.size === 0) {
       this.waitersByRoomId.delete(waiter.roomId);
@@ -443,11 +520,14 @@ export class FileBackedChatService {
 
   private rejectWaiters(roomId: string, error: Error): void {
     const waiters = this.waitersByRoomId.get(roomId);
-    if (!waiters) {
-      return;
-    }
+    if (!waiters) return;
     for (const waiter of Array.from(waiters)) {
       waiter.reject(error);
     }
   }
 }
+
+// Keep the schema reference exported in case external callers still validate
+// against it; we no longer use it ourselves but the wire schema lives in
+// chat-types.ts.
+export { ChatMessageSchema };

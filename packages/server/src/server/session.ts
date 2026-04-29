@@ -192,6 +192,7 @@ import type pino from "pino";
 import { resolveClientMessageId } from "./client-message-id.js";
 import { ChatServiceError, FileBackedChatService } from "./chat/chat-service.js";
 import { notifyChatMentions } from "./chat/chat-mentions.js";
+import type { ChatSubscriptionManager } from "./chat/chat-subscription-manager.js";
 import { LoopService } from "./loop-service.js";
 import { ScheduleService } from "./schedule/service.js";
 import { execCommand } from "../utils/spawn.js";
@@ -620,6 +621,7 @@ export interface SessionOptions {
   projectRegistry: ProjectRegistry;
   workspaceRegistry: WorkspaceRegistry;
   chatService: FileBackedChatService;
+  chatSubscriptionManager: ChatSubscriptionManager;
   scheduleService: ScheduleService;
   loopService: LoopService;
   checkoutDiffManager: CheckoutDiffManager;
@@ -794,6 +796,7 @@ export class Session {
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly chatService: FileBackedChatService;
+  private readonly chatSubscriptionManager: ChatSubscriptionManager;
   private readonly scheduleService: ScheduleService;
   private readonly loopService: LoopService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
@@ -883,6 +886,7 @@ export class Session {
       projectRegistry,
       workspaceRegistry,
       chatService,
+      chatSubscriptionManager,
       scheduleService,
       loopService,
       checkoutDiffManager,
@@ -927,6 +931,7 @@ export class Session {
     this.projectRegistry = projectRegistry;
     this.workspaceRegistry = workspaceRegistry;
     this.chatService = chatService;
+    this.chatSubscriptionManager = chatSubscriptionManager;
     this.scheduleService = scheduleService;
     this.loopService = loopService;
     this.checkoutDiffManager = checkoutDiffManager;
@@ -1685,6 +1690,7 @@ export class Session {
       this.dispatchWorkspaceAndProjectMessage(msg) ??
       this.dispatchProviderMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
+      this.dispatchChatSyncMessage(msg) ??
       this.dispatchChatScheduleLoopMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
@@ -1962,6 +1968,22 @@ export class Session {
         return this.handleKillTerminalRequest(msg);
       case "capture_terminal_request":
         return this.handleCaptureTerminalRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  // PR #2 chat sync RPCs live in their own dispatcher so the parent
+  // dispatchChatScheduleLoopMessage method stays under the 20-case
+  // cyclomatic complexity cap.
+  private dispatchChatSyncMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "chat/subscribe":
+        return this.handleChatSubscribeRequest(msg);
+      case "chat/unsubscribe":
+        return this.handleChatUnsubscribeRequest(msg);
+      case "chat/ack":
+        return this.handleChatAckRequest(msg);
       default:
         return undefined;
     }
@@ -8202,6 +8224,10 @@ export class Session {
   public async cleanup(): Promise<void> {
     this.sessionLogger.trace("Cleaning up");
 
+    // Drop chat subscriptions FIRST so no broadcasts try to reach this
+    // session after we start tearing down emit() targets.
+    this.chatSubscriptionManager.unsubscribeAll(this.sessionId);
+
     if (this.unsubscribeAgentEvents) {
       this.unsubscribeAgentEvents();
       this.unsubscribeAgentEvents = null;
@@ -8389,11 +8415,19 @@ export class Session {
   ): Promise<void> {
     try {
       const authorAgentId = request.authorAgentId?.trim() || this.clientId;
+      // Tell the subscription manager who's authoring this message BEFORE
+      // dispatch, so the broadcast suppresses echoing the message back to
+      // this session (the author gets it via chat/post/response instead).
+      const clientMessageId = request.clientMessageId?.trim();
+      if (clientMessageId) {
+        this.chatSubscriptionManager.registerAuthor(clientMessageId, this.sessionId);
+      }
       const message = await this.chatService.dispatchMessage({
         room: request.room,
         authorAgentId,
         body: request.body,
         replyToMessageId: request.replyToMessageId,
+        clientMessageId,
       });
       this.emit({
         type: "chat/post/response",
@@ -8464,6 +8498,107 @@ export class Session {
       });
     } catch (error) {
       this.emitChatRpcError(request, error);
+    }
+  }
+
+  private async handleChatSubscribeRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/subscribe" }>,
+  ): Promise<void> {
+    const subscriber = {
+      sessionId: this.sessionId,
+      clientId: this.clientId,
+      send: (event: { type: "chat/message" | "chat/status"; payload: unknown }) => {
+        this.emit(event as SessionOutboundMessage);
+      },
+    };
+
+    const results = await Promise.all(
+      request.rooms.map(async (entry) => {
+        try {
+          const result = await this.chatSubscriptionManager.subscribe(subscriber, {
+            roomId: entry.roomId,
+            sinceSeq: entry.sinceSeq,
+            epoch: entry.epoch,
+          });
+          return {
+            roomId: entry.roomId,
+            reset: result.reset,
+            epoch: result.epoch,
+            latestSeq: result.latestSeq,
+            gapFill: result.gapFill,
+            error: null,
+          };
+        } catch (err) {
+          return {
+            roomId: entry.roomId,
+            reset: false,
+            epoch: "",
+            latestSeq: 0,
+            gapFill: [],
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }),
+    );
+
+    this.emit({
+      type: "chat/subscribe/response",
+      payload: {
+        requestId: request.requestId,
+        rooms: results,
+        error: null,
+      },
+    });
+  }
+
+  private async handleChatUnsubscribeRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/unsubscribe" }>,
+  ): Promise<void> {
+    for (const roomId of request.rooms) {
+      this.chatSubscriptionManager.unsubscribe(this.sessionId, roomId);
+    }
+    this.emit({
+      type: "chat/unsubscribe/response",
+      payload: {
+        requestId: request.requestId,
+        error: null,
+      },
+    });
+  }
+
+  private async handleChatAckRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/ack" }>,
+  ): Promise<void> {
+    try {
+      const result = await this.chatSubscriptionManager.ack({
+        sessionId: this.sessionId,
+        clientId: this.clientId,
+        roomId: request.roomId,
+        seq: request.seq,
+        kind: request.kind,
+      });
+      this.emit({
+        type: "chat/ack/response",
+        payload: {
+          requestId: request.requestId,
+          advanced: result.advanced,
+          // The cursor itself isn't returned here to keep the response small;
+          // clients track their own cursor and the response just confirms
+          // the advancement decision.
+          cursor: null,
+          error: null,
+        },
+      });
+    } catch (err) {
+      this.emit({
+        type: "chat/ack/response",
+        payload: {
+          requestId: request.requestId,
+          advanced: false,
+          cursor: null,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
     }
   }
 

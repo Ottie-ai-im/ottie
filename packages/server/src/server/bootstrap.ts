@@ -108,6 +108,8 @@ import {
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
 import { FileBackedProjectRegistry, FileBackedWorkspaceRegistry } from "./workspace-registry.js";
 import { FileBackedChatService } from "./chat/chat-service.js";
+import { ChatCursorStore } from "./chat/chat-cursor-store.js";
+import { ChatSubscriptionManager } from "./chat/chat-subscription-manager.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { LoopService } from "./loop-service.js";
 import { ScheduleService } from "./schedule/service.js";
@@ -500,6 +502,16 @@ export async function createOttieDaemon(
   logger.info({ elapsed: elapsed() }, "Workspace registries bootstrapped");
   await chatService.initialize();
   logger.info({ elapsed: elapsed() }, "Chat service initialized");
+  const chatCursorStore = new ChatCursorStore({
+    rootDir: path.join(config.ottieHome, "chat", "cursors"),
+    logger,
+  });
+  const chatSubscriptionManager = new ChatSubscriptionManager({
+    chatService,
+    cursorStore: chatCursorStore,
+    logger,
+  });
+  chatSubscriptionManager.start();
   const checkoutDiffManager = new CheckoutDiffManager({
     logger,
     ottieHome: config.ottieHome,
@@ -806,6 +818,7 @@ export async function createOttieDaemon(
             (hostname) => scriptHealthMonitor.getHealthForHostname(hostname),
             workspaceGitService,
             github,
+            chatSubscriptionManager,
           );
 
           if (typeof process.send === "function" && process.env.OTTIE_SUPERVISED === "1") {

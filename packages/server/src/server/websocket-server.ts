@@ -9,6 +9,7 @@ import type { TerminalManager } from "../terminal/terminal-manager.js";
 import type pino from "pino";
 import type { ProjectRegistry, WorkspaceRegistry } from "./workspace-registry.js";
 import type { FileBackedChatService } from "./chat/chat-service.js";
+import type { ChatSubscriptionManager } from "./chat/chat-subscription-manager.js";
 import type { LoopService } from "./loop-service.js";
 import type { ScheduleService } from "./schedule/service.js";
 import type { CheckoutDiffManager, CheckoutDiffMetrics } from "./checkout-diff-manager.js";
@@ -287,6 +288,7 @@ export class MissingDaemonVersionError extends Error {
 
 interface RequiredWebSocketServices {
   chatService: FileBackedChatService;
+  chatSubscriptionManager: ChatSubscriptionManager;
   loopService: LoopService;
   scheduleService: ScheduleService;
   checkoutDiffManager: CheckoutDiffManager;
@@ -294,13 +296,23 @@ interface RequiredWebSocketServices {
 
 function requireWebSocketServices(params: {
   chatService?: FileBackedChatService;
+  chatSubscriptionManager?: ChatSubscriptionManager;
   loopService?: LoopService;
   scheduleService?: ScheduleService;
   checkoutDiffManager?: CheckoutDiffManager;
 }): RequiredWebSocketServices {
-  const { chatService, loopService, scheduleService, checkoutDiffManager } = params;
+  const {
+    chatService,
+    chatSubscriptionManager,
+    loopService,
+    scheduleService,
+    checkoutDiffManager,
+  } = params;
   if (!chatService) {
     throw new Error("VoiceAssistantWebSocketServer requires a chat service.");
+  }
+  if (!chatSubscriptionManager) {
+    throw new Error("VoiceAssistantWebSocketServer requires a chat subscription manager.");
   }
   if (!loopService) {
     throw new Error("VoiceAssistantWebSocketServer requires a loop service.");
@@ -311,7 +323,13 @@ function requireWebSocketServices(params: {
   if (!checkoutDiffManager) {
     throw new Error("VoiceAssistantWebSocketServer requires a checkout diff manager.");
   }
-  return { chatService, loopService, scheduleService, checkoutDiffManager };
+  return {
+    chatService,
+    chatSubscriptionManager,
+    loopService,
+    scheduleService,
+    checkoutDiffManager,
+  };
 }
 
 /**
@@ -330,6 +348,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly chatService: FileBackedChatService;
+  private readonly chatSubscriptionManager: ChatSubscriptionManager;
   private readonly loopService: LoopService;
   private readonly scheduleService: ScheduleService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
@@ -433,6 +452,7 @@ export class VoiceAssistantWebSocketServer {
     resolveScriptHealth?: (hostname: string) => ScriptHealthState | null,
     workspaceGitService?: WorkspaceGitService,
     github?: GitHubService,
+    chatSubscriptionManager?: ChatSubscriptionManager,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.serverId = serverId;
@@ -446,11 +466,13 @@ export class VoiceAssistantWebSocketServer {
     this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
     const requiredServices = requireWebSocketServices({
       chatService,
+      chatSubscriptionManager,
       loopService,
       scheduleService,
       checkoutDiffManager,
     });
     this.chatService = requiredServices.chatService;
+    this.chatSubscriptionManager = requiredServices.chatSubscriptionManager;
     this.loopService = requiredServices.loopService;
     this.scheduleService = requiredServices.scheduleService;
     this.checkoutDiffManager = requiredServices.checkoutDiffManager;
@@ -837,6 +859,7 @@ export class VoiceAssistantWebSocketServer {
       projectRegistry: this.projectRegistry,
       workspaceRegistry: this.workspaceRegistry,
       chatService: this.chatService,
+      chatSubscriptionManager: this.chatSubscriptionManager,
       loopService: this.loopService,
       scheduleService: this.scheduleService,
       checkoutDiffManager: this.checkoutDiffManager,
