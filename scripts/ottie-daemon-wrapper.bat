@@ -23,4 +23,8 @@ echo ottie-daemon-wrapper: cannot find resources\server.mjs near %DIR% 1>&2
 exit /b 1
 
 :run
-node "%RES%\server.mjs" %*
+if exist "%RES%\node.exe" (
+    "%RES%\node.exe" "%RES%\server.mjs" %*
+) else (
+    node "%RES%\server.mjs" %*
+)

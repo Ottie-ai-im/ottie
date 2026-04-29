@@ -21,6 +21,11 @@ SERVER_DIR="$REPO_ROOT/packages/server"
 BUNDLE_DIR="$SERVER_DIR/dist-bundle"
 OUT_DIR="$REPO_ROOT/packages/desktop/src-tauri/binaries"
 
+# Node version bundled with the daemon. Pinning this guarantees better-sqlite3
+# (and other prebuilt native modules) match the runtime at execution time,
+# regardless of what the user has installed on PATH.
+BUNDLED_NODE_VERSION="${BUNDLED_NODE_VERSION:-22.18.0}"
+
 if ! command -v rustc >/dev/null 2>&1; then
   echo "error: rustc is required to detect the Tauri target triple." >&2
   echo "install: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh" >&2
@@ -57,6 +62,71 @@ mkdir -p "$OUT_DIR/resources"
 cp -p "$BUNDLE_DIR/server.mjs" "$OUT_DIR/resources/"
 [[ -f "$BUNDLE_DIR/server.mjs.map" ]] && cp -p "$BUNDLE_DIR/server.mjs.map" "$OUT_DIR/resources/"
 cp -RLp "$BUNDLE_DIR/node_modules" "$OUT_DIR/resources/node_modules"
+
+# Step 2.5: bundle a pinned Node runtime so the daemon doesn't depend on the
+# user having any specific (or any) Node on PATH. The Node ABI dictates which
+# prebuilt native bindings work at runtime, so we recompile better-sqlite3
+# below for this exact version.
+case "$TARGET_TRIPLE" in
+  aarch64-apple-darwin)   NODE_OS="darwin"; NODE_ARCH="arm64" ;;
+  x86_64-apple-darwin)    NODE_OS="darwin"; NODE_ARCH="x64" ;;
+  aarch64-unknown-linux-gnu) NODE_OS="linux"; NODE_ARCH="arm64" ;;
+  x86_64-unknown-linux-gnu)  NODE_OS="linux"; NODE_ARCH="x64" ;;
+  *-pc-windows-*)         NODE_OS="win"; NODE_ARCH="x64" ;;
+  *)
+    echo "error: no bundled-Node mapping for target $TARGET_TRIPLE" >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$NODE_OS" == "win" ]]; then
+  NODE_PKG="node-v$BUNDLED_NODE_VERSION-$NODE_OS-$NODE_ARCH.zip"
+  NODE_BIN_NAME="node.exe"
+else
+  NODE_PKG="node-v$BUNDLED_NODE_VERSION-$NODE_OS-$NODE_ARCH.tar.gz"
+  NODE_BIN_NAME="node"
+fi
+NODE_URL="https://nodejs.org/dist/v$BUNDLED_NODE_VERSION/$NODE_PKG"
+
+echo "==> bundle Node $BUNDLED_NODE_VERSION ($NODE_OS-$NODE_ARCH)"
+TMP_NODE_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_NODE_DIR"' EXIT
+curl -fsSL "$NODE_URL" -o "$TMP_NODE_DIR/$NODE_PKG"
+if [[ "$NODE_OS" == "win" ]]; then
+  unzip -q "$TMP_NODE_DIR/$NODE_PKG" -d "$TMP_NODE_DIR"
+  cp -p "$TMP_NODE_DIR/node-v$BUNDLED_NODE_VERSION-$NODE_OS-$NODE_ARCH/$NODE_BIN_NAME" "$OUT_DIR/resources/$NODE_BIN_NAME"
+else
+  tar -xzf "$TMP_NODE_DIR/$NODE_PKG" -C "$TMP_NODE_DIR"
+  cp -p "$TMP_NODE_DIR/node-v$BUNDLED_NODE_VERSION-$NODE_OS-$NODE_ARCH/bin/$NODE_BIN_NAME" "$OUT_DIR/resources/$NODE_BIN_NAME"
+fi
+chmod +x "$OUT_DIR/resources/$NODE_BIN_NAME"
+
+# Step 2.6: recompile better-sqlite3's prebuild against the bundled Node
+# ABI. Otherwise we ship a .node file built for whatever Node the developer
+# happened to have on PATH at install time — which is exactly the bug that
+# necessitated bundling Node in the first place.
+BSQ_DIR="$OUT_DIR/resources/node_modules/better-sqlite3"
+if [[ -d "$BSQ_DIR" ]]; then
+  echo "==> rebuild better-sqlite3 prebuild for Node $BUNDLED_NODE_VERSION"
+  # The .bin shim copied alongside better-sqlite3 is a pnpm symlink relative to
+  # the original store layout, so it can't find prebuild-install once the
+  # package is flattened into resources/node_modules. Locate the script in
+  # pnpm's content-addressable store and invoke it directly via the bundled
+  # Node so the rebuild targets that ABI.
+  PREBUILD_INSTALL_JS="$(find "$REPO_ROOT/node_modules/.pnpm" -path "*/prebuild-install/bin.js" -type f -print -quit 2>/dev/null)"
+  if [[ -z "$PREBUILD_INSTALL_JS" ]]; then
+    echo "error: prebuild-install/bin.js not found in node_modules/.pnpm" >&2
+    exit 1
+  fi
+  ( cd "$BSQ_DIR" && \
+    rm -rf build/Release && \
+    "$OUT_DIR/resources/node" "$PREBUILD_INSTALL_JS" \
+      --target="$BUNDLED_NODE_VERSION" \
+      --runtime=node \
+      --platform="$NODE_OS" \
+      --arch="$NODE_ARCH" \
+      --tag-prefix=v )
+fi
 
 # The daemon's resolveDaemonVersion() walks parent directories looking for a
 # package.json with name === "@ottie/server" to read the version. Synthesize

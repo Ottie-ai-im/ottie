@@ -34,4 +34,13 @@ if [ -z "$RESOURCES" ]; then
   exit 1
 fi
 
-exec node "$RESOURCES/server.mjs" "$@"
+# Prefer the bundled Node next to resources/server.mjs. Falling back to system
+# `node` is the legacy dev-time path; in production the bundled binary is
+# always present and matches the ABI of better-sqlite3's compiled .node file.
+if [ -x "$RESOURCES/node" ]; then
+  NODE_BIN="$RESOURCES/node"
+else
+  NODE_BIN="node"
+fi
+
+exec "$NODE_BIN" "$RESOURCES/server.mjs" "$@"
