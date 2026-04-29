@@ -120,6 +120,27 @@ fn probe_listen(listen: &str) -> bool {
     TcpStream::connect_timeout(&addr, Duration::from_millis(150)).is_ok()
 }
 
+/// Block (with a hard ceiling) until the sidecar has bound the listen port
+/// AND written its real server-id. This avoids a startup race where the
+/// renderer would otherwise persist "srv_unknown" as the host identity.
+fn daemon_status_value_blocking(info: &DaemonInfo) -> Value {
+    use std::thread::sleep;
+    use std::time::{Duration, Instant};
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if probe_listen(&info.listen) {
+            let id = read_server_id(&info.home);
+            if id != "srv_unknown" && !id.is_empty() {
+                return daemon_status_value(info);
+            }
+        }
+        sleep(Duration::from_millis(100));
+    }
+    // Timed out — return whatever we have. The renderer can still surface a
+    // helpful error rather than hanging forever.
+    daemon_status_value(info)
+}
+
 fn daemon_status_value(info: &DaemonInfo) -> Value {
     let alive = probe_listen(&info.listen);
     let server_id = if alive {
@@ -170,9 +191,17 @@ pub fn ottie_invoke<R: Runtime>(
         .unwrap_or_default();
 
     match command.as_str() {
-        "desktop_daemon_status"
-        | "start_desktop_daemon"
-        | "restart_desktop_daemon" => Ok(daemon_status_value(&info)),
+        "desktop_daemon_status" => Ok(daemon_status_value(&info)),
+
+        // start/restart: callers expect a fully-bootstrapped daemon, not a
+        // half-started one. The renderer persists `serverId` to local storage
+        // and uses it as the host identity forever after — if we hand back
+        // "srv_unknown" because the sidecar hasn't written `$OTTIE_HOME/server-id`
+        // yet, that placeholder gets pinned and the next probe (which sees the
+        // real id) fails the host-id sanity check, leaving the app stuck at
+        // "Connecting to local server...".
+        "start_desktop_daemon"
+        | "restart_desktop_daemon" => Ok(daemon_status_value_blocking(&info)),
 
         "stop_desktop_daemon" => {
             let mut stopped = info.clone();
@@ -562,3 +591,4 @@ pub fn emit_to_webview<R: Runtime>(app: &AppHandle<R>, event: &str, payload: &Va
     // Also use Tauri's own event bus so listeners using @tauri-apps/api work.
     let _ = app.emit(&event_name, payload.clone());
 }
+

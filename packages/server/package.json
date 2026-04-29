@@ -1,6 +1,6 @@
 {
   "name": "@ottie/server",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Ottie backend server",
   "files": [
     "dist/server",
@@ -67,8 +67,8 @@
     "@mariozechner/pi-coding-agent": "^0.67.68",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "@opencode-ai/sdk": "1.2.6",
-    "@ottie/highlight": "1.8.0",
-    "@ottie/relay": "1.8.0",
+    "@ottie/highlight": "1.9.0",
+    "@ottie/relay": "1.9.0",
     "@sctg/sentencepiece-js": "^1.1.0",
     "@xterm/headless": "^6.0.0",
     "ai": "5.0.78",

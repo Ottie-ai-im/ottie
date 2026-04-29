@@ -1208,7 +1208,13 @@ export class HostRuntimeStore {
       }
       const profiles = parsed
         .map((entry) => normalizeStoredHostProfile(entry))
-        .filter((entry): entry is HostProfile => entry !== null);
+        .filter((entry): entry is HostProfile => entry !== null)
+        // Drop hosts persisted under the placeholder identity. Older desktop
+        // shells could race the daemon's `server-id` write and pin
+        // "srv_unknown" as the host id; later probes would see the real id,
+        // fail the host-id sanity check, and the app would be stuck at
+        // "Connecting to local server..." forever.
+        .filter((entry) => entry.serverId !== "srv_unknown");
       this.hosts = profiles;
       this.syncHosts(profiles);
       this.emitHostList();
