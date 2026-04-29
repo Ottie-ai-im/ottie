@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { ChatCursorKindSchema, ChatRoomCursorSchema } from "./chat-cursor-store.js";
+// Pure-zod schemas live in chat-cursor-schemas.ts so this module — and the
+// shared messages.ts that re-exports it — can be bundled by Metro for the
+// React Native client without dragging in node:crypto / node:fs.
+import { ChatCursorKindSchema, ChatRoomCursorSchema } from "./chat-cursor-schemas.js";
 import { ChatMessageSchema, ChatRoomDetailSchema } from "./chat-types.js";
 
 export const ChatCreateRequestSchema = z.object({

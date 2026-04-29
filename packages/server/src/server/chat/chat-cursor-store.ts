@@ -22,17 +22,16 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { Logger } from "pino";
+import {
+  ChatCursorKindSchema,
+  type ChatCursorKind,
+  ChatRoomCursorSchema,
+  type ChatRoomCursor,
+} from "./chat-cursor-schemas.js";
 
-export const ChatCursorKindSchema = z.enum(["delivered", "read"]);
-export type ChatCursorKind = z.infer<typeof ChatCursorKindSchema>;
-
-export const ChatRoomCursorSchema = z.object({
-  lastDeliveredSeq: z.number().int().nonnegative(),
-  lastReadSeq: z.number().int().nonnegative(),
-  updatedAt: z.string(),
-});
-
-export type ChatRoomCursor = z.infer<typeof ChatRoomCursorSchema>;
+// Re-export so existing server-side imports of these schemas keep working.
+export { ChatCursorKindSchema, ChatRoomCursorSchema };
+export type { ChatCursorKind, ChatRoomCursor };
 
 const ChatClientCursorsSchema = z.object({
   version: z.literal(1).optional(),

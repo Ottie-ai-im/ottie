@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type ReactNode } from "react";
-import { View, type StyleProp, type ViewStyle } from "react-native";
+import { type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { PanelLeft } from "lucide-react-native";
+import { ChevronLeft, PanelLeft } from "lucide-react-native";
 import { ScreenHeader } from "./screen-header";
 import { ScreenTitle } from "./screen-title";
 import { HeaderToggleButton } from "./header-toggle-button";
@@ -20,25 +20,6 @@ interface SidebarMenuToggleProps {
   tooltipSide?: "left" | "right" | "top" | "bottom";
   testID?: string;
   nativeID?: string;
-}
-
-const MOBILE_MENU_LINE_WIDTH = 16;
-const MOBILE_MENU_LINE_SHORT_WIDTH = 8;
-const MOBILE_MENU_LINE_HEIGHT = 2;
-
-function MobileMenuIcon({ color }: { color: string }) {
-  const lineStyle = useMemo(() => [styles.mobileMenuLine, { backgroundColor: color }], [color]);
-  const shortLineStyle = useMemo(
-    () => [styles.mobileMenuLine, styles.mobileMenuLineShort, { backgroundColor: color }],
-    [color],
-  );
-  return (
-    <View style={styles.mobileMenuIcon} pointerEvents="none">
-      <View style={lineStyle} />
-      <View style={lineStyle} />
-      <View style={shortLineStyle} />
-    </View>
-  );
 }
 
 export function SidebarMenuToggle({
@@ -80,7 +61,7 @@ export function SidebarMenuToggle({
       accessibilityState={accessibilityState}
     >
       {isMobile ? (
-        <MobileMenuIcon color={menuIconColor} />
+        <ChevronLeft size={theme.iconSize.md} color={menuIconColor} />
       ) : (
         <PanelLeft size={theme.iconSize.md} color={menuIconColor} />
       )}
@@ -107,19 +88,5 @@ export function MenuHeader({ title, rightContent, borderless }: MenuHeaderProps)
 const styles = StyleSheet.create((theme) => ({
   left: {
     gap: theme.spacing[2],
-  },
-  mobileMenuIcon: {
-    width: MOBILE_MENU_LINE_WIDTH,
-    height: 12,
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  mobileMenuLine: {
-    width: MOBILE_MENU_LINE_WIDTH,
-    height: MOBILE_MENU_LINE_HEIGHT,
-    borderRadius: theme.borderRadius.full,
-  },
-  mobileMenuLineShort: {
-    width: MOBILE_MENU_LINE_SHORT_WIDTH,
   },
 }));

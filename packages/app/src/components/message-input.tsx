@@ -2220,14 +2220,15 @@ const styles = StyleSheet.create((theme: Theme) => ({
   inputWrapper: {
     flexDirection: "column",
     gap: theme.spacing[3],
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceGlassStrong,
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
-    // Larger radius gives the IM-style "pill / chat bubble" feel; combined
-    // with a soft shadow it lifts the composer off the page like WhatsApp /
-    // Slack input docks.
-    borderRadius: 24,
-    ...theme.shadow.sm,
+    borderColor: theme.colors.borderGlass,
+    // macOS/iOS 26 floating glass composer: large continuous-curve radius,
+    // glass surface so the chat behind shows through, soft glass shadow
+    // lifts it off the page.
+    borderRadius: theme.borderRadius.glassSheet,
+    borderCurve: "continuous",
+    ...theme.shadow.glass,
     paddingVertical: {
       xs: theme.spacing[2],
       md: theme.spacing[4],
@@ -2237,11 +2238,12 @@ const styles = StyleSheet.create((theme: Theme) => ({
       md: theme.spacing[4],
     },
     ...(isWeb
-      ? {
-          transitionProperty: "border-color",
-          transitionDuration: "200ms",
+      ? ({
+          transitionProperty: "border-color, background-color",
+          transitionDuration: "180ms",
           transitionTimingFunction: "ease-in-out",
-        }
+          backdropFilter: "blur(28px) saturate(180%)",
+        } as unknown as object)
       : {}),
   },
   // Mobile WeChat-style horizontal layout: mic on the left, input flexing
@@ -2296,10 +2298,12 @@ const styles = StyleSheet.create((theme: Theme) => ({
   },
   textInput: {
     width: "100%",
+    fontFamily: theme.fontFamily.system,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
-    lineHeight: theme.fontSize.base * 1.4,
+    letterSpacing: -0.1,
+    lineHeight: theme.fontSize.base * 1.45,
     ...(isWeb
       ? ({
           outlineStyle: "none",

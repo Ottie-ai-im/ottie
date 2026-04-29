@@ -54,12 +54,15 @@ function pushEscHandler(handler: EscHandler): () => void {
 const styles = StyleSheet.create((theme) => ({
   desktopOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     alignItems: "center",
     padding: theme.spacing[6],
     zIndex: OVERLAY_Z.modal,
     pointerEvents: "auto" as const,
+    // Web-only: blur the page behind the modal so the dialog reads as
+    // a true glass surface floating over the workspace.
+    ...(isWeb ? ({ backdropFilter: "blur(28px) saturate(160%)" } as unknown as object) : {}),
   },
   desktopCard: {
     width: "100%",
@@ -67,10 +70,14 @@ const styles = StyleSheet.create((theme) => ({
     maxHeight: "85%",
     flexShrink: 1,
     minHeight: 0,
-    backgroundColor: theme.colors.surface1,
-    borderRadius: theme.borderRadius.xl,
+    backgroundColor: theme.colors.surfaceGlassStrong,
+    borderRadius: theme.borderRadius.glassSheet,
+    borderCurve: "continuous",
     borderWidth: 1,
-    borderColor: theme.colors.surface2,
+    borderColor: theme.colors.borderGlass,
+    overflow: "hidden",
+    ...theme.shadow.glassDeep,
+    ...(isWeb ? ({ backdropFilter: "blur(40px) saturate(180%)" } as unknown as object) : {}),
   },
   header: {
     paddingHorizontal: theme.spacing[6],
@@ -79,7 +86,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "flex-start",
     justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.surface2,
+    borderBottomColor: theme.colors.borderGlass,
     gap: theme.spacing[3],
   },
   headerTitleGroup: {
@@ -88,9 +95,11 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
   },
   title: {
+    fontFamily: theme.fontFamily.rounded,
     flex: 1,
     fontSize: theme.fontSize.lg,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.semibold,
+    letterSpacing: -0.3,
   },
   headerActions: {
     flexDirection: "row",
@@ -101,8 +110,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   closeButton: {
     padding: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
-    backgroundColor: theme.colors.surface2,
+    borderRadius: theme.borderRadius.glassPill,
+    borderCurve: "continuous",
+    backgroundColor: theme.colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
   },
   desktopScroll: {
     flexShrink: 1,
@@ -121,7 +133,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     alignItems: "flex-start",
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.surface2,
+    borderBottomColor: theme.colors.borderGlass,
     gap: theme.spacing[3],
   },
   bottomSheetContent: {
@@ -148,12 +160,21 @@ function SheetBackground({ style }: BottomSheetBackgroundProps) {
     () => [
       style,
       {
-        backgroundColor: theme.colors.surface1,
-        borderTopLeftRadius: theme.borderRadius.xl,
-        borderTopRightRadius: theme.borderRadius.xl,
+        backgroundColor: theme.colors.surfaceGlassStrong,
+        borderTopLeftRadius: theme.borderRadius.glassSheet,
+        borderTopRightRadius: theme.borderRadius.glassSheet,
+        borderCurve: "continuous" as const,
+        borderTopWidth: 1,
+        borderColor: theme.colors.borderGlass,
+        ...(isWeb ? ({ backdropFilter: "blur(40px) saturate(180%)" } as unknown as object) : {}),
       },
     ],
-    [style, theme.colors.surface1, theme.borderRadius.xl],
+    [
+      style,
+      theme.colors.surfaceGlassStrong,
+      theme.colors.borderGlass,
+      theme.borderRadius.glassSheet,
+    ],
   );
   return <View style={combinedStyle} />;
 }

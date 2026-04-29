@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import type { LucideIcon } from "lucide-react-native";
@@ -12,6 +12,11 @@ interface SidebarHeaderRowProps {
   testID?: string;
   nativeID?: string;
   accessibilityLabel?: string;
+  /**
+   * Optional accessory rendered at the right edge of the row, outside the
+   * pressable trigger so it can have its own onPress (e.g. an "add" button).
+   */
+  trailing?: ReactNode;
 }
 
 /**
@@ -28,6 +33,7 @@ export function SidebarHeaderRow({
   testID,
   nativeID,
   accessibilityLabel,
+  trailing,
 }: SidebarHeaderRowProps) {
   const { theme } = useUnistyles();
 
@@ -73,6 +79,7 @@ export function SidebarHeaderRow({
       >
         {renderChildren}
       </Pressable>
+      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
     </View>
   );
 }
@@ -98,10 +105,13 @@ const styles = StyleSheet.create((theme) => ({
       md: HEADER_INNER_HEIGHT,
     },
     paddingHorizontal: theme.spacing[2],
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.borderGlass,
     userSelect: "none",
+    gap: theme.spacing[2],
   },
   button: {
     flexDirection: "row",
@@ -109,7 +119,16 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.button,
+    borderCurve: "continuous",
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  trailing: {
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
   },
   buttonHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,

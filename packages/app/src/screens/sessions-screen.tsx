@@ -65,7 +65,7 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
 
   return (
     <View style={styles.container}>
-      <MenuHeader title="Sessions" />
+      <MenuHeader title="Chats" />
       {isInitialLoad ? (
         <View style={styles.loadingContainer}>
           <LoadingSpinner size="large" color={theme.colors.foregroundMuted} />
@@ -73,7 +73,7 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
       ) : null}
       {!isInitialLoad && sortedAgents.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No sessions yet</Text>
+          <Text style={styles.emptyText}>No chats yet</Text>
           <Button variant="ghost" leftIcon={ChevronLeft} onPress={handleBack}>
             Back
           </Button>

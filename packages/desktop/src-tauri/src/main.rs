@@ -20,6 +20,45 @@ use tauri::{
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
+#[cfg(target_os = "macos")]
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+#[cfg(target_os = "windows")]
+use window_vibrancy::apply_acrylic;
+
+/// Apply the platform-native window backdrop so the window background reads
+/// as macOS 26 "Liquid Glass" / Windows acrylic. Called from `setup`.
+fn apply_window_backdrop(window: &tauri::WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    {
+        // HudWindow gives the strongest, most uniform blur and matches the
+        // macOS 26 default for floating panels. State::Active keeps the
+        // material lit even when the window is unfocused so the chrome
+        // doesn't dim out behind us.
+        if let Err(err) = apply_vibrancy(
+            window,
+            NSVisualEffectMaterial::HudWindow,
+            Some(NSVisualEffectState::Active),
+            None,
+        ) {
+            log::warn!("apply_vibrancy failed: {err}");
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // Use translucent acrylic on Windows 11. This is a no-op on older
+        // Windows versions where acrylic isn't supported.
+        if let Err(err) = apply_acrylic(window, Some((18, 18, 18, 125))) {
+            log::warn!("apply_acrylic failed: {err}");
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        // No-op on Linux — the window stays transparent and the renderer
+        // covers it with its own surface.
+        let _ = window;
+    }
+}
+
 const BRIDGE_JS: &str = include_str!("../bridge.js");
 
 struct AppState {
@@ -79,6 +118,7 @@ fn main() {
             // when added programmatically (we don't do that today).
             for (_, window) in app.webview_windows() {
                 let _ = window.eval(&init_script);
+                apply_window_backdrop(&window);
             }
             install_application_menu(&app.handle())?;
             wire_window_events(app);

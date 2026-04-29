@@ -521,9 +521,15 @@ const explorerStaticStyles = RNStyleSheet.create({
 
 const styles = StyleSheet.create((theme) => ({
   desktopSidebarBorder: {
-    borderLeftWidth: 1,
-    borderLeftColor: theme.colors.border,
+    // Drawer treatment: drop the hairline border in favor of a horizontal
+    // shadow on the left edge, so the panel reads as a lifted drawer over
+    // the chat surface rather than as a fused IDE column.
     backgroundColor: theme.colors.surfaceSidebar,
+    shadowColor: "rgba(0, 0, 0, 0.18)",
+    shadowOffset: { width: -8, height: 0 },
+    shadowRadius: 18,
+    shadowOpacity: 1,
+    elevation: 12,
   },
   resizeHandle: {
     position: "absolute",

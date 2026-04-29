@@ -14,6 +14,7 @@ import {
   Ellipsis,
   EllipsisVertical,
   PanelRight,
+  Pencil,
   RotateCw,
   Settings,
   SquarePen,
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExplorerSidebar } from "@/components/explorer-sidebar";
+import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
 import { SplitContainer } from "@/components/split-container";
 import { SourceControlPanelIcon } from "@/components/icons/source-control-panel-icon";
 import { WorkspaceGitActions } from "@/screens/workspace/workspace-git-actions";
@@ -715,11 +717,13 @@ interface WorkspaceHeaderMenuProps {
   menuNewTerminalIcon: ReactElement;
   menuCopyIcon: ReactElement;
   menuSettingsIcon: ReactElement;
+  menuRenameIcon: ReactElement;
   onCreateDraftTab: () => void;
   onCreateTerminal: () => void;
   onCopyWorkspacePath: () => void;
   onCopyBranchName: () => void;
   onOpenSetupTab: () => void;
+  onRename: () => void;
 }
 
 function WorkspaceHeaderMenuTriggerIcon({
@@ -751,11 +755,13 @@ function WorkspaceHeaderMenu({
   menuNewTerminalIcon,
   menuCopyIcon,
   menuSettingsIcon,
+  menuRenameIcon,
   onCreateDraftTab,
   onCreateTerminal,
   onCopyWorkspacePath,
   onCopyBranchName,
   onOpenSetupTab,
+  onRename,
 }: WorkspaceHeaderMenuProps) {
   const renderTriggerIcon = useCallback(
     ({ hovered, open }: { hovered: boolean; open: boolean }) => (
@@ -775,6 +781,14 @@ function WorkspaceHeaderMenu({
         {renderTriggerIcon}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" width={220} testID="workspace-header-menu">
+        <DropdownMenuItem
+          testID="workspace-header-rename"
+          leading={menuRenameIcon}
+          onSelect={onRename}
+        >
+          Rename
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           testID="workspace-header-new-agent"
           leading={menuNewAgentIcon}
@@ -840,11 +854,13 @@ interface WorkspaceHeaderTitleBarProps {
   menuNewTerminalIcon: ReactElement;
   menuCopyIcon: ReactElement;
   menuSettingsIcon: ReactElement;
+  menuRenameIcon: ReactElement;
   onCreateDraftTab: () => void;
   onCreateTerminal: () => void;
   onCopyWorkspacePath: () => void;
   onCopyBranchName: () => void;
   onOpenSetupTab: () => void;
+  onRename: () => void;
 }
 
 function WorkspaceHeaderTitleBar({
@@ -863,11 +879,13 @@ function WorkspaceHeaderTitleBar({
   menuNewTerminalIcon,
   menuCopyIcon,
   menuSettingsIcon,
+  menuRenameIcon,
   onCreateDraftTab,
   onCreateTerminal,
   onCopyWorkspacePath,
   onCopyBranchName,
   onOpenSetupTab,
+  onRename,
 }: WorkspaceHeaderTitleBarProps) {
   return (
     <View style={styles.headerTitleContainer}>
@@ -905,11 +923,13 @@ function WorkspaceHeaderTitleBar({
         menuNewTerminalIcon={menuNewTerminalIcon}
         menuCopyIcon={menuCopyIcon}
         menuSettingsIcon={menuSettingsIcon}
+        menuRenameIcon={menuRenameIcon}
         onCreateDraftTab={onCreateDraftTab}
         onCreateTerminal={onCreateTerminal}
         onCopyWorkspacePath={onCopyWorkspacePath}
         onCopyBranchName={onCopyBranchName}
         onOpenSetupTab={onOpenSetupTab}
+        onRename={onRename}
       />
     </View>
   );
@@ -1109,6 +1129,47 @@ function removeTerminalFromPayload(terminalId: string) {
       terminals: current.terminals.filter((terminal) => terminal.id !== terminalId),
     };
   };
+}
+
+/**
+ * Owns the rename-modal state and the menu-icon prop for the workspace
+ * header. Lives outside WorkspaceScreenContent so this module's complexity
+ * budget stays under the lint cap. Renders both the title bar and the
+ * modal so the open/close handler stays inside one component.
+ */
+function WorkspaceHeaderTitleBarWithRename(
+  props: Omit<WorkspaceHeaderTitleBarProps, "menuRenameIcon" | "onRename"> & {
+    workspaceDescriptor: WorkspaceDescriptor | null | undefined;
+  },
+) {
+  const { theme } = useUnistyles();
+  const { workspaceDescriptor, ...titleBarProps } = props;
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const handleOpen = useCallback(() => setIsRenameOpen(true), []);
+  const handleClose = useCallback(() => setIsRenameOpen(false), []);
+  const menuRenameIcon = useMemo(
+    () => <Pencil size={16} color={theme.colors.foregroundMuted} />,
+    [theme.colors.foregroundMuted],
+  );
+  return (
+    <>
+      <WorkspaceHeaderTitleBar
+        {...titleBarProps}
+        menuRenameIcon={menuRenameIcon}
+        onRename={handleOpen}
+      />
+      {workspaceDescriptor ? (
+        <WorkspaceRenameModal
+          visible={isRenameOpen}
+          onClose={handleClose}
+          serverId={titleBarProps.normalizedServerId}
+          workspaceId={titleBarProps.normalizedWorkspaceId}
+          workspaceName={workspaceDescriptor.name}
+          currentAlias={workspaceDescriptor.alias ?? null}
+        />
+      ) : null}
+    </>
+  );
 }
 
 function WorkspaceScreenContent({
@@ -2730,6 +2791,9 @@ function WorkspaceScreenContent({
                   accessibilityLabel={isExplorerOpen ? "Close explorer" : "Open explorer"}
                   accessibilityState={explorerToggleAccessibilityState}
                   style={explorerToggleStyle}
+                  // Voice-control anchor: ghost cursor flies here when either
+                  // open_file_explorer or close_file_explorer fires.
+                  {...EXPLORER_TOGGLE_VOICE_DATASET_PROP}
                 >
                   {({ hovered, pressed }) => {
                     const active = isExplorerOpen || hovered || pressed;
@@ -2776,6 +2840,7 @@ function WorkspaceScreenContent({
             accessibilityRole="button"
             accessibilityLabel={isExplorerOpen ? "Close explorer" : "Open explorer"}
             accessibilityState={explorerToggleAccessibilityState}
+            {...EXPLORER_TOGGLE_VOICE_DATASET_PROP}
           >
             {({ hovered }) => {
               const color =
@@ -2796,6 +2861,7 @@ function WorkspaceScreenContent({
             accessibilityRole="button"
             accessibilityLabel={isExplorerOpen ? "Close explorer" : "Open explorer"}
             accessibilityState={explorerToggleAccessibilityState}
+            {...EXPLORER_TOGGLE_VOICE_DATASET_PROP}
           >
             {({ hovered }) => {
               const color =
@@ -2945,7 +3011,7 @@ function WorkspaceScreenContent({
               left={
                 <>
                   <SidebarMenuToggle />
-                  <WorkspaceHeaderTitleBar
+                  <WorkspaceHeaderTitleBarWithRename
                     isLoading={isWorkspaceHeaderLoading}
                     title={workspaceHeaderTitle}
                     subtitle={workspaceHeaderSubtitle}
@@ -2961,6 +3027,7 @@ function WorkspaceScreenContent({
                     menuNewTerminalIcon={menuNewTerminalIcon}
                     menuCopyIcon={menuCopyIcon}
                     menuSettingsIcon={menuSettingsIcon}
+                    workspaceDescriptor={workspaceDescriptor}
                     onCreateDraftTab={handleCreateDraftTab}
                     onCreateTerminal={handleCreateTerminal}
                     onCopyWorkspacePath={handleCopyWorkspacePath}
@@ -3062,11 +3129,13 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: 0,
   },
   headerTitle: {
+    fontFamily: theme.fontFamily.rounded,
     fontSize: theme.fontSize.base,
     fontWeight: {
-      xs: "400",
-      md: "300",
+      xs: theme.fontWeight.semibold,
+      md: theme.fontWeight.semibold,
     },
+    letterSpacing: -0.3,
     color: theme.colors.foreground,
     flexShrink: 1,
   },
@@ -3102,11 +3171,13 @@ const styles = StyleSheet.create((theme) => ({
     },
   },
   headerProjectTitle: {
+    fontFamily: theme.fontFamily.system,
     color: theme.colors.foregroundMuted,
     fontSize: {
       xs: theme.fontSize.sm,
-      md: theme.fontSize.base,
+      md: theme.fontSize.sm,
     },
+    letterSpacing: -0.1,
     flexShrink: 1,
     minWidth: 0,
     maxWidth: "60%",
@@ -3130,7 +3201,13 @@ const styles = StyleSheet.create((theme) => ({
   headerActionButton: {
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.glassPill,
+    borderCurve: "continuous",
+    backgroundColor: theme.colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sourceControlButton: {
     flexDirection: "row",
@@ -3346,3 +3423,17 @@ const styles = StyleSheet.create((theme) => ({
 }));
 
 const EXPLORER_TOGGLE_KEYS: ShortcutKey[] = ["mod", "E"];
+
+// Voice-control anchor: the explorer toggle button is the natural target for
+// both `open_file_explorer` and `close_file_explorer` ghost-cursor flights.
+// On web, react-native-web translates `dataSet` into `data-*` attributes;
+// the resolver in @/voice-control/ghost-cursor-target queries for matching
+// command names. Native renders ignore this prop.
+//
+// Type cast: react-native's `dataSet` IS supported by Pressable / View at
+// runtime via react-native-web, but the upstream Pressable types in this
+// repo don't expose it. We spread it via `as never` the same way the
+// codebase handles `aria-expanded` in header-toggle-button.tsx.
+const EXPLORER_TOGGLE_VOICE_DATASET_PROP: Record<string, unknown> = {
+  dataSet: { voiceTarget: "open_file_explorer close_file_explorer" },
+};

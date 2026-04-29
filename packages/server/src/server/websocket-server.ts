@@ -1026,6 +1026,10 @@ export class VoiceAssistantWebSocketServer {
       features: {
         // COMPAT(providersSnapshot): keep optional until all clients rely on snapshot flow.
         providersSnapshot: true,
+        // COMPAT(voiceIntentRouting): added in v1.4.x. Old clients omit
+        // this field; new clients use it to decide whether to send
+        // voice_route_request or fall back to local heuristic matching.
+        voiceIntentRouting: true,
       },
     };
   }

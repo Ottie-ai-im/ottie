@@ -20,6 +20,8 @@ function workspace(input: {
     projectKind: "git",
     workspaceKind: "checkout",
     name: input.name,
+    alias: null,
+    displayLabel: input.name,
     statusBucket: "done",
     diffStat: null,
     scripts: [],

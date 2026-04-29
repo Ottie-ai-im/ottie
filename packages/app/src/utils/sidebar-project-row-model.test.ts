@@ -17,6 +17,8 @@ function workspace(overrides: Partial<SidebarWorkspaceEntry> = {}): SidebarWorks
     projectKind: "git",
     workspaceKind: "checkout",
     name: "ottie",
+    alias: null,
+    displayLabel: "ottie",
     statusBucket: "done",
     diffStat: null,
     scripts: [],

@@ -9,6 +9,21 @@
   if (typeof window === "undefined") return;
   if (window.ottieDesktop) return;
 
+  // Mark the document so CSS can swap to a transparent root and let the
+  // native macOS NSVisualEffect / Windows acrylic backdrop bleed through
+  // beneath the React app. The CSS rule lives in packages/app/public/index.html.
+  try {
+    if (typeof document !== "undefined" && document.documentElement) {
+      document.documentElement.setAttribute("data-tauri", "true");
+    } else if (typeof document !== "undefined") {
+      document.addEventListener("DOMContentLoaded", function () {
+        document.documentElement.setAttribute("data-tauri", "true");
+      });
+    }
+  } catch (_err) {
+    // ignore — this is purely cosmetic chrome.
+  }
+
   function tauri() {
     return window.__TAURI_INTERNALS__;
   }
@@ -28,11 +43,16 @@
   function listen(event, handler) {
     var name = "ottie://" + event;
     function cb(e) {
-      try { handler(e && e.detail !== undefined ? e.detail : undefined); }
-      catch (err) { console.error("[ottieDesktop] listener for " + event + " threw:", err); }
+      try {
+        handler(e && e.detail !== undefined ? e.detail : undefined);
+      } catch (err) {
+        console.error("[ottieDesktop] listener for " + event + " threw:", err);
+      }
     }
     window.addEventListener(name, cb);
-    return Promise.resolve(function () { window.removeEventListener(name, cb); });
+    return Promise.resolve(function () {
+      window.removeEventListener(name, cb);
+    });
   }
 
   var bridge = {
@@ -51,8 +71,12 @@
     window: {
       getCurrentWindow: function () {
         return {
-          toggleMaximize: function () { return invoke("ottie_window_toggle_maximize"); },
-          isFullscreen: function () { return invoke("ottie_window_is_fullscreen"); },
+          toggleMaximize: function () {
+            return invoke("ottie_window_toggle_maximize");
+          },
+          isFullscreen: function () {
+            return invoke("ottie_window_is_fullscreen");
+          },
           updateWindowControls: function (update) {
             return invoke("ottie_window_update_controls", { update: update });
           },
@@ -100,7 +124,9 @@
   // Resolve `platform` synchronously by reading the value the Rust side
   // will inject as window.__OTTIE_PLATFORM__ during initialization.
   Object.defineProperty(bridge, "platform", {
-    get: function () { return window.__OTTIE_PLATFORM__; },
+    get: function () {
+      return window.__OTTIE_PLATFORM__;
+    },
     enumerable: true,
   });
 

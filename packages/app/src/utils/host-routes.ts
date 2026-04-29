@@ -355,6 +355,22 @@ export function buildHostOpenProjectRoute(serverId: string) {
   return `${base}/open-project` as const;
 }
 
+export function buildHostDevicesRoute(serverId: string) {
+  const base = buildHostRootRoute(serverId);
+  if (base === "/") {
+    return "/" as const;
+  }
+  return `${base}/devices` as const;
+}
+
+export function buildHostCommunityRoute(serverId: string) {
+  const base = buildHostRootRoute(serverId);
+  if (base === "/") {
+    return "/" as const;
+  }
+  return `${base}/community` as const;
+}
+
 export function buildHostNewWorkspaceRoute(
   serverId: string,
   sourceDirectory: string,
@@ -378,6 +394,7 @@ export const SETTINGS_SECTION_SLUGS = [
   "integrations",
   "permissions",
   "usage",
+  "labs",
   "diagnostics",
   "about",
 ] as const;

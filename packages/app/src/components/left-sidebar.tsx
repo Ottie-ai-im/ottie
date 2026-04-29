@@ -1,5 +1,8 @@
 import { router, usePathname } from "expo-router";
-import { MessagesSquare, Plus, Settings } from "lucide-react-native";
+import { useTranslation } from "react-i18next";
+import { MobileTabBar, type MobileTab } from "@/components/mobile-tab-bar";
+import { buildHostCommunityRoute, buildHostDevicesRoute } from "@/utils/host-routes";
+import { MessagesSquare, Plus } from "lucide-react-native";
 import {
   type Dispatch,
   memo,
@@ -18,9 +21,6 @@ import {
   Text,
   useWindowDimensions,
   View,
-  type PressableStateCallbackType,
-  type StyleProp,
-  type ViewStyle,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -34,10 +34,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
-import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
+import { ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useIsCompactFormFactor } from "@/constants/layout";
+import { HEADER_TOP_PADDING_MOBILE, useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import { useSidebarAnimation } from "@/contexts/sidebar-animation-context";
 import { useOpenProjectPicker } from "@/hooks/use-open-project-picker";
@@ -145,11 +145,15 @@ export const LeftSidebar = memo(function LeftSidebar({
   const activeHostStatus = activeServerId
     ? (activeHostSnapshot?.connectionStatus ?? "connecting")
     : "idle";
-  let activeHostStatusColor: string;
-  if (activeHostStatus === "online") activeHostStatusColor = theme.colors.palette.green[400];
-  else if (activeHostStatus === "connecting")
-    activeHostStatusColor = theme.colors.palette.amber[500];
-  else activeHostStatusColor = theme.colors.palette.red[500];
+  // Inline color computation in a useMemo so the React Compiler captures values
+  // (status, theme) directly. Earlier attempts using a `let` rebind, then a
+  // module-level helper, both produced "Can't find variable" runtime crashes
+  // under the compiler's scope rewrites.
+  const activeHostStatusColor = useMemo(() => {
+    if (activeHostStatus === "online") return theme.colors.palette.green[400];
+    if (activeHostStatus === "connecting") return theme.colors.palette.amber[500];
+    return theme.colors.palette.red[500];
+  }, [activeHostStatus, theme.colors.palette]);
   const hostOptions = useMemo(
     () =>
       daemons.map((daemon) => ({
@@ -290,44 +294,6 @@ export const LeftSidebar = memo(function LeftSidebar({
   );
 });
 
-interface HostPickerTriggerProps {
-  triggerRef: React.Ref<View>;
-  setIsHostPickerOpen: Dispatch<SetStateAction<boolean>>;
-  hostOptionsEmpty: boolean;
-  hostStatusDotStyle: StyleProp<ViewStyle>;
-  activeHostLabel: string;
-}
-
-function HostPickerTrigger({
-  triggerRef,
-  setIsHostPickerOpen,
-  hostOptionsEmpty,
-  hostStatusDotStyle,
-  activeHostLabel,
-}: HostPickerTriggerProps) {
-  const pressableStyle = useCallback(
-    ({ hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
-      styles.hostTrigger,
-      Boolean(hovered) && styles.hostTriggerHovered,
-    ],
-    [],
-  );
-  const handlePress = useCallback(() => setIsHostPickerOpen(true), [setIsHostPickerOpen]);
-  return (
-    <Pressable
-      ref={triggerRef}
-      style={pressableStyle}
-      onPress={handlePress}
-      disabled={hostOptionsEmpty}
-    >
-      <View style={hostStatusDotStyle} />
-      <Text style={styles.hostTriggerText} numberOfLines={1}>
-        {activeHostLabel}
-      </Text>
-    </Pressable>
-  );
-}
-
 function HostSwitchOption({
   serverId,
   label,
@@ -402,93 +368,15 @@ function AddProjectTooltipContent({
   );
 }
 
-function SidebarFooter({
-  theme,
-  activeServerId,
-  activeHostLabel,
-  hostStatusDotStyle,
-  hostOptions,
-  hostTriggerRef,
-  isHostPickerOpen,
-  setIsHostPickerOpen,
-  handleHostSelect,
-  renderHostOption,
-  handleOpenProject,
-  handleSettings,
-}: {
-  theme: SidebarTheme;
-  activeServerId: string | null;
-  activeHostLabel: string;
-  hostStatusDotStyle: StyleProp<ViewStyle>;
-  hostOptions: ComboboxOption[];
-  hostTriggerRef: RefObject<View | null>;
-  isHostPickerOpen: boolean;
-  setIsHostPickerOpen: Dispatch<SetStateAction<boolean>>;
-  handleHostSelect: (nextServerId: string) => void;
-  renderHostOption: SidebarSharedProps["renderHostOption"];
-  handleOpenProject: () => void;
-  handleSettings: () => void;
-}) {
-  const newAgentKeys = useShortcutKeys("new-agent");
-  return (
-    <View style={styles.sidebarFooter}>
-      <View style={styles.footerHostSlot}>
-        <HostPickerTrigger
-          triggerRef={hostTriggerRef}
-          setIsHostPickerOpen={setIsHostPickerOpen}
-          hostOptionsEmpty={hostOptions.length === 0}
-          hostStatusDotStyle={hostStatusDotStyle}
-          activeHostLabel={activeHostLabel}
-        />
-      </View>
-      <View style={styles.footerIconRow}>
-        <Tooltip delayDuration={300}>
-          <TooltipTrigger asChild>
-            <FooterIconButton
-              onPress={handleOpenProject}
-              testID="sidebar-add-project"
-              accessibilityLabel="Add project"
-              icon={Plus}
-              theme={theme}
-            />
-          </TooltipTrigger>
-          <TooltipContent side="top" align="center" offset={8}>
-            <AddProjectTooltipContent newAgentKeys={newAgentKeys} />
-          </TooltipContent>
-        </Tooltip>
-        <FooterIconButton
-          onPress={handleSettings}
-          testID="sidebar-settings"
-          accessibilityLabel="Settings"
-          icon={Settings}
-          theme={theme}
-        />
-      </View>
-      <Combobox
-        options={hostOptions}
-        value={activeServerId ?? ""}
-        onSelect={handleHostSelect}
-        renderOption={renderHostOption}
-        searchable={false}
-        title="Switch host"
-        searchPlaceholder="Search hosts..."
-        open={isHostPickerOpen}
-        onOpenChange={setIsHostPickerOpen}
-        anchorRef={hostTriggerRef}
-      />
-    </View>
-  );
-}
-
 function MobileSidebar({
   theme,
   activeServerId,
-  activeHostLabel,
-  activeHostStatusColor,
-  hostOptions,
-  hostTriggerRef,
-  isHostPickerOpen,
-  setIsHostPickerOpen,
+  activeHostLabel: _activeHostLabel,
+  activeHostStatusColor: _activeHostStatusColor,
+  hostOptions: _hostOptions,
+  hostTriggerRef: _hostTriggerRef,
+  isHostPickerOpen: _isHostPickerOpen,
+  setIsHostPickerOpen: _setIsHostPickerOpen,
   projects,
   isInitialLoad,
   isRevalidating,
@@ -497,10 +385,10 @@ function MobileSidebar({
   shortcutIndexByWorkspaceKey,
   toggleProjectCollapsed,
   handleRefresh,
-  handleHostSelect,
-  renderHostOption,
+  handleHostSelect: _handleHostSelect,
+  renderHostOption: _renderHostOption,
   handleOpenProject,
-  handleSettings,
+  handleSettings: _handleSettings,
   insetsTop,
   insetsBottom,
   isOpen,
@@ -508,6 +396,7 @@ function MobileSidebar({
   handleViewMoreNavigate,
 }: MobileSidebarProps) {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const isSessionsActive = pathname.includes("/sessions");
   const {
     translateX,
@@ -526,6 +415,44 @@ function MobileSidebar({
     gestureAnimatingRef.current = true;
     closeToAgent();
   }, [closeToAgent, gestureAnimatingRef]);
+
+  const mobileChatsTrailing = useMemo(
+    () => (
+      <FooterIconButton
+        onPress={handleOpenProject}
+        testID="sidebar-add-project"
+        accessibilityLabel="Add project"
+        icon={Plus}
+        theme={theme}
+      />
+    ),
+    [handleOpenProject, theme],
+  );
+
+  const handleMobileTabSelect = useCallback(
+    (tab: MobileTab) => {
+      if (tab === "chats") return;
+      // Close the sidebar drawer immediately so the next route renders on a
+      // clean canvas without the workspace overlay competing for the screen.
+      closeToAgent();
+      switch (tab) {
+        case "devices":
+          if (activeServerId) {
+            router.push(buildHostDevicesRoute(activeServerId));
+          }
+          return;
+        case "community":
+          if (activeServerId) {
+            router.push(buildHostCommunityRoute(activeServerId));
+          }
+          return;
+        case "settings":
+          router.push("/settings");
+          return;
+      }
+    },
+    [activeServerId, closeToAgent],
+  );
 
   const handleViewMore = useCallback(() => {
     if (!activeServerId) {
@@ -627,14 +554,16 @@ function MobileSidebar({
     ],
   );
 
+  // Match the 8px gap that ScreenHeader adds on mobile so the sidebar's
+  // "Chats" header lines up vertically with the headers on Devices /
+  // Community / Settings tabs.
   const mobileSidebarInsetStyle = useMemo(
-    () => ({ width: windowWidth, paddingTop: insetsTop, paddingBottom: insetsBottom }),
+    () => ({
+      width: windowWidth,
+      paddingTop: insetsTop + HEADER_TOP_PADDING_MOBILE,
+      paddingBottom: insetsBottom,
+    }),
     [windowWidth, insetsTop, insetsBottom],
-  );
-
-  const hostStatusDotStyle = useMemo(
-    () => [styles.hostStatusDot, { backgroundColor: activeHostStatusColor }],
-    [activeHostStatusColor],
   );
 
   const sidebarAnimatedStyle = useAnimatedStyle(() => ({
@@ -674,10 +603,11 @@ function MobileSidebar({
           <View style={styles.sidebarContent} pointerEvents="auto">
             <SidebarHeaderRow
               icon={MessagesSquare}
-              label="Sessions"
+              label="Chats"
               onPress={handleViewMore}
               isActive={isSessionsActive}
               testID="sidebar-sessions"
+              trailing={mobileChatsTrailing}
             />
 
             {isInitialLoad ? (
@@ -697,20 +627,7 @@ function MobileSidebar({
               />
             )}
 
-            <SidebarFooter
-              theme={theme}
-              activeServerId={activeServerId}
-              activeHostLabel={activeHostLabel}
-              hostStatusDotStyle={hostStatusDotStyle}
-              hostOptions={hostOptions}
-              hostTriggerRef={hostTriggerRef}
-              isHostPickerOpen={isHostPickerOpen}
-              setIsHostPickerOpen={setIsHostPickerOpen}
-              handleHostSelect={handleHostSelect}
-              renderHostOption={renderHostOption}
-              handleOpenProject={handleOpenProject}
-              handleSettings={handleSettings}
-            />
+            <MobileTabBar activeTab="chats" onSelect={handleMobileTabSelect} />
           </View>
         </Animated.View>
       </GestureDetector>
@@ -721,12 +638,12 @@ function MobileSidebar({
 function DesktopSidebar({
   theme,
   activeServerId,
-  activeHostLabel,
-  activeHostStatusColor,
-  hostOptions,
-  hostTriggerRef,
-  isHostPickerOpen,
-  setIsHostPickerOpen,
+  activeHostLabel: _activeHostLabel,
+  activeHostStatusColor: _activeHostStatusColor,
+  hostOptions: _hostOptions,
+  hostTriggerRef: _hostTriggerRef,
+  isHostPickerOpen: _isHostPickerOpen,
+  setIsHostPickerOpen: _setIsHostPickerOpen,
   projects,
   isInitialLoad,
   isRevalidating,
@@ -735,24 +652,40 @@ function DesktopSidebar({
   shortcutIndexByWorkspaceKey,
   toggleProjectCollapsed,
   handleRefresh,
-  handleHostSelect,
-  renderHostOption,
+  handleHostSelect: _handleHostSelect,
+  renderHostOption: _renderHostOption,
   handleOpenProject,
-  handleSettings,
+  handleSettings: _handleSettings,
   insetsTop,
   isOpen,
   handleViewMore,
 }: DesktopSidebarProps) {
   const pathname = usePathname();
   const isSessionsActive = pathname.includes("/sessions");
+  const newAgentKeys = useShortcutKeys("new-agent");
   const padding = useWindowControlsPadding("sidebar");
+  const desktopChatsTrailing = useMemo(
+    () => (
+      <Tooltip delayDuration={300}>
+        <TooltipTrigger asChild>
+          <FooterIconButton
+            onPress={handleOpenProject}
+            testID="sidebar-add-project"
+            accessibilityLabel="Add project"
+            icon={Plus}
+            theme={theme}
+          />
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="end" offset={6}>
+          <AddProjectTooltipContent newAgentKeys={newAgentKeys} />
+        </TooltipContent>
+      </Tooltip>
+    ),
+    [handleOpenProject, newAgentKeys, theme],
+  );
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const setSidebarWidth = usePanelStore((state) => state.setSidebarWidth);
   const { width: viewportWidth } = useWindowDimensions();
-  const hostStatusDotStyle = useMemo(
-    () => [styles.hostStatusDot, { backgroundColor: activeHostStatusColor }],
-    [activeHostStatusColor],
-  );
 
   const startWidthRef = useRef(sidebarWidth);
   const resizeWidth = useSharedValue(sidebarWidth);
@@ -812,10 +745,11 @@ function DesktopSidebar({
           {padding.top > 0 ? <View style={paddingTopSpacerStyle} /> : null}
           <SidebarHeaderRow
             icon={MessagesSquare}
-            label="Sessions"
+            label="Chats"
             onPress={handleViewMore}
             isActive={isSessionsActive}
             testID="sidebar-sessions"
+            trailing={desktopChatsTrailing}
           />
         </View>
 
@@ -835,21 +769,6 @@ function DesktopSidebar({
         )}
 
         <SidebarCalloutSlot />
-
-        <SidebarFooter
-          theme={theme}
-          activeServerId={activeServerId}
-          activeHostLabel={activeHostLabel}
-          hostStatusDotStyle={hostStatusDotStyle}
-          hostOptions={hostOptions}
-          hostTriggerRef={hostTriggerRef}
-          isHostPickerOpen={isHostPickerOpen}
-          setIsHostPickerOpen={setIsHostPickerOpen}
-          handleHostSelect={handleHostSelect}
-          renderHostOption={renderHostOption}
-          handleOpenProject={handleOpenProject}
-          handleSettings={handleSettings}
-        />
 
         {/* Resize handle - absolutely positioned over right border */}
         <GestureDetector gesture={resizeGesture}>
@@ -887,7 +806,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   desktopSidebarBorder: {
     borderRightWidth: 1,
-    borderRightColor: theme.colors.border,
+    borderRightColor: theme.colors.borderGlass,
     backgroundColor: theme.colors.surfaceSidebar,
   },
   resizeHandle: {
@@ -909,10 +828,11 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
     paddingVertical: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.button,
+    borderCurve: "continuous",
   },
   hostTriggerHovered: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
+    backgroundColor: theme.colors.surfaceGlass,
   },
   hostStatusDot: {
     width: 8,

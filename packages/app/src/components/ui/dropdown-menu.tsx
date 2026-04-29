@@ -30,6 +30,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Check, CheckCircle } from "lucide-react-native";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useWebScrollbarStyle } from "@/hooks/use-web-scrollbar-style";
+import { isWeb } from "@/constants/platform";
 
 // Action status for menu items with loading/success feedback
 export type ActionStatus = "idle" | "pending" | "success";
@@ -746,12 +747,14 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
   },
   content: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceGlassStrong,
     borderWidth: 1,
-    borderColor: theme.colors.borderAccent,
-    borderRadius: theme.borderRadius.lg,
+    borderColor: theme.colors.borderGlass,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous",
     overflow: "hidden",
-    ...theme.shadow.md,
+    ...theme.shadow.glass,
+    ...(isWeb ? ({ backdropFilter: "blur(32px) saturate(180%)" } as unknown as object) : {}),
   },
   labelContainer: {
     paddingHorizontal: theme.spacing[3],
@@ -787,20 +790,24 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[3],
     paddingVertical: theme.spacing[2],
+    marginHorizontal: theme.spacing[1],
+    marginVertical: 1,
+    borderRadius: theme.borderRadius.lg,
+    borderCurve: "continuous",
     borderWidth: theme.borderWidth[1],
     borderColor: "transparent",
   },
   itemHovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceGlassHover,
   },
   itemPressed: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceGlassHover,
   },
   itemSelected: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceGlass,
   },
   itemSelectedInteractive: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceGlassHover,
   },
   itemSelectedAccent: {
     backgroundColor: theme.colors.accent,
@@ -812,9 +819,11 @@ const styles = StyleSheet.create((theme) => ({
     opacity: 0.72,
   },
   itemText: {
+    fontFamily: theme.fontFamily.system,
     fontSize: theme.fontSize.sm,
     color: theme.colors.foreground,
     fontWeight: theme.fontWeight.normal,
+    letterSpacing: -0.1,
   },
   itemTextMuted: {
     color: theme.colors.foregroundMuted,

@@ -33,6 +33,7 @@ function createWorkspace(
     projectKind: input.projectKind ?? "git",
     workspaceKind: input.workspaceKind ?? "local_checkout",
     name: input.name ?? "main",
+    alias: input.alias ?? null,
     status: input.status ?? "done",
     diffStat: input.diffStat ?? null,
     scripts: input.scripts ?? [],

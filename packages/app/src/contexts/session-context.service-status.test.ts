@@ -17,6 +17,7 @@ function workspace(input: {
     projectKind: "git",
     workspaceKind: "checkout",
     name: "main",
+    alias: null,
     status: "running",
     diffStat: null,
     scripts: input.scripts ?? [],

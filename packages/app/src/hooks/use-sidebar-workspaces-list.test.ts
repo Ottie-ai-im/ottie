@@ -56,6 +56,7 @@ function workspaceDescriptor(id: string): WorkspaceDescriptor {
     projectKind: "git",
     workspaceKind: "worktree",
     name: id,
+    alias: null,
     status: "done",
     diffStat: null,
     scripts: [],

@@ -75,8 +75,11 @@ export function ScreenHeader({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  // macOS 26 toolbar look: transparent fill so the window vibrancy / glass
+  // overlay below shows through; only a thin bottom hairline separates it
+  // from the content area.
   header: {
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: "transparent",
   },
   inner: {},
   row: {
@@ -90,7 +93,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing[2],
     borderBottomWidth: theme.borderWidth[1],
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.borderGlass,
     userSelect: "none",
   },
   left: {

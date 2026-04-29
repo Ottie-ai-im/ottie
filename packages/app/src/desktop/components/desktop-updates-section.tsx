@@ -21,6 +21,7 @@ import {
 import { useDaemonStatus } from "@/desktop/hooks/use-daemon-status";
 import type { DesktopDaemonStatus } from "@/desktop/daemon/desktop-daemon";
 import { resolveAppVersion } from "@/utils/app-version";
+import { Fonts } from "@/constants/theme";
 
 function getDaemonManagementButtonLabel(isUpdating: boolean, isPaused: boolean): string {
   if (isUpdating) return isPaused ? "Resuming..." : "Pausing...";
@@ -713,7 +714,7 @@ const styles = StyleSheet.create((theme) => ({
   logOutput: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+    fontFamily: Fonts.mono,
     lineHeight: 18,
   },
   modalActions: {

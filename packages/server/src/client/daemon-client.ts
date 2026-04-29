@@ -47,6 +47,7 @@ import type {
   OpenInEditorResponseMessage,
   OpenProjectResponseMessage,
   ArchiveWorkspaceResponseMessage,
+  SetWorkspaceAliasResponseMessage,
   WorkspaceSetupStatusResponseMessage,
   ListCommandsResponse,
   ListProviderFeaturesResponseMessage,
@@ -212,6 +213,29 @@ export interface SendMessageOptions {
   messageId?: string;
   images?: Array<{ data: string; mimeType: string }>;
   attachments?: SendAgentMessageRequest["attachments"];
+}
+
+export interface RouteVoiceIntentCommand {
+  name: string;
+  description: string;
+  parameters?: unknown;
+  examples?: string[];
+}
+
+export interface RouteVoiceIntentInput {
+  transcript: string;
+  provider: "claude" | "codex" | "opencode";
+  modelId?: string | null;
+  commands: RouteVoiceIntentCommand[];
+  timeoutMs?: number;
+}
+
+export interface RouteVoiceIntentResult {
+  matched: boolean;
+  commandName: string | null;
+  params: Record<string, unknown>;
+  confidence: number | null;
+  error: string | null;
 }
 
 type AgentConfigOverrides = Partial<Omit<AgentSessionConfig, "provider" | "cwd">>;
@@ -509,6 +533,7 @@ type OpenProjectPayload = OpenProjectResponseMessage["payload"];
 type CheckPathPayload = Extract<SessionOutboundMessage, { type: "check_path_response" }>["payload"];
 export type CheckPathResult = CheckPathPayload;
 type ArchiveWorkspacePayload = ArchiveWorkspaceResponseMessage["payload"];
+type SetWorkspaceAliasPayload = SetWorkspaceAliasResponseMessage["payload"];
 type WorkspaceSetupStatusPayload = WorkspaceSetupStatusResponseMessage["payload"];
 export type EditorTargetDescriptor = ListAvailableEditorsPayload["editors"][number];
 
@@ -1538,6 +1563,23 @@ export class DaemonClient {
     });
   }
 
+  async setWorkspaceAlias(
+    workspaceId: string,
+    alias: string,
+    requestId?: string,
+  ): Promise<SetWorkspaceAliasPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "set_workspace_alias_request",
+        workspaceId,
+        alias,
+      },
+      responseType: "set_workspace_alias_response",
+      timeout: 10000,
+    });
+  }
+
   async fetchWorkspaceSetupStatus(
     workspaceId: string,
     requestId?: string,
@@ -1886,6 +1928,53 @@ export class DaemonClient {
 
   async sendMessage(agentId: string, text: string, options?: SendMessageOptions): Promise<void> {
     await this.sendAgentMessage(agentId, text, options);
+  }
+
+  /**
+   * Voice intent routing — daemon-side one-shot tool selection.
+   *
+   * Caller passes the user's transcript + a serialized command catalog.
+   * Daemon asks the configured provider's model to pick a tool and returns
+   * `{ matched: true, commandName, params }` on success, or
+   * `{ matched: false, error }` on any failure (no API key, model didn't
+   * match, timeout, etc). Throwing on the wire isn't part of the contract —
+   * routing failures are normal and the client falls back to heuristic.
+   */
+  async routeVoiceIntent(input: RouteVoiceIntentInput): Promise<RouteVoiceIntentResult> {
+    const requestId = this.createRequestId();
+    const message = SessionInboundMessageSchema.parse({
+      type: "voice_route_request",
+      requestId,
+      transcript: input.transcript,
+      provider: input.provider,
+      modelId: input.modelId ?? null,
+      commands: input.commands,
+      ...(typeof input.timeoutMs === "number" ? { timeoutMs: input.timeoutMs } : {}),
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      // Allow the daemon's own provider call to take its full budget plus a
+      // small safety margin for the round-trip.
+      timeout: (input.timeoutMs ?? 8_000) + 4_000,
+      options: { skipQueue: true },
+      select: (msg) => {
+        if (msg.type !== "voice_route_response") {
+          return null;
+        }
+        if (msg.payload.requestId !== requestId) {
+          return null;
+        }
+        return msg.payload;
+      },
+    });
+    return {
+      matched: payload.matched,
+      commandName: payload.commandName,
+      params: payload.params ?? {},
+      confidence: payload.confidence ?? null,
+      error: payload.error ?? null,
+    };
   }
 
   async cancelAgent(agentId: string): Promise<void> {

@@ -17,11 +17,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Buffer } from "buffer";
 import {
-  ArrowLeft,
   Sun,
   Moon,
   Monitor,
   ChevronDown,
+  ChevronRight,
   Settings,
   Server,
   Keyboard,
@@ -31,10 +31,11 @@ import {
   Puzzle,
   Plus,
   Gauge,
+  FlaskConical,
 } from "lucide-react-native";
-import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
 import { ScreenTitle } from "@/components/headers/screen-title";
+import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
 import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { useAppSettings, type AppSettings, type SendBehavior } from "@/hooks/use-settings";
@@ -55,6 +56,7 @@ import { AddHostMethodModal } from "@/components/add-host-method-modal";
 import { AddHostModal } from "@/components/add-host-modal";
 import { PairLinkModal } from "@/components/pair-link-modal";
 import { KeyboardShortcutsSection } from "@/screens/settings/keyboard-shortcuts-section";
+import { LabsSection } from "@/screens/settings/labs-section";
 import { UsageSection } from "@/screens/settings/usage-section";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -108,6 +110,7 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "integrations", labelKey: "settings.integrations", icon: Puzzle, desktopOnly: true },
   { id: "permissions", labelKey: "settings.permissions", icon: Shield, desktopOnly: true },
   { id: "usage", labelKey: "settings.usage", icon: Gauge },
+  { id: "labs", labelKey: "settings.labs", icon: FlaskConical },
   { id: "diagnostics", labelKey: "settings.diagnostics", icon: Stethoscope },
   { id: "about", labelKey: "settings.about", icon: Info },
 ];
@@ -166,6 +169,10 @@ function selectedSidebarItemStyle({ hovered }: PressableStateCallbackType & { ho
     Boolean(hovered) && sidebarStyles.itemHovered,
     sidebarStyles.itemSelected,
   ];
+}
+
+function mobileSidebarItemStyle({ pressed }: PressableStateCallbackType) {
+  return [sidebarStyles.mobileItem, pressed && sidebarStyles.mobileItemPressed];
 }
 
 const THEME_LABEL_KEYS: Record<AppSettings["theme"], string> = {
@@ -673,6 +680,7 @@ interface SidebarSectionButtonProps {
   icon: ComponentType<{ size: number; color: string }>;
   isSelected: boolean;
   onSelect: (section: SettingsSectionSlug) => void;
+  layout: "desktop" | "mobile";
 }
 
 function SidebarSectionButton({
@@ -681,6 +689,7 @@ function SidebarSectionButton({
   icon: IconComponent,
   isSelected,
   onSelect,
+  layout,
 }: SidebarSectionButtonProps) {
   const { theme } = useUnistyles();
   const handlePress = useCallback(() => {
@@ -688,9 +697,28 @@ function SidebarSectionButton({
   }, [onSelect, itemId]);
   const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
   const labelStyle = useMemo(
-    () => [sidebarStyles.label, isSelected && { color: theme.colors.foreground }],
-    [isSelected, theme.colors.foreground],
+    () =>
+      layout === "mobile"
+        ? sidebarStyles.mobileLabel
+        : [sidebarStyles.label, isSelected && { color: theme.colors.foreground }],
+    [isSelected, layout, theme.colors.foreground],
   );
+  if (layout === "mobile") {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={accessibilityState}
+        onPress={handlePress}
+        style={mobileSidebarItemStyle}
+      >
+        <IconComponent size={theme.iconSize.md} color={theme.colors.foreground} />
+        <Text style={labelStyle} numberOfLines={1}>
+          {label}
+        </Text>
+        <ChevronRight size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       accessibilityRole="button"
@@ -715,9 +743,17 @@ interface SidebarHostItemProps {
   isSelected: boolean;
   isLocal: boolean;
   onSelect: (serverId: string) => void;
+  layout: "desktop" | "mobile";
 }
 
-function SidebarHostItem({ serverId, label, isSelected, isLocal, onSelect }: SidebarHostItemProps) {
+function SidebarHostItem({
+  serverId,
+  label,
+  isSelected,
+  isLocal,
+  onSelect,
+  layout,
+}: SidebarHostItemProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const handlePress = useCallback(() => {
@@ -725,9 +761,34 @@ function SidebarHostItem({ serverId, label, isSelected, isLocal, onSelect }: Sid
   }, [onSelect, serverId]);
   const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
   const labelStyle = useMemo(
-    () => [sidebarStyles.label, isSelected && { color: theme.colors.foreground }],
-    [isSelected, theme.colors.foreground],
+    () =>
+      layout === "mobile"
+        ? sidebarStyles.mobileLabel
+        : [sidebarStyles.label, isSelected && { color: theme.colors.foreground }],
+    [isSelected, layout, theme.colors.foreground],
   );
+  if (layout === "mobile") {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={accessibilityState}
+        onPress={handlePress}
+        testID={`settings-host-entry-${serverId}`}
+        style={mobileSidebarItemStyle}
+      >
+        <Server size={theme.iconSize.md} color={theme.colors.foreground} />
+        <Text style={labelStyle} numberOfLines={1}>
+          {label}
+        </Text>
+        {isLocal ? (
+          <Text style={sidebarStyles.localMarker} testID="settings-host-local-marker">
+            {t("settings.local")}
+          </Text>
+        ) : null}
+        <ChevronRight size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       accessibilityRole="button"
@@ -766,7 +827,7 @@ function SettingsSidebar({
   onSelectSection,
   onSelectHost,
   onAddHost,
-  onBackToWorkspace,
+  onBackToWorkspace: _onBackToWorkspace,
   layout,
 }: SettingsSidebarProps) {
   const { theme } = useUnistyles();
@@ -791,6 +852,7 @@ function SettingsSidebar({
   const padding = useWindowControlsPadding("sidebar");
   const isDesktop = layout === "desktop";
   const containerStyle = isDesktop ? sidebarStyles.desktopContainer : sidebarStyles.mobileContainer;
+  const groupStyle = isDesktop ? sidebarStyles.list : sidebarStyles.mobileGroup;
   const selectedSectionId = view.kind === "section" ? view.section : null;
   const selectedServerId = view.kind === "host" ? view.serverId : null;
   const paddingTopStyle = useMemo(() => ({ height: padding.top }), [padding.top]);
@@ -803,47 +865,54 @@ function SettingsSidebar({
           {padding.top > 0 ? <View style={paddingTopStyle} /> : null}
         </>
       ) : null}
-      {isDesktop ? (
-        <SidebarHeaderRow
-          icon={ArrowLeft}
-          label={t("settings.back")}
-          onPress={onBackToWorkspace}
-          testID="settings-back-to-workspace"
-        />
-      ) : null}
-      <View style={sidebarStyles.list}>
-        {items.map((item) => (
-          <SidebarSectionButton
-            key={item.id}
-            itemId={item.id}
-            label={t(item.labelKey)}
-            icon={item.icon}
-            isSelected={selectedSectionId === item.id}
-            onSelect={onSelectSection}
-          />
+      <View style={groupStyle}>
+        {items.map((item, index) => (
+          <View key={item.id}>
+            {!isDesktop && index > 0 ? <View style={sidebarStyles.mobileItemDivider} /> : null}
+            <SidebarSectionButton
+              itemId={item.id}
+              label={t(item.labelKey)}
+              icon={item.icon}
+              isSelected={selectedSectionId === item.id}
+              onSelect={onSelectSection}
+              layout={layout}
+            />
+          </View>
         ))}
       </View>
-      <SidebarSeparator />
-      <View style={sidebarStyles.list}>
-        {sortedHosts.map((host) => (
-          <SidebarHostItem
-            key={host.serverId}
-            serverId={host.serverId}
-            label={host.label}
-            isSelected={selectedServerId === host.serverId}
-            isLocal={localServerId !== null && host.serverId === localServerId}
-            onSelect={onSelectHost}
-          />
+      {isDesktop ? <SidebarSeparator /> : null}
+      <View style={groupStyle}>
+        {sortedHosts.map((host, index) => (
+          <View key={host.serverId}>
+            {!isDesktop && index > 0 ? <View style={sidebarStyles.mobileItemDivider} /> : null}
+            <SidebarHostItem
+              serverId={host.serverId}
+              label={host.label}
+              isSelected={selectedServerId === host.serverId}
+              isLocal={localServerId !== null && host.serverId === localServerId}
+              onSelect={onSelectHost}
+              layout={layout}
+            />
+          </View>
         ))}
+        {!isDesktop && sortedHosts.length > 0 ? (
+          <View style={sidebarStyles.mobileItemDivider} />
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("settings.addHost")}
           onPress={onAddHost}
           testID="settings-add-host"
-          style={sidebarItemStyle}
+          style={isDesktop ? sidebarItemStyle : mobileSidebarItemStyle}
         >
-          <Plus size={theme.iconSize.md} color={theme.colors.foregroundMuted} />
-          <Text style={sidebarStyles.label} numberOfLines={1}>
+          <Plus
+            size={theme.iconSize.md}
+            color={isDesktop ? theme.colors.foregroundMuted : theme.colors.accent}
+          />
+          <Text
+            style={isDesktop ? sidebarStyles.label : sidebarStyles.mobileLabelAccent}
+            numberOfLines={1}
+          >
             {t("settings.addHost")}
           </Text>
         </Pressable>
@@ -858,6 +927,10 @@ function SettingsSidebar({
 
 export interface SettingsScreenProps {
   view: SettingsView;
+}
+
+function MobileSettingsRootHeader({ title }: { title: string }) {
+  return <MobileTabHeader title={title} testID="settings-header" />;
 }
 
 export default function SettingsScreen({ view }: SettingsScreenProps) {
@@ -1085,6 +1158,8 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
           return isDesktopApp ? <DesktopPermissionsSection /> : null;
         case "usage":
           return <UsageSection />;
+        case "labs":
+          return <LabsSection />;
         case "diagnostics":
           return (
             <DiagnosticsSection
@@ -1133,11 +1208,13 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
     </>
   );
 
-  // Mobile root: full-screen sidebar-as-list.
+  // Mobile root: full-screen sidebar-as-list. No back button — settings is a
+  // bottom-tab destination, not a pushed screen, so there's nowhere to go
+  // "back" to. Just render the title in the screen header.
   if (isCompactLayout && view.kind === "root") {
     return (
-      <View style={styles.container}>
-        <BackHeader title={t("settings.title")} onBack={handleBackToWorkspace} />
+      <View style={styles.iosGroupedContainer}>
+        <MobileSettingsRootHeader title={t("settings.title")} />
         <ScrollView style={styles.scrollView} contentContainerStyle={insetBottomStyle}>
           <SettingsSidebar
             view={view}
@@ -1170,9 +1247,10 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
     );
   }
 
-  // Desktop split view — mirrors AppContainer: sidebar owns the titlebar drag
-  // region + traffic-light padding; detail pane renders whatever header the
-  // selected section provides.
+  // Desktop view — Settings is reached from the DesktopNavRail. The inner
+  // section sidebar stays so users can navigate between General / Usage /
+  // Labs / Diagnostics / About / hosts. The "Back to workspace" header row
+  // is gone (DesktopNavRail provides that affordance instead).
   return (
     <View style={styles.container}>
       <View style={desktopStyles.row}>
@@ -1234,6 +1312,10 @@ const styles = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
     backgroundColor: theme.colors.surface0,
+  },
+  iosGroupedContainer: {
+    flex: 1,
+    backgroundColor: theme.colors.surface1,
   },
   scrollView: {
     flex: 1,
@@ -1322,13 +1404,19 @@ const sidebarStyles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surfaceSidebar,
   },
   mobileContainer: {
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[4],
+    paddingHorizontal: theme.spacing[4],
+    gap: theme.spacing[6],
   },
   list: {
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
     gap: theme.spacing[1],
+  },
+  mobileGroup: {
+    backgroundColor: theme.colors.surface0,
+    borderRadius: theme.borderRadius.xl,
+    overflow: "hidden",
   },
   item: {
     flexDirection: "row",
@@ -1345,9 +1433,37 @@ const sidebarStyles = StyleSheet.create((theme) => ({
   itemSelected: {
     backgroundColor: theme.colors.surfaceSidebarHover,
   },
+  mobileItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    minHeight: 44,
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
+  },
+  mobileItemPressed: {
+    backgroundColor: theme.colors.surface2,
+  },
+  mobileItemDivider: {
+    height: 1,
+    marginLeft: theme.spacing[4] + theme.iconSize.md + theme.spacing[3],
+    backgroundColor: theme.colors.border,
+  },
   label: {
     fontSize: theme.fontSize.base,
     color: theme.colors.foregroundMuted,
+    fontWeight: theme.fontWeight.normal,
+    flex: 1,
+  },
+  mobileLabel: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.foreground,
+    fontWeight: theme.fontWeight.normal,
+    flex: 1,
+  },
+  mobileLabelAccent: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.accent,
     fontWeight: theme.fontWeight.normal,
     flex: 1,
   },

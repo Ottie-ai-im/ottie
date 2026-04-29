@@ -20,6 +20,7 @@ function createWorkspace(
     projectKind: input.projectKind ?? "git",
     workspaceKind: input.workspaceKind ?? "checkout",
     name: input.name ?? "main",
+    alias: input.alias ?? null,
     status: input.status ?? "running",
     diffStat: input.diffStat ?? null,
     scripts: input.scripts ?? [],

@@ -18,7 +18,7 @@ import { shortenPath } from "@/utils/shorten-path";
 import { type AggregatedAgent } from "@/hooks/use-aggregated-agents";
 import { useSessionStore } from "@/stores/session-store";
 import { Archive } from "lucide-react-native";
-import { getProviderIcon } from "@/components/provider-icons";
+import { getProviderAccent, getProviderIcon } from "@/components/provider-icons";
 import { buildHostAgentDetailRoute } from "@/utils/host-routes";
 import { resolveWorkspaceIdByExecutionDirectory } from "@/utils/workspace-execution";
 import { prepareWorkspaceTab } from "@/utils/workspace-navigation";
@@ -196,6 +196,11 @@ function SessionRow({
   const statusLabel = formatStatusLabel(agent.status);
   const projectPath = shortenPath(agent.cwd);
   const ProviderIcon = getProviderIcon(agent.provider);
+  const providerAccent = useMemo(() => getProviderAccent(agent.provider), [agent.provider]);
+  const avatarCircleStyle = useMemo(
+    () => [styles.avatarCircle, { backgroundColor: providerAccent.background }],
+    [providerAccent.background],
+  );
 
   const pressableStyle = useCallback(
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -238,8 +243,8 @@ function SessionRow({
       testID={`agent-row-${agent.serverId}-${agent.id}`}
     >
       <View style={styles.avatarWrap}>
-        <View style={styles.avatarCircle}>
-          <ProviderIcon size={18} color={theme.colors.foreground} />
+        <View style={avatarCircleStyle}>
+          <ProviderIcon size={18} color={providerAccent.foreground} />
         </View>
         {showAttentionDot ? <View style={styles.avatarAttentionDot} /> : null}
       </View>

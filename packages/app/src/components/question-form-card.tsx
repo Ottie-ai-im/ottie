@@ -416,7 +416,7 @@ export function QuestionFormCard({ permission, onRespond, isResponding }: Questi
 const styles = StyleSheet.create((theme) => ({
   container: {
     padding: theme.spacing[3],
-    borderRadius: theme.spacing[2],
+    borderRadius: theme.borderRadius.card,
     borderWidth: 1,
     gap: theme.spacing[3],
   },

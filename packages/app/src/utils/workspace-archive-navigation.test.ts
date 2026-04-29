@@ -31,6 +31,7 @@ function workspace(
     projectKind: input.projectKind ?? "git",
     workspaceKind: input.workspaceKind ?? "worktree",
     name: input.name ?? input.id,
+    alias: input.alias ?? null,
     status: input.status ?? "done",
     diffStat: input.diffStat ?? null,
     scripts: input.scripts ?? [],

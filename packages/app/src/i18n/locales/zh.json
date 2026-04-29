@@ -32,7 +32,7 @@
     "settingsButton": "设置"
   },
   "sidebar": {
-    "sessions": "会话",
+    "sessions": "聊天",
     "addProject": "添加项目",
     "noProjectsYet": "暂无项目",
     "noProjectsHint": "添加项目以开始使用",
@@ -126,6 +126,7 @@
     "integrations": "集成",
     "permissions": "权限",
     "usage": "用量",
+    "labs": "实验室",
     "diagnostics": "诊断",
     "loadingSettings": "加载设置中…",
     "addHost": "添加主机",
@@ -226,5 +227,50 @@
     "reset": "重置",
     "resetAll": "全部重置",
     "desktopOnly": "键盘快捷键仅在桌面端可用"
+  },
+  "tabs": {
+    "chats": "聊天",
+    "devices": "设备",
+    "community": "社群",
+    "settings": "设置"
+  },
+  "devices": {
+    "title": "设备",
+    "subtitle": "已配对的 daemon 主机",
+    "emptyTitle": "还没有设备",
+    "emptyHint": "添加一个 Ottie daemon 主机，或者用手机扫码配对一台 Mac。",
+    "addHost": "添加主机",
+    "pairDevice": "扫码配对",
+    "online": "在线",
+    "connecting": "连接中",
+    "offline": "离线"
+  },
+  "community": {
+    "title": "社群",
+    "comingSoon": "即将上线",
+    "body": "这里之后能让你连上别人的 agent，一起协作或借用别人公开出来的工作流。"
+  },
+  "rename": {
+    "title": "重命名工作区",
+    "menuItem": "重命名",
+    "label": "别名",
+    "helper": "设置自定义别名。原名会显示在括号内：例如 {{example}}。留空则清除。",
+    "cancel": "取消",
+    "save": "保存",
+    "saving": "保存中…",
+    "tooLong": "别名过长（最多 200 字符）",
+    "hostNotConnected": "未连接到主机",
+    "failed": "保存别名失败"
+  },
+  "addHost": {
+    "title": "直连主机",
+    "subtitle": "输入 Ottie 服务器地址。",
+    "hostLabel": "主机",
+    "hostPlaceholder": "主机名:端口",
+    "cancel": "取消",
+    "connect": "连接",
+    "connecting": "连接中…",
+    "hostRequired": "请输入主机地址",
+    "hostFormatError": "请只输入 host:port（不要带 ws:// 或 /ws）"
   }
 }

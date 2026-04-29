@@ -389,6 +389,58 @@ describe("WorkspaceReconciliationService", () => {
     expect(workspaces.get("w1")!.displayName).toBe("feature-branch");
   });
 
+  test("preserves user-set alias when reconciling displayName", async () => {
+    const dir = createTempGitRepo("reconcile-alias-");
+    tempDirs.push(dir);
+
+    execSync("git checkout -b feature-branch", { cwd: dir, stdio: "ignore" });
+
+    const { projects, workspaces, projectRegistry, workspaceRegistry } = createTestRegistries();
+
+    projects.set(
+      "p1",
+      createPersistedProjectRecord({
+        projectId: "p1",
+        rootPath: dir,
+        kind: "git",
+        displayName: path.basename(dir),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+    );
+    workspaces.set(
+      "w1",
+      createPersistedWorkspaceRecord({
+        workspaceId: "w1",
+        projectId: "p1",
+        cwd: dir,
+        kind: "local_checkout",
+        displayName: "main",
+        alias: "我的设计",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+    );
+
+    const service = new WorkspaceReconciliationService({
+      projectRegistry,
+      workspaceRegistry,
+      logger: createTestLogger(),
+      workspaceGitService: createWorkspaceGitServiceStub({
+        [dir]: {
+          projectKind: "git",
+          projectDisplayName: path.basename(dir),
+          workspaceDisplayName: "feature-branch",
+        },
+      }),
+    });
+
+    await service.runOnce();
+
+    expect(workspaces.get("w1")!.displayName).toBe("feature-branch");
+    expect(workspaces.get("w1")!.alias).toBe("我的设计");
+  });
+
   test("does not modify already-archived records", async () => {
     const { projects, workspaces, projectRegistry, workspaceRegistry } = createTestRegistries();
 

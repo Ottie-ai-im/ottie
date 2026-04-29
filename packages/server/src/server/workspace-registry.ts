@@ -23,6 +23,9 @@ const PersistedWorkspaceRecordSchema = z.object({
   cwd: z.string(),
   kind: z.enum(["local_checkout", "worktree", "directory"]),
   displayName: z.string(),
+  // User-set alias overrides displayName in the rendered title. Optional so legacy
+  // records on disk parse without a migration.
+  alias: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),
@@ -218,12 +221,14 @@ export function createPersistedWorkspaceRecord(input: {
   cwd: string;
   kind: PersistedWorkspaceKind;
   displayName: string;
+  alias?: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
 }): PersistedWorkspaceRecord {
   return PersistedWorkspaceRecordSchema.parse({
     ...input,
+    alias: input.alias ?? null,
     archivedAt: input.archivedAt ?? null,
   });
 }

@@ -50,7 +50,7 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { MathCurveLoader } from "@/components/math-curve-loader";
+import { UnicodeSpinner } from "@/components/unicode-spinner";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -1005,7 +1005,7 @@ const expandableBadgeStylesheet = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing[4],
   },
   pressable: {
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.card,
     borderWidth: theme.borderWidth[1],
     borderColor: "transparent",
     paddingHorizontal: theme.spacing[2],
@@ -1074,8 +1074,8 @@ const expandableBadgeStylesheet = StyleSheet.create((theme) => ({
     transform: [{ rotate: "90deg" }],
   },
   detailWrapper: {
-    borderBottomLeftRadius: theme.borderRadius.lg,
-    borderBottomRightRadius: theme.borderRadius.lg,
+    borderBottomLeftRadius: theme.borderRadius.card,
+    borderBottomRightRadius: theme.borderRadius.card,
     borderWidth: theme.borderWidth[1],
     borderTopWidth: 0,
     borderColor: theme.colors.border,
@@ -2272,13 +2272,12 @@ function resolveExpandableBadgeIconColor({
 }
 
 // Animated icon used inside ExpandableBadge while an agent is actively
-// thinking. Replaces the static brain glyph with a Rose Three curve so the
-// "is the agent doing anything?" question has a visible answer at a glance.
+// thinking. Cycles through the unicode-animations dots glyph set so the
+// "is the agent doing anything?" question reads at a glance regardless of
+// theme — same visual language as a CLI spinner.
 function ThinkingIconSlot() {
   const { theme } = useUnistyles();
-  // Brand accent so the heartbeat pops against the muted text — green by
-  // default, follows whatever the active theme defines as `accent`.
-  return <MathCurveLoader curve="rose-three" size={20} color={theme.colors.accent} />;
+  return <UnicodeSpinner animation="dots" size={16} color={theme.colors.accent} fps={12} />;
 }
 
 function renderExpandableBadgeIcon({

@@ -3,7 +3,7 @@ import { Pressable, Text, View, type PressableStateCallbackType } from "react-na
 import { Check } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import invariant from "tiny-invariant";
-import { SyncedLoader } from "@/components/synced-loader";
+import { UnicodeSpinner } from "@/components/unicode-spinner";
 import { ensurePanelsRegistered } from "@/panels/register-panels";
 import { getPanelRegistration } from "@/panels/panel-registry";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
@@ -152,8 +152,9 @@ export function WorkspaceTabIcon({
   if (shouldShowLoader) {
     return (
       <View style={agentIconWrapperStyle}>
-        <SyncedLoader
-          size={size - 1}
+        <UnicodeSpinner
+          animation="dots"
+          size={size}
           color={
             theme.colorScheme === "light"
               ? theme.colors.palette.amber[700]

@@ -116,11 +116,26 @@ export interface WorkspaceDescriptor {
   projectKind: WorkspaceDescriptorPayload["projectKind"];
   workspaceKind: WorkspaceDescriptorPayload["workspaceKind"];
   name: string;
+  alias: string | null;
   status: WorkspaceDescriptorPayload["status"];
   /** ISO timestamp of the last meaningful activity (agent run, message). */
   activityAt: string | null;
   diffStat: { additions: number; deletions: number } | null;
   scripts: WorkspaceDescriptorPayload["scripts"];
+}
+
+/**
+ * The user-facing label for a workspace. When the user has set an alias,
+ * render it as `${alias} (${name})` so the original branch/folder context is
+ * still visible at a glance. With no alias, fall back to the daemon-derived
+ * name.
+ */
+export function formatWorkspaceTitle(workspace: { name: string; alias: string | null }): string {
+  const alias = workspace.alias?.trim();
+  if (!alias) {
+    return workspace.name;
+  }
+  return `${alias} (${workspace.name})`;
 }
 
 export function normalizeWorkspaceDescriptor(
@@ -135,6 +150,7 @@ export function normalizeWorkspaceDescriptor(
     projectKind: payload.projectKind,
     workspaceKind: payload.workspaceKind,
     name: payload.name,
+    alias: payload.alias ?? null,
     status: payload.status,
     activityAt: payload.activityAt ?? null,
     diffStat: payload.diffStat ?? null,

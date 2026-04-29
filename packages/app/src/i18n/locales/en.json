@@ -32,7 +32,7 @@
     "settingsButton": "Settings"
   },
   "sidebar": {
-    "sessions": "Sessions",
+    "sessions": "Chats",
     "addProject": "Add project",
     "noProjectsYet": "No projects yet",
     "noProjectsHint": "Add a project to get started",
@@ -126,6 +126,7 @@
     "integrations": "Integrations",
     "permissions": "Permissions",
     "usage": "Usage",
+    "labs": "Labs",
     "diagnostics": "Diagnostics",
     "loadingSettings": "Loading settings…",
     "addHost": "Add host",
@@ -226,5 +227,50 @@
     "reset": "Reset",
     "resetAll": "Reset all",
     "desktopOnly": "Keyboard shortcuts are only available on desktop"
+  },
+  "tabs": {
+    "chats": "Chats",
+    "devices": "Devices",
+    "community": "Community",
+    "settings": "Settings"
+  },
+  "devices": {
+    "title": "Devices",
+    "subtitle": "Paired daemon hosts",
+    "emptyTitle": "No devices yet",
+    "emptyHint": "Add an Ottie daemon host, or scan a QR code to pair from your phone.",
+    "addHost": "Add host",
+    "pairDevice": "Scan to pair",
+    "online": "Online",
+    "connecting": "Connecting",
+    "offline": "Offline"
+  },
+  "community": {
+    "title": "Community",
+    "comingSoon": "Coming soon",
+    "body": "Soon you'll be able to connect to other people's agents — collaborate or borrow workflows others have shared."
+  },
+  "rename": {
+    "title": "Rename workspace",
+    "menuItem": "Rename",
+    "label": "Alias",
+    "helper": "Set a custom alias. The original name shows in parentheses: e.g. {{example}}. Leave blank to clear.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "tooLong": "Alias is too long (max 200 characters)",
+    "hostNotConnected": "Host is not connected",
+    "failed": "Failed to set alias"
+  },
+  "addHost": {
+    "title": "Direct connection",
+    "subtitle": "Enter the address of an Ottie server.",
+    "hostLabel": "Host",
+    "hostPlaceholder": "hostname:port",
+    "cancel": "Cancel",
+    "connect": "Connect",
+    "connecting": "Connecting...",
+    "hostRequired": "Host is required",
+    "hostFormatError": "Enter host:port only (no ws://, no /ws)"
   }
 }

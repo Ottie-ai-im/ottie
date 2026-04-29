@@ -45,6 +45,7 @@ import {
   SquareTerminal,
   Monitor,
   MoreVertical,
+  Pencil,
   Plus,
   Trash2,
 } from "lucide-react-native";
@@ -78,7 +79,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { SyncedLoader } from "@/components/synced-loader";
+import { UnicodeSpinner } from "@/components/unicode-spinner";
 import { useToast } from "@/contexts/toast-context";
 import { useCheckoutGitActionsStore } from "@/stores/checkout-git-actions-store";
 import { hasVisibleOrderChanged, mergeWithRemainder } from "@/utils/sidebar-reorder";
@@ -108,6 +109,7 @@ import {
   resolveWorkspaceExecutionDirectory,
 } from "@/utils/workspace-execution";
 import { WorkspaceHoverCard } from "@/components/workspace-hover-card";
+import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
 import { GitHubIcon } from "@/components/icons/github-icon";
 import { isWeb as platformIsWeb, isNative as platformIsNative } from "@/constants/platform";
 
@@ -197,6 +199,7 @@ interface WorkspaceRowInnerProps {
   onArchive?: () => void;
   onCopyBranchName?: () => void;
   onCopyPath?: () => void;
+  onRename?: () => void;
   archiveShortcutKeys?: ShortcutKey[][] | null;
 }
 
@@ -363,8 +366,9 @@ function WorkspaceStatusIndicator({
   if (shouldShowSyncedLoader) {
     return (
       <View style={styles.workspaceStatusDot}>
-        <SyncedLoader
-          size={11}
+        <UnicodeSpinner
+          animation="dots"
+          size={12}
           color={
             theme.colorScheme === "light"
               ? theme.colors.palette.amber[700]
@@ -613,6 +617,7 @@ function WorkspaceRowRightGroup({
   onArchive,
   onCopyBranchName,
   onCopyPath,
+  onRename,
 }: {
   workspace: SidebarWorkspaceEntry;
   isHovered: boolean;
@@ -630,6 +635,7 @@ function WorkspaceRowRightGroup({
   onArchive?: () => void;
   onCopyBranchName?: () => void;
   onCopyPath?: () => void;
+  onRename?: () => void;
 }) {
   const showKebab = Boolean(onArchive && (isHovered || isTouchPlatform));
   return (
@@ -651,6 +657,7 @@ function WorkspaceRowRightGroup({
           onCopyPath={onCopyPath}
           onCopyBranchName={onCopyBranchName}
           onArchive={onArchive}
+          onRename={onRename}
           archiveLabel={archiveLabel}
           archiveStatus={archiveStatus}
           archivePendingLabel={archivePendingLabel}
@@ -690,6 +697,7 @@ function WorkspaceKebabMenu({
   onCopyPath,
   onCopyBranchName,
   onArchive,
+  onRename,
   archiveLabel,
   archiveStatus,
   archivePendingLabel,
@@ -700,6 +708,7 @@ function WorkspaceKebabMenu({
   onCopyPath?: () => void;
   onCopyBranchName?: () => void;
   onArchive: () => void;
+  onRename?: () => void;
   archiveLabel?: string;
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
@@ -711,6 +720,10 @@ function WorkspaceKebabMenu({
   );
   const archiveLeadingIcon = useMemo(
     () => <Archive size={14} color={theme.colors.foregroundMuted} />,
+    [theme.colors.foregroundMuted],
+  );
+  const renameLeadingIcon = useMemo(
+    () => <Pencil size={14} color={theme.colors.foregroundMuted} />,
     [theme.colors.foregroundMuted],
   );
   const archiveTrailing = useMemo(
@@ -739,6 +752,15 @@ function WorkspaceKebabMenu({
         {renderTriggerIcon}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" width={260}>
+        {onRename ? (
+          <DropdownMenuItem
+            testID={`sidebar-workspace-menu-rename-${workspaceKey}`}
+            leading={renameLeadingIcon}
+            onSelect={onRename}
+          >
+            Rename
+          </DropdownMenuItem>
+        ) : null}
         {onCopyPath ? (
           <DropdownMenuItem
             testID={`sidebar-workspace-menu-copy-path-${workspaceKey}`}
@@ -816,8 +838,9 @@ function ProjectLeadingVisualStatus({
   if (shouldShowSyncedLoader) {
     return (
       <View style={styles.projectLeadingVisualSlot}>
-        <SyncedLoader
-          size={11}
+        <UnicodeSpinner
+          animation="dots"
+          size={12}
           color={
             theme.colorScheme === "light"
               ? theme.colors.palette.amber[700]
@@ -1378,6 +1401,7 @@ function WorkspaceRowInner({
   onArchive,
   onCopyBranchName,
   onCopyPath,
+  onRename,
   archiveShortcutKeys,
 }: WorkspaceRowInnerProps) {
   const { theme } = useUnistyles();
@@ -1464,7 +1488,7 @@ function WorkspaceRowInner({
                 loading={isArchiving || isCreating}
               />
               <Text style={workspaceBranchTextStyle} numberOfLines={1}>
-                {workspace.name}
+                {workspace.displayLabel}
               </Text>
             </View>
             <WorkspaceRowRightGroup
@@ -1484,6 +1508,7 @@ function WorkspaceRowInner({
               onArchive={onArchive}
               onCopyBranchName={onCopyBranchName}
               onCopyPath={onCopyPath}
+              onRename={onRename}
             />
           </View>
           {prHint ? (
@@ -1685,27 +1710,42 @@ function WorkspaceRowWithMenu({
     },
   });
 
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const handleOpenRename = useCallback(() => setIsRenameOpen(true), []);
+  const handleCloseRename = useCallback(() => setIsRenameOpen(false), []);
+
   return (
-    <WorkspaceRowInner
-      workspace={workspace}
-      selected={selected}
-      shortcutNumber={shortcutNumber}
-      showShortcutBadge={showShortcutBadge}
-      onPress={onPress}
-      drag={drag}
-      isDragging={isDragging}
-      isArchiving={isArchiving}
-      isCreating={isCreating}
-      dragHandleProps={dragHandleProps}
-      menuController={null}
-      archiveLabel={isWorktree ? "Archive worktree" : "Hide from sidebar"}
-      archiveStatus={getWorkspaceArchiveStatus(isWorktree, archiveStatus, isArchivingWorkspace)}
-      archivePendingLabel={isWorktree ? "Archiving..." : "Hiding..."}
-      onArchive={isWorktree ? handleArchiveWorktree : handleArchiveWorkspace}
-      onCopyBranchName={canCopyBranchName ? handleCopyBranchName : undefined}
-      onCopyPath={handleCopyPath}
-      archiveShortcutKeys={selected ? archiveShortcutKeys : null}
-    />
+    <>
+      <WorkspaceRowInner
+        workspace={workspace}
+        selected={selected}
+        shortcutNumber={shortcutNumber}
+        showShortcutBadge={showShortcutBadge}
+        onPress={onPress}
+        drag={drag}
+        isDragging={isDragging}
+        isArchiving={isArchiving}
+        isCreating={isCreating}
+        dragHandleProps={dragHandleProps}
+        menuController={null}
+        archiveLabel={isWorktree ? "Archive worktree" : "Hide from sidebar"}
+        archiveStatus={getWorkspaceArchiveStatus(isWorktree, archiveStatus, isArchivingWorkspace)}
+        archivePendingLabel={isWorktree ? "Archiving..." : "Hiding..."}
+        onArchive={isWorktree ? handleArchiveWorktree : handleArchiveWorkspace}
+        onCopyBranchName={canCopyBranchName ? handleCopyBranchName : undefined}
+        onCopyPath={handleCopyPath}
+        onRename={handleOpenRename}
+        archiveShortcutKeys={selected ? archiveShortcutKeys : null}
+      />
+      <WorkspaceRenameModal
+        visible={isRenameOpen}
+        onClose={handleCloseRename}
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        workspaceName={workspace.name}
+        currentAlias={workspace.alias}
+      />
+    </>
   );
 }
 
@@ -1737,6 +1777,9 @@ function NonGitProjectRowWithMenuContent({
   const toast = useToast();
   const contextMenu = useContextMenu();
   const [isArchivingWorkspace, setIsArchivingWorkspace] = useState(false);
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const handleOpenRename = useCallback(() => setIsRenameOpen(true), []);
+  const handleCloseRename = useCallback(() => setIsRenameOpen(false), []);
   const redirectAfterArchive = useCallback(() => {
     redirectIfArchivingActiveWorkspace({
       serverId: workspace.serverId,
@@ -1819,6 +1862,12 @@ function NonGitProjectRowWithMenuContent({
         testID={`sidebar-workspace-context-${workspace.workspaceKey}`}
       >
         <ContextMenuItem
+          testID={`sidebar-workspace-context-${workspace.workspaceKey}-rename`}
+          onSelect={handleOpenRename}
+        >
+          Rename
+        </ContextMenuItem>
+        <ContextMenuItem
           testID={`sidebar-workspace-context-${workspace.workspaceKey}-archive`}
           status={isArchivingWorkspace ? "pending" : "idle"}
           pendingLabel="Hiding..."
@@ -1828,6 +1877,14 @@ function NonGitProjectRowWithMenuContent({
           Hide from sidebar
         </ContextMenuItem>
       </ContextMenuContent>
+      <WorkspaceRenameModal
+        visible={isRenameOpen}
+        onClose={handleCloseRename}
+        serverId={workspace.serverId}
+        workspaceId={workspace.workspaceId}
+        workspaceName={workspace.name}
+        currentAlias={workspace.alias}
+      />
     </>
   );
 }
@@ -2729,16 +2786,21 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
     height: "100%",
     borderRadius: theme.borderRadius.md,
-    // Tinted brand background + no border = squircle "app icon" feel.
-    backgroundColor:
-      theme.colorScheme === "light" ? "rgba(31, 168, 85, 0.12)" : "rgba(37, 211, 102, 0.18)",
+    borderCurve: "continuous",
+    // Neutral glass squircle — looks like a macOS 26 placeholder app icon
+    // sitting on the sidebar's vibrancy backdrop.
+    backgroundColor: theme.colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
     alignItems: "center",
     justifyContent: "center",
   },
   projectIconFallbackText: {
-    color: theme.colors.accent,
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
     fontSize: 12,
     fontWeight: theme.fontWeight.semibold,
+    letterSpacing: -0.1,
   },
   projectTitle: {
     color: theme.colors.foreground,
@@ -2823,7 +2885,8 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[2],
     paddingLeft: theme.spacing[3] + theme.spacing[3],
     paddingRight: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.button,
+    borderCurve: "continuous",
     flexDirection: "column",
     alignItems: "stretch",
     justifyContent: "center",
@@ -2855,10 +2918,10 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
   },
   workspaceRowHovered: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
+    backgroundColor: theme.colors.surfaceGlass,
   },
   workspaceRowPressed: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceGlassHover,
   },
   workspaceRowDragging: {
     backgroundColor: theme.colors.surface2,
@@ -2912,11 +2975,13 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: "600",
   },
   workspaceBranchText: {
+    fontFamily: theme.fontFamily.system,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
-    fontWeight: "400",
+    fontWeight: "500",
     lineHeight: 20,
-    opacity: 0.76,
+    letterSpacing: -0.1,
+    opacity: 0.78,
     flex: 1,
     minWidth: 0,
   },

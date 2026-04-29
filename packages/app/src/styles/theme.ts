@@ -140,6 +140,12 @@ const lightSemanticColors = {
   surfaceSidebar: "#f4f4f5", // Sidebar background (darker than main)
   surfaceSidebarHover: "#e9e9ec", // Sidebar hover (darker in light mode)
   surfaceWorkspace: "#ffffff", // Workspace main background
+  // Glass tokens (light): white-tinted but more opaque so content stays
+  // readable on bright backgrounds.
+  surfaceGlass: "rgba(255, 255, 255, 0.55)",
+  surfaceGlassStrong: "rgba(255, 255, 255, 0.72)",
+  surfaceGlassHover: "rgba(255, 255, 255, 0.85)",
+  borderGlass: "rgba(0, 0, 0, 0.06)",
 
   // Chat surfaces — IM-style message area, distinct from workspace pure-white
   surfaceChat: "#f7f7f8", // Chat main background — soft warm gray
@@ -237,6 +243,17 @@ interface DarkThemeConfig {
   borderAccent: string;
   accent: string;
   accentBright: string;
+  /**
+   * macOS/iOS 26-inspired glass tints. Optional so existing tints keep
+   * working — `buildDarkSemanticColors` derives sane defaults when omitted.
+   * `surfaceGlass*` are translucent fills layered on top of darker backdrops
+   * (sidebar / behind-window vibrancy). `borderGlass` is the bright inner
+   * stroke that gives glass its highlight edge.
+   */
+  surfaceGlass?: string;
+  surfaceGlassStrong?: string;
+  surfaceGlassHover?: string;
+  borderGlass?: string;
 }
 
 const darkTerminalAnsi = {
@@ -257,6 +274,14 @@ const darkTerminalAnsi = {
 } as const;
 
 function buildDarkSemanticColors(tint: DarkThemeConfig) {
+  // Glass tokens — translucent fills layered on darker backdrops
+  // (sidebar / vibrancy). Defaults pick a subtle white wash that matches
+  // macOS 26's "Liquid Glass" look. Tints can override for e.g. tinted
+  // panels (claude warm, ghostty cool).
+  const surfaceGlass = tint.surfaceGlass ?? "rgba(255, 255, 255, 0.06)";
+  const surfaceGlassStrong = tint.surfaceGlassStrong ?? "rgba(255, 255, 255, 0.10)";
+  const surfaceGlassHover = tint.surfaceGlassHover ?? "rgba(255, 255, 255, 0.14)";
+  const borderGlass = tint.borderGlass ?? "rgba(255, 255, 255, 0.10)";
   return {
     surface0: tint.surface0,
     surface1: tint.surface1,
@@ -267,6 +292,11 @@ function buildDarkSemanticColors(tint: DarkThemeConfig) {
     surfaceSidebar: tint.surfaceSidebar,
     surfaceSidebarHover: tint.surfaceSidebarHover,
     surfaceWorkspace: tint.surface1,
+    // Glass surfaces
+    surfaceGlass,
+    surfaceGlassStrong,
+    surfaceGlassHover,
+    borderGlass,
 
     // Chat surfaces — IM-style message area
     surfaceChat: tint.surface0,
@@ -364,7 +394,8 @@ const zincDarkColors = buildDarkSemanticColors({
   accentBright: "#22C55E",
 });
 
-// Midnight — cool slate gray with messenger green accent
+// Midnight — cool slate gray with messenger green accent. Slightly
+// blue-tinted glass to match macOS 26's "midnight" preset.
 const midnightDarkColors = buildDarkSemanticColors({
   surface0: "#161A1C",
   surface1: "#1C2123",
@@ -380,9 +411,14 @@ const midnightDarkColors = buildDarkSemanticColors({
   borderAccent: "#2D3439",
   accent: "#1FA855",
   accentBright: "#22C55E",
+  surfaceGlass: "rgba(210, 230, 255, 0.05)",
+  surfaceGlassStrong: "rgba(210, 230, 255, 0.09)",
+  surfaceGlassHover: "rgba(210, 230, 255, 0.13)",
+  borderGlass: "rgba(210, 230, 255, 0.10)",
 });
 
-// Claude slot — kept for compatibility; warm neutral gray + messenger green (no orange brand color)
+// Claude slot — warm neutral gray + messenger green. Glass overlays use a
+// warm ivory tint so the panel feels closer to macOS 26 "Tahoe" warm light.
 const claudeDarkColors = buildDarkSemanticColors({
   surface0: "#1d1d1f",
   surface1: "#252527",
@@ -398,9 +434,13 @@ const claudeDarkColors = buildDarkSemanticColors({
   borderAccent: "#34343a",
   accent: "#1FA855",
   accentBright: "#22C55E",
+  surfaceGlass: "rgba(255, 240, 220, 0.05)",
+  surfaceGlassStrong: "rgba(255, 240, 220, 0.09)",
+  surfaceGlassHover: "rgba(255, 240, 220, 0.13)",
+  borderGlass: "rgba(255, 240, 220, 0.10)",
 });
 
-// Ghostty slot — kept for compatibility; cool gray-green dark with messenger green accent
+// Ghostty slot — cool gray-green dark with green-tinted glass.
 const ghosttyDarkColors = buildDarkSemanticColors({
   surface0: "#1F2422",
   surface1: "#262B29",
@@ -416,6 +456,10 @@ const ghosttyDarkColors = buildDarkSemanticColors({
   borderAccent: "#313835",
   accent: "#1FA855",
   accentBright: "#22C55E",
+  surfaceGlass: "rgba(220, 255, 235, 0.05)",
+  surfaceGlassStrong: "rgba(220, 255, 235, 0.09)",
+  surfaceGlassHover: "rgba(220, 255, 235, 0.13)",
+  borderGlass: "rgba(220, 255, 235, 0.10)",
 });
 
 const commonTheme = {
@@ -472,6 +516,7 @@ const commonTheme = {
     lg: 8,
     xl: 12,
     "2xl": 16,
+    "3xl": 22,
     full: 9999,
     // IM-style semantic radii — use these for chat surfaces so we keep
     // existing UI radii stable while migrating phase-by-phase.
@@ -479,6 +524,13 @@ const commonTheme = {
     bubble: 18,
     sheet: 16,
     pill: 9999,
+    // macOS/iOS 26 semantic radii — continuous-style squircles. Pair these
+    // with `borderCurve: "continuous"` on each style to get the iOS look.
+    button: 14,
+    field: 14,
+    glassCard: 18,
+    glassSheet: 22,
+    glassPill: 9999,
   },
 
   borderWidth: {
@@ -491,6 +543,44 @@ const commonTheme = {
     0: 0,
     50: 0.5,
     100: 1,
+  },
+
+  /**
+   * Typography stack. Following CLAUDE.md hybrid policy:
+   * - `system`: macOS/iOS 26 SF stack for chrome (buttons, headers, menus)
+   * - `rounded`: SF Pro Rounded equivalent for prominent display titles
+   * - `mono`: existing JetBrains Mono / Ark Pixel pair, kept for code,
+   *   agent stream output, terminal, and inputs that benefit from
+   *   monospaced alignment.
+   *
+   * On web/Tauri: SF stack resolves to "-apple-system" then falls back.
+   * On native: React Native maps "System" automatically to SF Pro / Roboto.
+   */
+  fontFamily: {
+    system:
+      'system-ui, -apple-system, "SF Pro Text", "SF Pro", BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    rounded:
+      '"SF Pro Rounded", "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    mono: '"JetBrains Mono", "Ark Pixel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  },
+
+  /**
+   * Motion tokens — used with reanimated `withSpring` / `withTiming`.
+   * `snappy`: button presses, tab switches, hover-in/out
+   * `gentle`: modals, sheets, drawer slides
+   * `bouncy`: drag-release, sidebar opens (slight overshoot for life)
+   */
+  motion: {
+    duration: {
+      fast: 120,
+      base: 200,
+      slow: 320,
+    },
+    spring: {
+      snappy: { damping: 22, stiffness: 320, mass: 0.9 },
+      gentle: { damping: 26, stiffness: 220, mass: 1 },
+      bouncy: { damping: 14, stiffness: 220, mass: 1 },
+    },
   },
 } as const;
 
@@ -512,6 +602,56 @@ const darkShadow = {
     shadowOffset: { width: 0, height: 12 },
     shadowRadius: 24,
     elevation: 8,
+  },
+  /**
+   * macOS 26-style glass elevation — soft, wide, low-intensity.
+   * `glass` is for floating cards/menus; `glassDeep` for full-screen
+   * sheets and modal stacks where the ambient shadow should read further.
+   */
+  glass: {
+    shadowColor: "rgba(0, 0, 0, 0.45)",
+    shadowOffset: { width: 0, height: 18 },
+    shadowRadius: 38,
+    elevation: 16,
+  },
+  glassDeep: {
+    shadowColor: "rgba(0, 0, 0, 0.55)",
+    shadowOffset: { width: 0, height: 28 },
+    shadowRadius: 56,
+    elevation: 24,
+  },
+} as const;
+
+const lightShadow = {
+  sm: {
+    shadowColor: "rgba(0, 0, 0, 0.06)",
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  md: {
+    shadowColor: "rgba(0, 0, 0, 0.08)",
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  lg: {
+    shadowColor: "rgba(0, 0, 0, 0.10)",
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 24,
+    elevation: 6,
+  },
+  glass: {
+    shadowColor: "rgba(0, 0, 0, 0.12)",
+    shadowOffset: { width: 0, height: 18 },
+    shadowRadius: 38,
+    elevation: 12,
+  },
+  glassDeep: {
+    shadowColor: "rgba(0, 0, 0, 0.18)",
+    shadowOffset: { width: 0, height: 28 },
+    shadowRadius: 56,
+    elevation: 18,
   },
 } as const;
 
@@ -539,26 +679,7 @@ export const lightTheme = {
     ...lightSemanticColors,
     palette: baseColors,
   },
-  shadow: {
-    sm: {
-      shadowColor: "rgba(0, 0, 0, 0.02)",
-      shadowOffset: { width: 0, height: 2 },
-      shadowRadius: 8,
-      elevation: 2,
-    },
-    md: {
-      shadowColor: "rgba(0, 0, 0, 0.04)",
-      shadowOffset: { width: 0, height: 4 },
-      shadowRadius: 16,
-      elevation: 4,
-    },
-    lg: {
-      shadowColor: "rgba(0, 0, 0, 0.08)",
-      shadowOffset: { width: 0, height: 8 },
-      shadowRadius: 24,
-      elevation: 8,
-    },
-  },
+  shadow: lightShadow,
   ...commonTheme,
 } as const;
 

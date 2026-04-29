@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { WorkspaceDescriptorPayload } from "@server/shared/messages";
 import {
+  formatWorkspaceTitle,
   normalizeWorkspaceDescriptor,
   useSessionStore,
   type WorkspaceDescriptor,
@@ -25,7 +26,16 @@ export interface SidebarWorkspaceEntry {
   workspaceDirectory?: string;
   projectKind: WorkspaceDescriptor["projectKind"];
   workspaceKind: WorkspaceDescriptor["workspaceKind"];
+  /** Original daemon-derived name (branch name, folder basename, etc.). */
   name: string;
+  /**
+   * User-set alias overriding the rendered label. `null` when unset. The
+   * raw `name` stays untouched for clipboard / dialog copy that should refer
+   * to the underlying branch/folder.
+   */
+  alias: string | null;
+  /** Formatted title shown in the sidebar row: `${alias} (${name})` or `name`. */
+  displayLabel: string;
   statusBucket: SidebarStateBucket;
   diffStat: { additions: number; deletions: number } | null;
   scripts: WorkspaceDescriptor["scripts"];
@@ -73,6 +83,8 @@ function createStructuralWorkspaceEntry(input: {
     projectKind: input.project.projectKind,
     workspaceKind: "checkout",
     name: input.workspaceId,
+    alias: null,
+    displayLabel: input.workspaceId,
     statusBucket: "done",
     diffStat: null,
     scripts: [],
@@ -94,6 +106,8 @@ export function createSidebarWorkspaceEntry(input: {
     projectKind: input.workspace.projectKind,
     workspaceKind: input.workspace.workspaceKind,
     name: input.workspace.name,
+    alias: input.workspace.alias,
+    displayLabel: formatWorkspaceTitle(input.workspace),
     statusBucket: input.workspace.status,
     diffStat: input.workspace.diffStat,
     scripts: input.workspace.scripts,

@@ -27,24 +27,16 @@ export const Colors = {
   },
 };
 
-// Font family names. The whole UI uses JetBrains Mono (Latin / numerals /
-// punctuation) paired with Ark Pixel (CJK pixel font) — terminal / hacker
-// aesthetic. On web, "JetBrains Mono" is grouped under one family across
-// weights via @font-face declarations in public/index.html so font-weight
-// cascading works. On native, expo-font registers each weight by filename
-// (e.g. "JetBrainsMono-Regular"); we point at the most common weights and
-// let RN's fake-bold handle anything else.
-//
-// CJK fall-through: JetBrains Mono has no Chinese glyphs. The browser /
-// react-native-web walks the family list, so Chinese chars naturally pick
-// up Ark Pixel — giving the whole UI a coherent "terminal × pixel" look.
-const SANS_STACK_WEB =
-  "'JetBrains Mono', 'Ark Pixel', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace";
-const MONO_STACK_WEB =
-  "'JetBrains Mono', 'Ark Pixel', SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+// Font family names. Ark Pixel everywhere (Latin + CJK) so the whole UI
+// keeps the pixel-art look. Render size is locked to 16px (native PPEM)
+// in public/index.html so the pixel grid stays sharp; antialiasing softens
+// the edges just enough to avoid the harsh 8-bit look. JetBrains Mono is
+// kept only as a last-resort fallback for any glyph Ark Pixel lacks.
+const SANS_STACK_WEB = "'Ark Pixel', 'JetBrains Mono', monospace";
+const MONO_STACK_WEB = "'Ark Pixel', 'JetBrains Mono', monospace";
 
-const SANS_NATIVE = "JetBrainsMono-Regular";
-const MONO_NATIVE = "JetBrainsMono-Regular";
+const SANS_NATIVE = "ArkPixel16px";
+const MONO_NATIVE = "ArkPixel16px";
 
 export const Fonts = Platform.select({
   ios: {

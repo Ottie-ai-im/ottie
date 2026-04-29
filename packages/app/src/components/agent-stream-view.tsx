@@ -24,10 +24,12 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import Animated, {
   FadeIn,
+  FadeInUp,
   FadeOut,
   cancelAnimation,
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withRepeat,
   withTiming,
@@ -84,6 +86,45 @@ import {
   WORKING_INDICATOR_OFFSETS,
 } from "@/utils/working-indicator";
 import { isWeb } from "@/constants/platform";
+import { formatTimeMarker } from "@/utils/time";
+
+// IM-style time divider: insert a centered timestamp label whenever two
+// consecutive items are separated by at least this much wall-clock time.
+// Calibrated to match iMessage / WhatsApp / Telegram defaults.
+const TIME_MARKER_GAP_MS = 5 * 60 * 1000;
+
+// Only attach time markers to "spoken" turns. Background events (tool_call,
+// thought, activity_log, compaction, todo_list) ride between turns and
+// shouldn't carry their own date headers — the next real message will.
+const TIME_MARKER_ATTACHABLE_KINDS: ReadonlySet<StreamItem["kind"]> = new Set([
+  "user_message",
+  "assistant_message",
+]);
+
+function getStreamItemTimestampMs(item: StreamItem | null | undefined): number | null {
+  if (!item) return null;
+  const ts = (item as { timestamp?: Date }).timestamp;
+  if (!ts) return null;
+  const ms = ts.getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function shouldShowTimeMarkerAbove(params: {
+  current: StreamItem;
+  above: StreamItem | null | undefined;
+}): boolean {
+  if (!TIME_MARKER_ATTACHABLE_KINDS.has(params.current.kind)) {
+    return false;
+  }
+  const currentMs = getStreamItemTimestampMs(params.current);
+  if (currentMs === null) return false;
+  // First "spoken" turn in the rendered stream — surface its timestamp so
+  // users always see when the conversation started.
+  if (!params.above) return true;
+  const aboveMs = getStreamItemTimestampMs(params.above);
+  if (aboveMs === null) return false;
+  return currentMs - aboveMs >= TIME_MARKER_GAP_MS;
+}
 
 const isUserMessageItem = (item?: StreamItem) => item?.kind === "user_message";
 const isToolSequenceItem = (item?: StreamItem) =>
@@ -555,12 +596,22 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         index: number,
         items: StreamItem[],
         seamAboveItem: StreamItem | null = null,
+        animateEntrance = false,
       ) => {
         const content = renderStreamItemContent(item, index, items, seamAboveItem);
         if (!content) {
           return null;
         }
 
+        const aboveItem =
+          getStreamNeighborItem({
+            strategy: streamRenderStrategy,
+            items,
+            index,
+            relation: "above",
+          }) ??
+          seamAboveItem ??
+          null;
         const nextItem = getStreamNeighborItem({
           strategy: streamRenderStrategy,
           items,
@@ -573,8 +624,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           (nextItem?.kind === "user_message" ||
             (nextItem === undefined && agent.status !== "running"));
 
+        const showTimeMarker = shouldShowTimeMarkerAbove({ current: item, above: aboveItem });
+        const timeMarkerLabel = showTimeMarker
+          ? formatTimeMarker((item as { timestamp: Date }).timestamp)
+          : null;
+
         return (
-          <StreamItemWrapper gapBelow={gapBelow}>
+          <StreamItemWrapper gapBelow={gapBelow} animateEntrance={animateEntrance}>
+            {timeMarkerLabel !== null ? <TimeMarker label={timeMarkerLabel} /> : null}
             {content}
             {isEndOfAssistantTurn ? (
               <TurnCopyButtonSlot
@@ -684,7 +741,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
     const renderLiveHeadRow = useCallback<StreamSegmentRenderers["renderLiveHeadRow"]>(
       (item, index, items) =>
-        renderStreamItem(item, index, items, index === 0 ? lastHistoryItem : null),
+        renderStreamItem(item, index, items, index === 0 ? lastHistoryItem : null, true),
       [lastHistoryItem, renderStreamItem],
     );
     const liveAuxiliaryHeaderStyle = useMemo(() => {
@@ -775,6 +832,18 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
 export const AgentStreamView = memo(AgentStreamViewComponent);
 AgentStreamView.displayName = "AgentStreamView";
+
+interface TimeMarkerProps {
+  label: string;
+}
+
+const TimeMarker = memo(function TimeMarker({ label }: TimeMarkerProps) {
+  return (
+    <View style={stylesheet.timeMarkerRow}>
+      <Text style={stylesheet.timeMarkerText}>{label}</Text>
+    </View>
+  );
+});
 
 function WorkingIndicator() {
   const progress = useSharedValue(0);
@@ -1202,6 +1271,18 @@ const stylesheet = StyleSheet.create((theme) => ({
     maxWidth: MAX_CONTENT_WIDTH,
     alignSelf: "center",
   },
+  timeMarkerRow: {
+    alignSelf: "center",
+    paddingTop: theme.spacing[3],
+    paddingBottom: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+  },
+  timeMarkerText: {
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.bubbleMeta,
+    fontWeight: theme.fontWeight.medium,
+    letterSpacing: 0.2,
+  },
   emptyState: {
     flex: 1,
     alignItems: "center",
@@ -1299,7 +1380,7 @@ const permissionStyles = StyleSheet.create((theme) => ({
   container: {
     marginVertical: theme.spacing[3],
     padding: theme.spacing[3],
-    borderRadius: theme.spacing[2],
+    borderRadius: theme.borderRadius.card,
     borderWidth: 1,
     gap: theme.spacing[2],
   },
@@ -1354,13 +1435,33 @@ const permissionStyles = StyleSheet.create((theme) => ({
 
 interface StreamItemWrapperProps {
   gapBelow: number;
+  /**
+   * When true, the wrapper plays a soft fade-up entrance on mount. Used for
+   * live-head items so newly arrived messages "snap in" the way they do in
+   * iMessage / WhatsApp. Always false for virtualized history rows so
+   * scroll-induced remounts don't constantly re-animate.
+   */
+  animateEntrance?: boolean;
   children: ReactNode;
 }
 
-function StreamItemWrapper({ gapBelow, children }: StreamItemWrapperProps) {
+// Bubble entrance: 180ms fade + small upward translate. Calibrated to feel
+// snappy without distracting during a streaming agent turn (where many items
+// land in quick succession).
+const BUBBLE_ENTRANCE_DURATION_MS = 180;
+
+function StreamItemWrapper({ gapBelow, animateEntrance, children }: StreamItemWrapperProps) {
+  const reducedMotion = useReducedMotion();
   const wrapperStyle = useMemo(
     () => [stylesheet.streamItemWrapper, { marginBottom: gapBelow }],
     [gapBelow],
   );
+  if (animateEntrance && !reducedMotion) {
+    return (
+      <Animated.View style={wrapperStyle} entering={FadeInUp.duration(BUBBLE_ENTRANCE_DURATION_MS)}>
+        {children}
+      </Animated.View>
+    );
+  }
   return <View style={wrapperStyle}>{children}</View>;
 }

@@ -276,6 +276,8 @@ function TabChip({
   const tabChipStyle = useCallback(
     () => [
       styles.tab,
+      isActive ? styles.tabActive : null,
+      hovered && !isActive ? styles.tabHovered : null,
       isWeb && isDragging && ({ cursor: "grabbing" } as object),
       {
         minWidth: resolvedTabWidth,
@@ -283,7 +285,7 @@ function TabChip({
         maxWidth: resolvedTabWidth,
       },
     ],
-    [isDragging, resolvedTabWidth],
+    [isActive, hovered, isDragging, resolvedTabWidth],
   );
 
   const handleTabHoverIn = useCallback(() => {
@@ -896,13 +898,23 @@ const styles = StyleSheet.create((theme) => ({
   },
   tab: {
     paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[2],
-    borderRightWidth: 1,
-    borderRightColor: theme.colors.border,
+    paddingVertical: theme.spacing[1.5],
+    marginVertical: theme.spacing[1],
+    marginHorizontal: 2,
+    borderRadius: theme.borderRadius.glassPill,
+    borderCurve: "continuous",
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
     userSelect: "none",
+  },
+  tabHovered: {
+    backgroundColor: theme.colors.surfaceGlass,
+  },
+  tabActive: {
+    backgroundColor: theme.colors.surfaceGlassStrong,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
   },
   tabSlot: {
     position: "relative",
@@ -921,10 +933,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabFocusIndicator: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
+    bottom: 2,
+    left: "30%",
+    right: "30%",
     height: 2,
+    borderRadius: theme.borderRadius.full,
     backgroundColor: theme.colors.accent,
   },
   tabFocusIndicatorUnfocused: {
@@ -947,11 +960,13 @@ const styles = StyleSheet.create((theme) => ({
     right: -3,
   },
   tabLabel: {
+    fontFamily: theme.fontFamily.system,
     flexShrink: 1,
     minWidth: 0,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.normal,
+    fontWeight: theme.fontWeight.medium,
+    letterSpacing: -0.1,
     userSelect: "none",
   },
   tabLabelSkeleton: {

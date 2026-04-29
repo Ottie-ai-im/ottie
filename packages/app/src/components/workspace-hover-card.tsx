@@ -280,7 +280,7 @@ function WorkspaceHoverCardContent({
         >
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle} numberOfLines={1} testID="hover-card-workspace-name">
-              {workspace.name}
+              {workspace.displayLabel}
             </Text>
           </View>
           {prHint || workspace.diffStat ? (

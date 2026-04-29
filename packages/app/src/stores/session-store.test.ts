@@ -4,6 +4,7 @@ import type { DaemonClient } from "@server/client/daemon-client";
 import type { WorkspaceDescriptorPayload } from "@server/shared/messages";
 
 import {
+  formatWorkspaceTitle,
   normalizeWorkspaceDescriptor,
   useSessionStore,
   type WorkspaceDescriptor,
@@ -22,12 +23,27 @@ function createWorkspace(
     projectKind: input.projectKind ?? "git",
     workspaceKind: input.workspaceKind ?? "local_checkout",
     name: input.name ?? "main",
+    alias: input.alias ?? null,
     status: input.status ?? "done",
     diffStat: input.diffStat ?? null,
     scripts: input.scripts ?? [],
     activityAt: input.activityAt ?? null,
   };
 }
+
+describe("formatWorkspaceTitle", () => {
+  it("returns the original name when no alias is set", () => {
+    expect(formatWorkspaceTitle({ name: "main", alias: null })).toBe("main");
+    expect(formatWorkspaceTitle({ name: "main", alias: "" })).toBe("main");
+    expect(formatWorkspaceTitle({ name: "main", alias: "   " })).toBe("main");
+  });
+
+  it("renders `${alias} (${name})` when alias is set", () => {
+    expect(formatWorkspaceTitle({ name: "未命名的设计", alias: "我的设计" })).toBe(
+      "我的设计 (未命名的设计)",
+    );
+  });
+});
 
 afterEach(() => {
   useSessionStore.getState().clearSession("test-server");

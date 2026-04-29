@@ -69,12 +69,21 @@ export function HeaderToggleButton({
 }
 
 export const headerIconSlotStyle = StyleSheet.create((theme) => ({
+  // macOS/iOS 26 toolbar icon button: each control sits in its own glass
+  // pill so multiple icons in a row read as discrete tappable affordances
+  // (instead of a free-floating icon collection on the toolbar surface).
   slot: {
     padding: {
       xs: theme.spacing[3],
       md: theme.spacing[2],
     },
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.glassPill,
+    borderCurve: "continuous",
+    backgroundColor: theme.colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+    alignItems: "center",
+    justifyContent: "center",
   },
 }));
 

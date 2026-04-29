@@ -19,12 +19,32 @@
       body {
         overflow: hidden;
       }
-      /* Prevent white flash before React mounts */
+      /* Prevent white flash before React mounts. In Tauri the native
+       * window backdrop (NSVisualEffect on macOS, acrylic on Windows)
+       * provides the actual chrome, so we keep the document transparent
+       * there and only paint a solid color in the regular browser case.
+       *
+       * The Tauri shell injects `__TAURI_INTERNALS__` early — we use the
+       * `:has()` heuristic on the html element via the `data-tauri` attr
+       * the bridge sets in bridge.js. As a fallback we still tint via
+       * media query for non-Tauri dark Web. */
       @media (prefers-color-scheme: dark) {
         html,
         body {
           background-color: #1a1c1b;
         }
+      }
+      html[data-tauri="true"],
+      html[data-tauri="true"] body,
+      html[data-tauri="true"] #root {
+        background-color: transparent !important;
+      }
+      /* Under Tauri vibrancy, the macOS/Windows window itself paints the
+       * dark gradient backdrop. The React surfaces only need to provide
+       * subtle fills; we damp surface0 / sidebar / chat backgrounds via
+       * the cascade so the native blur shows through on empty regions. */
+      html[data-tauri="true"] [data-vibrancy-pass-through="true"] {
+        background-color: transparent !important;
       }
       /* These styles make the root element full-height */
       #root {
@@ -79,23 +99,52 @@
         src: url("/fonts/ArkPixel16px.ttf") format("truetype");
       }
 
-      /* App-wide default. CJK chars fall through to Ark Pixel.
+      /* App-wide default — macOS/iOS 26 Liquid Glass aesthetic.
        *
-       * react-native-web inlines `font-family: System` on every Text/View it
-       * styles, which beats anything we set on `body` via the cascade. We use
-       * !important here to guarantee our terminal/pixel stack wins on every
-       * leaf element — the override is intentional, not a band-aid.
+       * Chrome (buttons, headers, menus, body copy) uses the system font
+       * stack so we inherit SF Pro on Apple platforms and Segoe UI Variable
+       * on Windows. Mono is reserved for code-bearing surfaces (agent
+       * stream output, terminals, code blocks) — opt in via the `.font-mono`
+       * class on a parent or the inline `fontFamily` token from the theme.
+       *
+       * react-native-web inlines `font-family: System` on every Text/View,
+       * which is exactly what we want now — no !important needed.
        */
       html,
       body,
-      #root,
-      * {
+      #root {
         font-family:
-          "JetBrains Mono", "Ark Pixel", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-          monospace !important;
-        font-feature-settings: "calt", "ss01", "ss02", "ss03", "ss19", "ss20", "zero";
+          system-ui,
+          -apple-system,
+          "SF Pro Text",
+          "SF Pro",
+          BlinkMacSystemFont,
+          "Segoe UI Variable",
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-feature-settings: "ss01", "cv11";
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* Mono opt-in: agents wrap their output in a parent that sets this
+       * class (or React Native sets `fontFamily: theme.fontFamily.mono`
+       * directly). Ark Pixel is kept FIRST so CJK keeps the pixel grid
+       * for sources that explicitly want the legacy look. */
+      .font-mono,
+      .font-mono * {
+        font-family:
+          "JetBrains Mono", "Ark Pixel", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+        font-feature-settings: "calt", "ss01", "ss02", "ss03", "ss19", "ss20", "zero";
+      }
+
+      /* Root font-size — 16px is the native PPEM for Ark Pixel and the
+       * default we use for system text. */
+      html {
+        font-size: 16px;
       }
 
       button,

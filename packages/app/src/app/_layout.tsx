@@ -28,6 +28,12 @@ import { Extrapolation, interpolate, runOnJS, useSharedValue } from "react-nativ
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 import { CommandCenter } from "@/components/command-center";
+import { DesktopNavRail } from "@/components/desktop-nav-rail";
+import { SplashOverlay } from "@/components/splash-overlay";
+import { GhostCursorOverlay } from "@/voice-control/ghost-cursor-overlay";
+import { VoiceCommandBridgeProvider } from "@/voice-control/voice-command-bridge-provider";
+import { VoiceFloatingOrb } from "@/voice-control/voice-floating-orb";
+import { VoicePttPill } from "@/voice-control/voice-ptt-pill";
 import { DaemonVersionMismatchCalloutSource } from "@/components/daemon-version-mismatch-callout-source";
 import { DownloadToast } from "@/components/download-toast";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
@@ -495,6 +501,7 @@ function AppContainer({
   const content = (
     <View style={containerStyle}>
       <View style={rowStyle}>
+        {!isCompactLayout && chromeEnabled && !isFocusModeEnabled && <DesktopNavRail />}
         {!isCompactLayout && chromeEnabled && !isFocusModeEnabled && (
           <LeftSidebar selectedAgentId={selectedAgentId} />
         )}
@@ -512,6 +519,15 @@ function AppContainer({
       />
       <WorkspaceSetupDialog />
       <KeyboardShortcutsDialog />
+      {/* Voice Control · Beta — both surfaces self-gate on the flag + platform.
+          The pill listens for the configured hotkey on web/desktop. The orb
+          mounts a draggable always-on mic button on iOS/Android. The bridge
+          provider syncs React-only context (active agent, daemon client) into
+          the controller's command handlers. */}
+      <VoiceCommandBridgeProvider />
+      <VoicePttPill />
+      <VoiceFloatingOrb />
+      <GhostCursorOverlay />
     </View>
   );
 
@@ -797,8 +813,14 @@ function AppWithSidebar({ children }: { children: ReactNode }) {
   const hosts = useHosts();
   const storeReady = useStoreReady();
   const activeServerId = useMemo(() => parseServerIdFromPathname(pathname), [pathname]);
+  // Settings is now reached from the desktop nav rail too, so the chrome
+  // (rail + workspace sidebar) needs to stay visible while in /settings/* —
+  // otherwise the user can't navigate back to chats/devices/community.
+  const isSettingsRoute = pathname.startsWith("/settings");
   const shouldShowAppChrome =
-    storeReady && activeServerId !== null && hosts.some((host) => host.serverId === activeServerId);
+    storeReady &&
+    (isSettingsRoute ||
+      (activeServerId !== null && hosts.some((host) => host.serverId === activeServerId)));
 
   useEffect(() => {
     if (!activeServerId || hosts.length === 0) {
@@ -959,6 +981,7 @@ export default function RootLayout() {
           <AppShell />
         </RuntimeProviders>
       </RootProviders>
+      <SplashOverlay />
     </GestureHandlerRootView>
   );
 }

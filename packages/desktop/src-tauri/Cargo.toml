@@ -13,6 +13,10 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
+# macOS / Windows vibrancy backdrops — gives the window the macOS 26 "Liquid
+# Glass" / Windows 11 mica look. The crate is platform-gated internally so
+# linux builds don't pull in the AppKit-specific code paths.
+window-vibrancy = "0.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }

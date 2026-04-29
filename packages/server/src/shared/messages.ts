@@ -839,6 +839,67 @@ export const SendAgentMessageRequestSchema = z.object({
   attachments: AgentAttachmentsSchema,
 });
 
+// ============================================================================
+// Voice intent routing (Beta · client → daemon one-shot tool selection)
+// ============================================================================
+
+/**
+ * Compact representation of a client-side voice command. Daemon translates
+ * the array into provider-specific tool definitions for the routing model.
+ *
+ * `parameters` is a permissive JSON-schema-ish object — for v1 we don't
+ * forward client zod schemas to the daemon (not JSON-serializable). The
+ * routing model uses `description` + `examples` + `parameters` together to
+ * pick the call shape; daemons only validate that the model returned an
+ * object, leaving full param validation to the client (which has the
+ * authoritative zod schema).
+ */
+export const VoiceRouteCommandSchema = z.object({
+  name: z.string().min(1),
+  description: z.string(),
+  parameters: z.unknown().optional(),
+  examples: z.array(z.string()).optional().default([]),
+});
+
+export const VoiceRouteRequestSchema = z.object({
+  type: z.literal("voice_route_request"),
+  requestId: z.string(),
+  /** Free-text transcript captured by the client's STT. */
+  transcript: z.string(),
+  /**
+   * Provider used to interpret intent. Must be a provider the user has
+   * configured on this daemon — otherwise daemon returns a "provider not
+   * configured" error and client falls back to heuristic.
+   */
+  provider: z.enum(["claude", "codex", "opencode"]),
+  /**
+   * Optional model id override. null/missing = let daemon pick the
+   * provider's default routing model (typically the cheapest fast model).
+   */
+  modelId: z.string().nullable().optional(),
+  /** Command catalog the daemon should expose to the model as tools. */
+  commands: z.array(VoiceRouteCommandSchema).min(1),
+  /** Soft per-call timeout. Daemon enforces; client also enforces locally. */
+  timeoutMs: z.number().int().positive().optional(),
+});
+
+export const VoiceRouteResponseMessageSchema = z.object({
+  type: z.literal("voice_route_response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** True only when the model selected a real command from the catalog. */
+    matched: z.boolean(),
+    /** Set iff `matched`. Always one of the catalog command names. */
+    commandName: z.string().nullable(),
+    /** Parsed JSON arguments. Empty object for zero-param commands. */
+    params: z.record(z.string(), z.unknown()).optional().default({}),
+    /** 0..1 confidence if the model exposes one; null otherwise. */
+    confidence: z.number().nullable().optional(),
+    /** Human-readable failure reason (e.g. "No matching command"). */
+    error: z.string().nullable().optional(),
+  }),
+});
+
 export const WaitForFinishRequestSchema = z.object({
   type: z.literal("wait_for_finish_request"),
   requestId: z.string(),
@@ -1385,6 +1446,14 @@ export const ArchiveWorkspaceRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const SetWorkspaceAliasRequestSchema = z.object({
+  type: z.literal("set_workspace_alias_request"),
+  requestId: z.string(),
+  workspaceId: z.string(),
+  // Empty string clears the alias and falls back to displayName.
+  alias: z.string().max(200),
+});
+
 // Highlighted diff token schema
 // Note: style can be a compound class name (e.g., "heading meta") from the syntax highlighter
 const HighlightTokenSchema = z.object({
@@ -1603,6 +1672,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   UpdateAgentRequestMessageSchema,
   SetVoiceModeMessageSchema,
   SendAgentMessageRequestSchema,
+  VoiceRouteRequestSchema,
   WaitForFinishRequestSchema,
   GetDaemonConfigRequestMessageSchema,
   SetDaemonConfigRequestMessageSchema,
@@ -1657,6 +1727,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   OpenProjectRequestSchema,
   CheckPathRequestSchema,
   ArchiveWorkspaceRequestSchema,
+  SetWorkspaceAliasRequestSchema,
   FileExplorerRequestSchema,
   ProjectIconRequestSchema,
   FileDownloadTokenRequestSchema,
@@ -1862,6 +1933,10 @@ export const ServerInfoStatusPayloadSchema = z
     features: z
       .object({
         providersSnapshot: z.boolean().optional(),
+        // COMPAT(voiceIntentRouting): added in v1.4.x. Old daemons omit this;
+        // clients see undefined and treat AI routing as unavailable, falling
+        // back to local heuristic. Always optional.
+        voiceIntentRouting: z.boolean().optional(),
       })
       .optional(),
   })
@@ -2107,6 +2182,9 @@ export const WorkspaceDescriptorPayloadSchema = z
     // COMPAT(workspaces): keep legacy directory workspace kind parseable.
     workspaceKind: z.enum(["directory", "local_checkout", "checkout", "worktree"]),
     name: z.string(),
+    // User-set alias. When present, clients render `${alias} (${name})`.
+    // Optional + nullable so older daemons (no field) and older clients (no field) round-trip cleanly.
+    alias: z.string().nullable().optional(),
     status: WorkspaceStateBucketSchema,
     activityAt: z.string().nullable(),
     diffStat: z
@@ -2312,6 +2390,16 @@ export const ArchiveWorkspaceResponseMessageSchema = z.object({
     requestId: z.string(),
     workspaceId: z.string(),
     archivedAt: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const SetWorkspaceAliasResponseMessageSchema = z.object({
+  type: z.literal("set_workspace_alias_response"),
+  payload: z.object({
+    requestId: z.string(),
+    workspaceId: z.string(),
+    alias: z.string().nullable(),
     error: z.string().nullable(),
   }),
 });
@@ -3198,11 +3286,13 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ListAvailableEditorsResponseMessageSchema,
   OpenInEditorResponseMessageSchema,
   ArchiveWorkspaceResponseMessageSchema,
+  SetWorkspaceAliasResponseMessageSchema,
   FetchAgentResponseMessageSchema,
   FetchAgentTimelineResponseMessageSchema,
   CancelAgentResponseMessageSchema,
   ClearAgentAttentionResponseMessageSchema,
   SendAgentMessageResponseMessageSchema,
+  VoiceRouteResponseMessageSchema,
   SetVoiceModeResponseMessageSchema,
   GetDaemonConfigResponseMessageSchema,
   SetDaemonConfigResponseMessageSchema,
@@ -3333,6 +3423,9 @@ export type ListAvailableEditorsResponseMessage = z.infer<
 >;
 export type OpenInEditorResponseMessage = z.infer<typeof OpenInEditorResponseMessageSchema>;
 export type ArchiveWorkspaceResponseMessage = z.infer<typeof ArchiveWorkspaceResponseMessageSchema>;
+export type SetWorkspaceAliasResponseMessage = z.infer<
+  typeof SetWorkspaceAliasResponseMessageSchema
+>;
 export type FetchAgentResponseMessage = z.infer<typeof FetchAgentResponseMessageSchema>;
 export type FetchAgentTimelineResponseMessage = z.infer<
   typeof FetchAgentTimelineResponseMessageSchema
@@ -3505,6 +3598,7 @@ export type ListAvailableEditorsRequest = z.infer<typeof ListAvailableEditorsReq
 export type OpenInEditorRequest = z.infer<typeof OpenInEditorRequestSchema>;
 export type OpenProjectRequest = z.infer<typeof OpenProjectRequestSchema>;
 export type ArchiveWorkspaceRequest = z.infer<typeof ArchiveWorkspaceRequestSchema>;
+export type SetWorkspaceAliasRequest = z.infer<typeof SetWorkspaceAliasRequestSchema>;
 export type FileExplorerRequest = z.infer<typeof FileExplorerRequestSchema>;
 export type FileExplorerResponse = z.infer<typeof FileExplorerResponseSchema>;
 export type ProjectIconRequest = z.infer<typeof ProjectIconRequestSchema>;

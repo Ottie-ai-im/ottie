@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { View, Text } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { FolderOpen, FolderPlus, Smartphone } from "lucide-react-native";
 import { OttieLogo } from "@/components/icons/ottie-logo";
 import { Button } from "@/components/ui/button";
 import { MenuHeader } from "@/components/headers/menu-header";
@@ -58,44 +57,36 @@ export function OpenProjectScreen({ serverId }: { serverId: string }) {
       <MenuHeader borderless />
       <View style={styles.content}>
         <TitlebarDragRegion />
-        <View style={styles.logo}>
-          <OttieLogo size={56} />
-        </View>
-        <View style={styles.headingGroup}>
-          <Text style={styles.heading}>{t("project.emptyHeading")}</Text>
+        <View style={styles.centerStack}>
+          <View style={styles.logo}>
+            <OttieLogo size={56} />
+          </View>
           {hasHydrated && !hasProjects ? (
-            <Text style={styles.subtitle}>{t("project.emptySubtitle")}</Text>
+            <View style={styles.headingGroup}>
+              <Text style={styles.subtitle}>{t("project.emptySubtitle")}</Text>
+            </View>
           ) : null}
-        </View>
-        <View style={styles.cta}>
-          {hasDefaultWorkspaceRoot ? (
+          <View style={styles.cta}>
             <Button
               variant="default"
-              leftIcon={FolderPlus}
-              onPress={handleOpenNewTask}
-              testID="open-project-new-task"
+              onPress={hasDefaultWorkspaceRoot ? handleOpenNewTask : handleOpenPicker}
+              testID={hasDefaultWorkspaceRoot ? "open-project-new-task" : "open-project-submit"}
             >
-              {t("project.newTaskCta")}
+              {hasDefaultWorkspaceRoot ? t("project.newTaskCta") : t("project.addProjectCta")}
             </Button>
-          ) : null}
-          <Button
-            variant={hasDefaultWorkspaceRoot ? "outline" : "default"}
-            leftIcon={FolderOpen}
-            onPress={handleOpenPicker}
-            testID="open-project-submit"
-          >
-            {t("project.addProjectCta")}
-          </Button>
-          {isLocalDaemon ? (
-            <Button
-              variant="outline"
-              leftIcon={Smartphone}
-              onPress={handleOpenPairDevice}
-              testID="open-project-pair-device"
-            >
-              {t("project.pairDevice")}
-            </Button>
-          ) : null}
+            <View style={styles.secondaryLinks}>
+              {hasDefaultWorkspaceRoot ? (
+                <Pressable onPress={handleOpenPicker} testID="open-project-submit">
+                  <Text style={styles.linkText}>{t("project.addProjectCta")}</Text>
+                </Pressable>
+              ) : null}
+              {isLocalDaemon ? (
+                <Pressable onPress={handleOpenPairDevice} testID="open-project-pair-device">
+                  <Text style={styles.linkText}>{t("project.pairDevice")}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
         </View>
       </View>
       <PairDeviceModal
@@ -126,12 +117,20 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 0,
     padding: theme.spacing[6],
+    // Pull the inner stack up by the header allowance so it lands at the
+    // *visual* center of the pane (the header eats vertical space at the
+    // top, so a plain center looks low).
     paddingBottom: {
       xs: HEADER_INNER_HEIGHT_MOBILE + HEADER_TOP_PADDING_MOBILE + theme.spacing[6],
       md: HEADER_INNER_HEIGHT + theme.spacing[6],
     },
+  },
+  centerStack: {
+    width: "100%",
+    maxWidth: 520,
+    alignItems: "center",
+    justifyContent: "center",
   },
   logo: {
     marginBottom: theme.spacing[8],
@@ -141,20 +140,30 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[3],
   },
   cta: {
-    marginTop: theme.spacing[12],
+    marginTop: theme.spacing[6],
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing[4],
+  },
+  secondaryLinks: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
+    justifyContent: "center",
+    flexWrap: "wrap",
+    columnGap: theme.spacing[4],
+    rowGap: theme.spacing[2],
   },
-  heading: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize["2xl"],
-    fontWeight: theme.fontWeight.normal,
-    textAlign: "center",
+  linkText: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    letterSpacing: -0.1,
   },
   subtitle: {
+    fontFamily: theme.fontFamily.system,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
+    letterSpacing: -0.1,
     textAlign: "center",
   },
 }));

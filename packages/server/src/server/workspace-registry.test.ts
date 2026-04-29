@@ -103,4 +103,46 @@ describe("workspace registries", () => {
     expect(await workspaceRegistry.get("/tmp/repo")).toBeNull();
     expect(await workspaceRegistry.list()).toEqual([]);
   });
+
+  test("persists alias on workspace records and round-trips through reload", async () => {
+    await workspaceRegistry.initialize();
+    await workspaceRegistry.upsert(
+      createPersistedWorkspaceRecord({
+        workspaceId: "/tmp/repo",
+        projectId: "remote:github.com/acme/repo",
+        cwd: "/tmp/repo",
+        kind: "local_checkout",
+        displayName: "main",
+        alias: "我的设计",
+        createdAt: "2026-04-28T00:00:00.000Z",
+        updatedAt: "2026-04-28T00:00:00.000Z",
+      }),
+    );
+
+    const reopened = new FileBackedWorkspaceRegistry(
+      path.join(tmpDir, "projects", "workspaces.json"),
+      logger,
+    );
+    await reopened.initialize();
+    expect((await reopened.get("/tmp/repo"))?.alias).toBe("我的设计");
+  });
+
+  test("legacy workspace records without alias still parse", async () => {
+    await workspaceRegistry.initialize();
+    await workspaceRegistry.upsert(
+      createPersistedWorkspaceRecord({
+        workspaceId: "/tmp/repo",
+        projectId: "remote:github.com/acme/repo",
+        cwd: "/tmp/repo",
+        kind: "local_checkout",
+        displayName: "main",
+        createdAt: "2026-04-28T00:00:00.000Z",
+        updatedAt: "2026-04-28T00:00:00.000Z",
+      }),
+    );
+
+    const record = await workspaceRegistry.get("/tmp/repo");
+    expect(record).not.toBeNull();
+    expect(record?.alias ?? null).toBeNull();
+  });
 });

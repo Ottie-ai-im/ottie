@@ -1,4 +1,4 @@
-import type { WorkspaceDescriptor } from "@/stores/session-store";
+import { formatWorkspaceTitle, type WorkspaceDescriptor } from "@/stores/session-store";
 
 export type WorkspaceHeaderCheckoutState =
   | { kind: "pending" }
@@ -41,7 +41,7 @@ export function resolveWorkspaceHeader(input: { workspace: WorkspaceDescriptor }
   subtitle: string;
 } {
   return {
-    title: input.workspace.name,
+    title: formatWorkspaceTitle(input.workspace),
     subtitle: input.workspace.projectDisplayName,
   };
 }

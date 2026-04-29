@@ -14,6 +14,7 @@ import type {
   TextStyle,
   ViewStyle,
 } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive";
@@ -27,66 +28,94 @@ type LeftIcon =
 
 const ICON_SIZE: Record<ButtonSize, number> = { sm: 14, md: 16, lg: 20 };
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 const styles = StyleSheet.create((theme) => ({
   base: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.button,
+    borderCurve: "continuous",
     borderWidth: 1,
     borderColor: "transparent",
   },
   md: {
-    paddingVertical: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[4],
+    minHeight: 32,
   },
   sm: {
-    paddingVertical: theme.spacing[2],
+    paddingVertical: theme.spacing[1.5],
     paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.button - 2,
+    minHeight: 26,
   },
   lg: {
-    paddingVertical: theme.spacing[4],
+    paddingVertical: theme.spacing[3],
     paddingHorizontal: theme.spacing[6],
-    borderRadius: theme.borderRadius.xl,
+    borderRadius: theme.borderRadius.button + 2,
+    minHeight: 40,
   },
   default: {
     backgroundColor: theme.colors.accent,
     borderColor: theme.colors.accent,
   },
+  defaultHovered: {
+    backgroundColor: theme.colors.accentBright,
+    borderColor: theme.colors.accentBright,
+  },
   secondary: {
-    backgroundColor: theme.colors.surface3,
-    borderColor: theme.colors.surface3,
+    backgroundColor: theme.colors.surfaceGlass,
+    borderColor: theme.colors.borderGlass,
+  },
+  secondaryHovered: {
+    backgroundColor: theme.colors.surfaceGlassHover,
+    borderColor: theme.colors.borderGlass,
   },
   outline: {
     backgroundColor: "transparent",
     borderColor: theme.colors.borderAccent,
   },
+  outlineHovered: {
+    backgroundColor: theme.colors.surfaceGlass,
+    borderColor: theme.colors.borderGlass,
+  },
   ghost: {
     backgroundColor: "transparent",
+    borderColor: "transparent",
+  },
+  ghostHovered: {
+    backgroundColor: theme.colors.surfaceGlass,
     borderColor: "transparent",
   },
   destructive: {
     backgroundColor: theme.colors.destructive,
     borderColor: theme.colors.destructive,
   },
-  pressed: {
-    opacity: 0.85,
+  destructiveHovered: {
+    backgroundColor: theme.colors.destructive,
+    borderColor: theme.colors.destructive,
+    opacity: 0.92,
   },
   disabled: {
     opacity: theme.opacity[50],
   },
   text: {
+    fontFamily: theme.fontFamily.system,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.normal,
+    fontWeight: theme.fontWeight.medium,
+    letterSpacing: -0.1,
   },
   textDefault: {
     color: theme.colors.palette.white,
+    fontWeight: theme.fontWeight.semibold,
   },
   textDestructive: {
     color: theme.colors.palette.white,
+    fontWeight: theme.fontWeight.semibold,
   },
   textGhost: {
     color: theme.colors.foregroundMuted,
@@ -117,18 +146,25 @@ export function Button({
 >) {
   const [hovered, setHovered] = useState(false);
   const { theme } = useUnistyles();
+  const pressScale = useSharedValue(1);
 
   let variantStyle: ViewStyle;
+  let variantHoverStyle: ViewStyle;
   if (variant === "default") {
     variantStyle = styles.default;
+    variantHoverStyle = styles.defaultHovered;
   } else if (variant === "secondary") {
     variantStyle = styles.secondary;
+    variantHoverStyle = styles.secondaryHovered;
   } else if (variant === "outline") {
     variantStyle = styles.outline;
+    variantHoverStyle = styles.outlineHovered;
   } else if (variant === "ghost") {
     variantStyle = styles.ghost;
+    variantHoverStyle = styles.ghostHovered;
   } else {
     variantStyle = styles.destructive;
+    variantHoverStyle = styles.destructiveHovered;
   }
 
   let sizeStyle: ViewStyle;
@@ -144,16 +180,27 @@ export function Button({
   const handleHoverIn = useCallback(() => setHovered(true), []);
   const handleHoverOut = useCallback(() => setHovered(false), []);
 
+  const handlePressIn = useCallback(() => {
+    pressScale.value = withSpring(0.96, theme.motion.spring.snappy);
+  }, [pressScale, theme.motion.spring.snappy]);
+  const handlePressOut = useCallback(() => {
+    pressScale.value = withSpring(1, theme.motion.spring.snappy);
+  }, [pressScale, theme.motion.spring.snappy]);
+
+  const animatedPressStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
+  }));
+
   const pressableStyle = useCallback(
-    ({ pressed }: PressableStateCallbackType): StyleProp<ViewStyle> => [
+    (_state: PressableStateCallbackType): StyleProp<ViewStyle> => [
       styles.base,
       sizeStyle,
       variantStyle,
-      pressed ? styles.pressed : null,
+      hovered ? variantHoverStyle : null,
       disabled ? styles.disabled : null,
       style,
     ],
-    [sizeStyle, variantStyle, disabled, style],
+    [sizeStyle, variantStyle, variantHoverStyle, hovered, disabled, style],
   );
 
   const resolvedTextStyle = useMemo(
@@ -171,7 +218,6 @@ export function Button({
   function renderIcon() {
     if (!leftIcon) return null;
 
-    // Pre-rendered element — pass through
     if (typeof leftIcon === "object" && "type" in leftIcon) {
       return <View>{leftIcon}</View>;
     }
@@ -186,7 +232,6 @@ export function Button({
     }
     const iconSize = ICON_SIZE[size];
 
-    // Render function
     if (
       typeof leftIcon === "function" &&
       !leftIcon.prototype?.isReactComponent &&
@@ -195,7 +240,6 @@ export function Button({
       return <View>{(leftIcon as (color: string) => ReactElement)(color)}</View>;
     }
 
-    // Component type
     const Icon = leftIcon as ComponentType<{ color: string; size: number }>;
     return (
       <View>
@@ -205,16 +249,18 @@ export function Button({
   }
 
   return (
-    <Pressable
+    <AnimatedPressable
       {...props}
       accessibilityRole={accessibilityRole ?? "button"}
       disabled={disabled}
       onHoverIn={handleHoverIn}
       onHoverOut={handleHoverOut}
-      style={pressableStyle}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={[pressableStyle, animatedPressStyle]}
     >
       {renderIcon()}
       {children != null ? <Text style={resolvedTextStyle}>{children}</Text> : null}
-    </Pressable>
+    </AnimatedPressable>
   );
 }

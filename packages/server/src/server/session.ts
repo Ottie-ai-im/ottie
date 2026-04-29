@@ -218,6 +218,7 @@ import {
 } from "./worktree-session.js";
 import { killTerminalsUnderPath as killWorktreeTerminalsUnderPath } from "./ottie-worktree-archive-service.js";
 import { toWorktreeWireError } from "./worktree-errors.js";
+import { routeVoiceIntent } from "./voice/voice-intent-routing.js";
 
 const MAX_INITIAL_AGENT_TITLE_CHARS = Math.min(60, MAX_EXPLICIT_AGENT_TITLE_CHARS);
 const WORKSPACE_GIT_WATCH_REMOVED_STATE_KEY = "__removed__";
@@ -1784,6 +1785,8 @@ export class Session {
         return this.handleUpdateAgentRequest(msg.agentId, msg.name, msg.labels, msg.requestId);
       case "send_agent_message_request":
         return this.handleSendAgentMessageRequest(msg);
+      case "voice_route_request":
+        return this.handleVoiceRouteRequest(msg);
       case "wait_for_finish_request":
         return this.handleWaitForFinish(msg.agentId, msg.requestId, msg.timeoutMs);
       case "create_agent_request":
@@ -1910,6 +1913,8 @@ export class Session {
         return this.handleCheckPathRequest(msg);
       case "archive_workspace_request":
         return this.handleArchiveWorkspaceRequest(msg);
+      case "set_workspace_alias_request":
+        return this.handleSetWorkspaceAliasRequest(msg);
       case "file_explorer_request":
         return this.handleFileExplorerRequest(msg);
       case "project_icon_request":
@@ -2005,6 +2010,12 @@ export class Session {
         return this.handleChatReadRequest(msg);
       case "chat/wait":
         return this.handleChatWaitRequest(msg);
+      case "chat/subscribe":
+        return this.handleChatSubscribeRequest(msg);
+      case "chat/unsubscribe":
+        return this.handleChatUnsubscribeRequest(msg);
+      case "chat/ack":
+        return this.handleChatAckRequest(msg);
       case "schedule/create":
         return this.handleScheduleCreateRequest(msg);
       case "schedule/list":
@@ -5845,6 +5856,7 @@ export class Session {
       projectKind: (resolvedProjectRecord?.kind ?? "directory") === "git" ? "git" : "non_git",
       workspaceKind: workspace.kind,
       name: workspace.displayName,
+      alias: workspace.alias ?? null,
       status: "done",
       activityAt: null,
       diffStat,
@@ -5926,6 +5938,7 @@ export class Session {
       projectKind: "git",
       workspaceKind: result.workspace.kind,
       name: result.worktree.branchName || result.workspace.displayName,
+      alias: result.workspace.alias ?? null,
       status: "done",
       activityAt: null,
       diffStat: { additions: 0, deletions: 0 },
@@ -7133,6 +7146,49 @@ export class Session {
     }
   }
 
+  private async handleSetWorkspaceAliasRequest(
+    request: Extract<SessionInboundMessage, { type: "set_workspace_alias_request" }>,
+  ): Promise<void> {
+    try {
+      const existing = await this.workspaceRegistry.get(request.workspaceId);
+      if (!existing) {
+        throw new Error(`Workspace not found: ${request.workspaceId}`);
+      }
+      const trimmed = request.alias.trim();
+      const nextAlias = trimmed.length > 0 ? trimmed : null;
+      await this.workspaceRegistry.upsert({
+        ...existing,
+        alias: nextAlias,
+        updatedAt: new Date().toISOString(),
+      });
+      await this.emitWorkspaceUpdateForCwd(existing.cwd);
+      this.emit({
+        type: "set_workspace_alias_response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          alias: nextAlias,
+          error: null,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to set workspace alias";
+      this.sessionLogger.error(
+        { err: error, workspaceId: request.workspaceId },
+        "Failed to set workspace alias",
+      );
+      this.emit({
+        type: "set_workspace_alias_response",
+        payload: {
+          requestId: request.requestId,
+          workspaceId: request.workspaceId,
+          alias: null,
+          error: message,
+        },
+      });
+    }
+  }
+
   private async handleFetchAgent(agentIdOrIdentifier: string, requestId: string): Promise<void> {
     const resolved = await this.resolveAgentIdentifier(agentIdOrIdentifier);
     if (!resolved.ok) {
@@ -7436,6 +7492,56 @@ export class Session {
           agentId: resolved.agentId,
           accepted: false,
           error: errorToFriendlyMessage(error),
+        },
+      });
+    }
+  }
+
+  /**
+   * Voice intent routing — accepts a transcript + a client-provided command
+   * catalog, asks the configured provider's model to pick a tool, and emits
+   * a `voice_route_response` with the model's choice. Heavy lifting lives in
+   * {@link routeVoiceIntent}; this handler is a thin error-funnel that
+   * guarantees we always emit exactly one response.
+   */
+  private async handleVoiceRouteRequest(
+    msg: Extract<SessionInboundMessage, { type: "voice_route_request" }>,
+  ): Promise<void> {
+    try {
+      const result = await routeVoiceIntent({
+        request: {
+          transcript: msg.transcript,
+          provider: msg.provider,
+          modelId: msg.modelId ?? null,
+          commands: msg.commands,
+          timeoutMs: msg.timeoutMs,
+        },
+        logger: this.sessionLogger,
+      });
+      this.emit({
+        type: "voice_route_response",
+        payload: {
+          requestId: msg.requestId,
+          matched: result.matched,
+          commandName: result.commandName,
+          params: result.params ?? {},
+          confidence: result.confidence ?? null,
+          error: result.error ?? null,
+        },
+      });
+    } catch (err) {
+      // Defensive — routeVoiceIntent's contract is "never throw", but if
+      // upstream code changes that, still emit a clean response.
+      this.sessionLogger.warn({ err }, "voice_route_request: unexpected throw");
+      this.emit({
+        type: "voice_route_response",
+        payload: {
+          requestId: msg.requestId,
+          matched: false,
+          commandName: null,
+          params: {},
+          confidence: null,
+          error: err instanceof Error ? err.message : "Unexpected routing error",
         },
       });
     }
