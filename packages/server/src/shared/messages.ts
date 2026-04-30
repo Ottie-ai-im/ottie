@@ -95,6 +95,56 @@ import type {
   AgentUsage,
 } from "../server/agent/agent-sdk-types.js";
 
+// ---------------------------------------------------------------------------
+// Schema evolution discipline (ARCH-02 — see docs/SCHEMA_EVOLUTION.md ship Phase 5)
+//
+// Every schema in this file is a wire boundary between old clients and new
+// daemons (and vice versa). Backward compatibility is a hard rule per CLAUDE.md
+// "WebSocket / Message Schema Rules":
+//
+//   • New fields MUST be `.optional()` with a sensible default or `.transform()`
+//     fallback. Never change a field from optional to required.
+//   • Never remove a field — deprecate it instead (keep accepting it; the daemon
+//     stops sending it once `removeAfter` ships).
+//   • Never narrow a field's type (e.g. `string` → `enum`, `nullable` → non-null).
+//
+// Deprecation annotation convention: every `@deprecated` mark on a field's
+// `.describe(...)` MUST include both `since=vX.Y` and `removeAfter=vX.Y`,
+// where `removeAfter` is at least 6 minor releases after `since`. Example:
+//
+//   chromeEnabled: z
+//     .boolean()
+//     .optional()
+//     .describe("@deprecated since=v1.11 use=`chromeLayoutEnabled`+`keyboardShortcutsEnabled` removeAfter=v1.16"),
+//
+// A warn-level lint (`tools/lint/deprecated-annotation.ts`, run via
+// `npm run lint:schema`) flags any `@deprecated` annotation missing either
+// marker. Promoted to error in Phase 5.
+//
+// Once a deprecated field's `removeAfter` window completes, the daemon stops
+// sending it AND the field name is added to `RESERVED_FIELDS` below. A reserved
+// name is never reused with different meaning (Protobuf-style "reserved"
+// discipline).
+//
+// Frozen-fixture parse tests (`messages.frozen-v1.{8,9,10}.test.ts`) pin
+// historical wire shapes against today's schemas. CI fails if any change in
+// this file breaks those fixtures — that is the empirical compatibility check.
+// ---------------------------------------------------------------------------
+
+/**
+ * Field names removed from the schema and reserved forever (per ARCH-02 +
+ * Protobuf-style "reserved" discipline). Adding a name here means: the wire
+ * key is dead, but no future field may reuse the name with different meaning.
+ *
+ * Populated as fields complete their sunset window
+ * (`@deprecated since=vX.Y removeAfter=vX.Y` → daemon stops emitting →
+ * `removeAfter` ships → name moves here).
+ */
+export const RESERVED_FIELDS = {
+  // Example shape — populated as fields complete their sunset window.
+  // CreateAgentRequestMessage: ["legacyHostId"],
+} as const satisfies Record<string, readonly string[]>;
+
 export const AgentStatusSchema = z.enum(AGENT_LIFECYCLE_STATUSES);
 
 const AgentModeSchema: z.ZodType<AgentMode> = z.object({
