@@ -38,7 +38,16 @@ The five-phase ordering is dictated by three hard dependency chains: (1) the `se
 3. `LocalTokenAuth` (ARCH-03) ships in three modes: loopback-trust default unchanged for `npm run dev`, auto-token at `$OTTIE_HOME/local-token` (mode 0600) for the Tauri-bundled daemon, env-var token for non-loopback. `SECURITY.md` reflects all three modes.
 4. Message chevron (CONCERNS H13) is visible on iOS / Android via the `isHovered || isNative || isCompact` pattern; the lint rule blocks `isHovered`-alone visibility gates going forward.
 5. The resize handle no longer uses `onPointerEnter`/`onPointerLeave` outside `.web.ts` (CONCERNS C12); the lint rule is in place at warn-level (promoted to error in Phase 5). OpenCode `listPersistedAgents` (CONCERNS H4) returns recovered sessions after a daemon restart in a UAT cycle; `chromeEnabled` (CONCERNS C11) is split into independent layout / shortcut feature flags with existing-user values preserved.
-   **Plans**: TBD
+
+**Plans:** 5 plans
+
+Plans:
+
+- [ ] 01-01-PLAN.md — Schema-evolution discipline: RESERVED_FIELDS export, frozen-fixture v1.8/v1.9/v1.10 parse tests, warn-level @deprecated annotation lint (ARCH-02)
+- [ ] 01-02-PLAN.md — Theme token skeleton + targeted migration (theme.ts/glass-surface/daemon-connection-dot/curves) + warn-level hardcoded-color lint with counter-baseline (THM-01)
+- [ ] 01-03-PLAN.md — Bug fixes bundle (atomic-per-bug): chevron + isHovered-alone lint (NAV-A3), resize-handle pointer-events + lint (NAT-03), OpenCode listPersistedAgents (SES-02), chromeEnabled split (SET-02)
+- [ ] 01-04-PLAN.md — Carve C-1/C-2/C-3: MessageRouter, Zod parse boundary, PermissionHandler with Strangler-Fig env flags (ARCH-01)
+- [ ] 01-05-PLAN.md — Local-token auth three modes (loopback-trust / Tauri token-file / env var) + Settings panel (en+zh) + SECURITY.md update + log redaction (ARCH-03)
 
 ### Phase 2: Action Surface & Session Foundations
 
