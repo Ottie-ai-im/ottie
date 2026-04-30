@@ -129,54 +129,55 @@ Explicitly excluded from v1.11 to prevent scope creep.
 
 ## Traceability
 
-Empty initially. Filled by the gsd-roadmapper after roadmap creation.
+Filled by the gsd-roadmapper after roadmap creation (2026-04-30).
 
 | Requirement | Phase | Status  |
 | ----------- | ----- | ------- |
-| ARCH-01     | TBD   | Pending |
-| ARCH-02     | TBD   | Pending |
-| ARCH-03     | TBD   | Pending |
-| ONB-01      | TBD   | Pending |
-| ONB-02      | TBD   | Pending |
-| ONB-03      | TBD   | Pending |
-| ONB-04      | TBD   | Pending |
-| AGT-01      | TBD   | Pending |
-| AGT-02      | TBD   | Pending |
-| AGT-03      | TBD   | Pending |
-| AGT-04      | TBD   | Pending |
-| AGT-05      | TBD   | Pending |
-| AGT-06      | TBD   | Pending |
-| SES-01      | TBD   | Pending |
-| SES-02      | TBD   | Pending |
-| SES-03      | TBD   | Pending |
-| SES-04      | TBD   | Pending |
-| SES-05      | TBD   | Pending |
-| NAV-A1      | TBD   | Pending |
-| NAV-A2      | TBD   | Pending |
-| NAV-A3      | TBD   | Pending |
-| NAV-A4      | TBD   | Pending |
-| NAV-A5      | TBD   | Pending |
-| SET-01      | TBD   | Pending |
-| SET-02      | TBD   | Pending |
-| SET-03      | TBD   | Pending |
-| SET-04      | TBD   | Pending |
-| THM-01      | TBD   | Pending |
-| THM-02      | TBD   | Pending |
-| THM-03      | TBD   | Pending |
-| THM-04      | TBD   | Pending |
-| NAT-01      | TBD   | Pending |
-| NAT-02      | TBD   | Pending |
-| NAT-03      | TBD   | Pending |
-| NAT-04      | TBD   | Pending |
-| NAT-05      | TBD   | Pending |
+| ARCH-01     | 1     | Pending |
+| ARCH-02     | 1     | Pending |
+| ARCH-03     | 1     | Pending |
+| ONB-01      | 4     | Pending |
+| ONB-02      | 4     | Pending |
+| ONB-03      | 4     | Pending |
+| ONB-04      | 4     | Pending |
+| AGT-01      | 2     | Pending |
+| AGT-02      | 2     | Pending |
+| AGT-03      | 2     | Pending |
+| AGT-04      | 3     | Pending |
+| AGT-05      | 3     | Pending |
+| AGT-06      | 2     | Pending |
+| SES-01      | 2     | Pending |
+| SES-02      | 1     | Pending |
+| SES-03      | 3     | Pending |
+| SES-04      | 3     | Pending |
+| SES-05      | 3     | Pending |
+| NAV-A1      | 4     | Pending |
+| NAV-A2      | 4     | Pending |
+| NAV-A3      | 1     | Pending |
+| NAV-A4      | 2     | Pending |
+| NAV-A5      | 4     | Pending |
+| SET-01      | 4     | Pending |
+| SET-02      | 1     | Pending |
+| SET-03      | 4     | Pending |
+| SET-04      | 4     | Pending |
+| THM-01      | 1     | Pending |
+| THM-02      | 4     | Pending |
+| THM-03      | 4     | Pending |
+| THM-04      | 4     | Pending |
+| NAT-01      | 4     | Pending |
+| NAT-02      | 4     | Pending |
+| NAT-03      | 1     | Pending |
+| NAT-04      | 4     | Pending |
+| NAT-05      | 3     | Pending |
 
 **Coverage:**
 
 - v1 requirements: 36 total (3 ARCH + 4 ONB + 6 AGT + 5 SES + 5 NAV + 4 SET + 4 THM + 5 NAT)
-- Mapped to phases: 0 (filled by roadmapper)
-- Unmapped: 36 ⚠️ (expected — pre-roadmap state)
+- Mapped to phases: 36 / 36 ✓
+- Unmapped: 0
+- Per-phase distribution: Phase 1 = 8 (ARCH-01, ARCH-02, ARCH-03, THM-01, NAV-A3, NAT-03, SES-02, SET-02); Phase 2 = 6 (AGT-01, AGT-02, AGT-03, AGT-06, SES-01, NAV-A4); Phase 3 = 6 (AGT-04, AGT-05, SES-03, SES-04, SES-05, NAT-05); Phase 4 = 16 (ONB-01..04, NAV-A1, NAV-A2, NAV-A5, SET-01, SET-03, SET-04, THM-02, THM-03, THM-04, NAT-01, NAT-02, NAT-04); Phase 5 = 0 net-new (verifies completion of all 36).
 
 ---
 
 _Requirements defined: 2026-04-30_
-_Last updated: 2026-04-30 after initial definition (v1.11 milestone — User Flow Polish)_
+_Last updated: 2026-04-30 — Traceability filled by roadmapper (5 phases, 36/36 mapped)_
