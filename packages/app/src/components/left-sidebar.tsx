@@ -16,6 +16,7 @@ import {
   useState,
 } from "react";
 import {
+  Platform,
   Pressable,
   StyleSheet as RNStyleSheet,
   Text,
@@ -38,7 +39,8 @@ import { ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HEADER_TOP_PADDING_MOBILE, useIsCompactFormFactor } from "@/constants/layout";
-import { isWeb } from "@/constants/platform";
+import { isNative, isWeb } from "@/constants/platform";
+import { BlurView } from "expo-blur";
 import { useSidebarAnimation } from "@/contexts/sidebar-animation-context";
 import { useOpenProjectPicker } from "@/hooks/use-open-project-picker";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -589,10 +591,18 @@ function MobileSidebar({
       staticStyles.mobileSidebar,
       mobileSidebarInsetStyle,
       sidebarAnimatedStyle,
-      { backgroundColor: theme.colors.surfaceSidebar },
+      {
+        backgroundColor: isNative ? theme.colors.surfaceGlassStrong : theme.colors.surfaceSidebar,
+      },
     ],
-    [mobileSidebarInsetStyle, sidebarAnimatedStyle, theme.colors.surfaceSidebar],
+    [
+      mobileSidebarInsetStyle,
+      sidebarAnimatedStyle,
+      theme.colors.surfaceGlassStrong,
+      theme.colors.surfaceSidebar,
+    ],
   );
+  const isDarkScheme = theme.colorScheme === "dark";
 
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents={overlayPointerEvents}>
@@ -600,10 +610,19 @@ function MobileSidebar({
 
       <GestureDetector gesture={closeGesture} touchAction="pan-y">
         <Animated.View style={mobileSidebarStyle} pointerEvents="auto">
+          {isNative ? (
+            <BlurView
+              tint={isDarkScheme ? "systemThickMaterialDark" : "systemThickMaterialLight"}
+              intensity={70}
+              experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+              style={RNStyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+          ) : null}
           <View style={styles.sidebarContent} pointerEvents="auto">
             <SidebarHeaderRow
               icon={MessagesSquare}
-              label="Chats"
+              label={t("sidebar.sessions")}
               onPress={handleViewMore}
               isActive={isSessionsActive}
               testID="sidebar-sessions"
@@ -661,6 +680,7 @@ function DesktopSidebar({
   handleViewMore,
 }: DesktopSidebarProps) {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const isSessionsActive = pathname.includes("/sessions");
   const newAgentKeys = useShortcutKeys("new-agent");
   const padding = useWindowControlsPadding("sidebar");
@@ -728,6 +748,10 @@ function DesktopSidebar({
     [resizeAnimatedStyle, insetsTop],
   );
   const desktopSidebarBorderStyle = useMemo(() => [styles.desktopSidebarBorder, { flex: 1 }], []);
+  const vibrancyPassThroughProp: Record<string, unknown> = useMemo(
+    () => ({ dataSet: { vibrancyPassThrough: "true" } }),
+    [],
+  );
   const resizeHandleStyle = useMemo(
     () => [styles.resizeHandle, isWeb && ({ cursor: "col-resize" } as object)],
     [],
@@ -739,13 +763,13 @@ function DesktopSidebar({
 
   return (
     <Animated.View style={desktopSidebarStyle}>
-      <View style={desktopSidebarBorderStyle}>
+      <View style={desktopSidebarBorderStyle} {...vibrancyPassThroughProp}>
         <View style={styles.sidebarDragArea}>
           <TitlebarDragRegion />
           {padding.top > 0 ? <View style={paddingTopSpacerStyle} /> : null}
           <SidebarHeaderRow
             icon={MessagesSquare}
-            label="Chats"
+            label={t("sidebar.sessions")}
             onPress={handleViewMore}
             isActive={isSessionsActive}
             testID="sidebar-sessions"

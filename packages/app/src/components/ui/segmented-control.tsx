@@ -143,8 +143,11 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "stretch",
     maxWidth: "100%",
-    backgroundColor: theme.colors.surface2,
-    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surfaceGlass,
+    borderRadius: theme.borderRadius.glassPill,
+    borderCurve: "continuous" as const,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
   },
   containerSm: {
     padding: 2,
@@ -157,7 +160,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.glassPill,
+    borderCurve: "continuous" as const,
     gap: theme.spacing[1],
   },
   segmentSm: {
@@ -169,18 +173,18 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[6],
   },
   segmentSelected: {
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: theme.colors.surfaceGlassStrong,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   segmentHover: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceGlassHover,
   },
   segmentPressed: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceGlassHover,
   },
   segmentDisabled: {
     opacity: theme.opacity[50],

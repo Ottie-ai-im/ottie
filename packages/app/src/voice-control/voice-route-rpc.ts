@@ -103,9 +103,7 @@ function resolveActiveDaemon(): {
  * Live RPC. Returns ok:false (with a specific reason) on every failure path
  * so the controller can branch cleanly without a try/catch.
  */
-export async function routeVoiceIntent(
-  request: VoiceRouteRequest,
-): Promise<VoiceRouteResult> {
+export async function routeVoiceIntent(request: VoiceRouteRequest): Promise<VoiceRouteResult> {
   const active = resolveActiveDaemon();
   if (!active || !active.client) {
     return {

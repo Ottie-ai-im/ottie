@@ -19,10 +19,7 @@ import {
   useAppSettings,
 } from "@/hooks/use-settings";
 import { isWeb } from "@/constants/platform";
-import {
-  formatHotkeyLabel,
-  serializeHotkeyFromKeyboardEvent,
-} from "@/voice-control/hotkey-format";
+import { formatHotkeyLabel, serializeHotkeyFromKeyboardEvent } from "@/voice-control/hotkey-format";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
 import type { AgentProvider } from "@server/server/agent/agent-sdk-types";
@@ -530,8 +527,7 @@ function IntentModelRow({ provider, modelId, enabled, onChange }: IntentModelRow
   }, [snapshot.entries, matchingProvider]);
 
   const selectedModel = models.find((m) => m.id === modelId);
-  const triggerLabel =
-    selectedModel?.label ?? (modelId === null ? "Default model" : modelId);
+  const triggerLabel = selectedModel?.label ?? (modelId === null ? "Default model" : modelId);
 
   const handleClearSelection = useCallback(() => onChange(null), [onChange]);
 
@@ -638,12 +634,7 @@ interface HotkeyPickerModalProps {
  * non-modifier) and serializes it via {@link serializeHotkeyFromKeyboardEvent}.
  * On native we don't render this — the orb replaces the hotkey.
  */
-function HotkeyPickerModal({
-  currentHotkey,
-  onSelect,
-  onClear,
-  onCancel,
-}: HotkeyPickerModalProps) {
+function HotkeyPickerModal({ currentHotkey, onSelect, onClear, onCancel }: HotkeyPickerModalProps) {
   const [captured, setCaptured] = useState<string | null>(null);
 
   useEffect(() => {
@@ -652,7 +643,12 @@ function HotkeyPickerModal({
     }
     const handler = (event: KeyboardEvent) => {
       // Ignore modifier-only presses; wait for the actual key.
-      if (event.key === "Meta" || event.key === "Shift" || event.key === "Control" || event.key === "Alt") {
+      if (
+        event.key === "Meta" ||
+        event.key === "Shift" ||
+        event.key === "Control" ||
+        event.key === "Alt"
+      ) {
         return;
       }
       // Escape cancels the picker.

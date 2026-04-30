@@ -2,12 +2,15 @@ import {
   View,
   Text,
   TextInput,
+  Platform,
   Pressable,
+  StyleSheet as RNStyleSheet,
   NativeSyntheticEvent,
   TextInputContentSizeChangeEventData,
   TextInputKeyPressEventData,
   TextInputSelectionChangeEventData,
 } from "react-native";
+import { BlurView } from "expo-blur";
 import { MathCurveLoader } from "@/components/math-curve-loader";
 import {
   useState,
@@ -55,7 +58,7 @@ import { getShortcutOs } from "@/utils/shortcut-platform";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 import { isImeComposingKeyboardEvent } from "@/utils/keyboard-ime";
 import { markScrollInvestigationEvent, markScrollInvestigationRender } from "@/utils/scroll-jank";
-import { isWeb } from "@/constants/platform";
+import { isNative, isWeb } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useComposerHeightMirror } from "./composer-height-mirror";
 
@@ -2031,6 +2034,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       ],
     );
 
+    const composerBlurFill = isNative ? (
+      <BlurView
+        tint={
+          theme.colorScheme === "dark" ? "systemChromeMaterialDark" : "systemChromeMaterialLight"
+        }
+        intensity={70}
+        experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+        style={RNStyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+    ) : null;
+
     return (
       <View ref={rootRef} style={styles.container} testID="message-input-root">
         <Animated.View
@@ -2046,6 +2061,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               : inputWrapperCombinedStyle
           }
         >
+          {composerBlurFill}
           {isCompact ? (
             // Mobile WeChat-style: status row above + [mic] [input] [+ / send].
             // The status row hosts AgentStatusBar (model / mode / thinking /
@@ -2228,6 +2244,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
     // lifts it off the page.
     borderRadius: theme.borderRadius.glassSheet,
     borderCurve: "continuous",
+    overflow: "hidden",
     ...theme.shadow.glass,
     paddingVertical: {
       xs: theme.spacing[2],

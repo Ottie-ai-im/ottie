@@ -510,19 +510,19 @@ const commonTheme = {
 
   borderRadius: {
     none: 0,
-    sm: 2,
-    base: 4,
-    md: 6,
-    lg: 8,
-    xl: 12,
-    "2xl": 16,
-    "3xl": 22,
+    sm: 4,
+    base: 8,
+    md: 10,
+    lg: 12,
+    xl: 16,
+    "2xl": 20,
+    "3xl": 24,
     full: 9999,
     // IM-style semantic radii — use these for chat surfaces so we keep
     // existing UI radii stable while migrating phase-by-phase.
-    card: 12,
-    bubble: 18,
-    sheet: 16,
+    card: 14,
+    bubble: 20,
+    sheet: 18,
     pill: 9999,
     // macOS/iOS 26 semantic radii — continuous-style squircles. Pair these
     // with `borderCurve: "continuous"` on each style to get the iOS look.

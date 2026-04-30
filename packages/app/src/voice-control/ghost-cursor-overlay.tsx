@@ -90,10 +90,7 @@ export function GhostCursorOverlay() {
     opacity: opacity.value,
   }));
 
-  const cursorStyle = useMemo(
-    () => [styles.cursor, animatedStyle],
-    [animatedStyle],
-  );
+  const cursorStyle = useMemo(() => [styles.cursor, animatedStyle], [animatedStyle]);
   const haloStyle = useMemo(
     () => [styles.halo, { borderColor: theme.colors.accent }],
     [theme.colors.accent],

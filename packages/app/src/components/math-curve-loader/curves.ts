@@ -31,7 +31,8 @@ export type CurveName =
   | "rose-three"
   | "thinking-nine"
   | "cardioid-heart"
-  | "butterfly-phase";
+  | "butterfly-phase"
+  | "lissajous-drift";
 
 const TAU = Math.PI * 2;
 
@@ -129,6 +130,26 @@ function cardioidHeartPoint(progress: number, detailScale: number): Point {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// 🌊 Lissajous Drift — assistant typing / streaming. A 3:4 Lissajous figure
+//    with a 90° phase offset; reads as a calm braided knot drifting in place.
+//    Replaces the old `•••` dots indicator inside thinking bubbles.
+// ──────────────────────────────────────────────────────────────────────────
+const LISSAJOUS_AMP = 24;
+const LISSAJOUS_AMP_BOOST = 6;
+const LISSAJOUS_AX = 3;
+const LISSAJOUS_BY = 4;
+const LISSAJOUS_PHASE = 1.57;
+const LISSAJOUS_Y_SCALE = 0.92;
+function lissajousDriftPoint(progress: number, detailScale: number): Point {
+  const t = progress * TAU;
+  const amp = LISSAJOUS_AMP + detailScale * LISSAJOUS_AMP_BOOST;
+  return {
+    x: 50 + Math.sin(LISSAJOUS_AX * t + LISSAJOUS_PHASE) * amp,
+    y: 50 + Math.sin(LISSAJOUS_BY * t) * (amp * LISSAJOUS_Y_SCALE),
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // 🦋 Butterfly Phase — empty state. Fluttering, asymmetric, alive.
 // ──────────────────────────────────────────────────────────────────────────
 const BUTTERFLY_TURNS = 12;
@@ -215,6 +236,17 @@ export const CURVE_PRESETS: Record<CurveName, CurvePreset> = {
     pulseDurationMs: 7000,
     strokeWidth: 4.4,
     point: butterflyPoint,
+  },
+  "lissajous-drift": {
+    name: "lissajous-drift",
+    rotate: false,
+    particleCount: 68,
+    trailSpan: 0.34,
+    durationMs: 6000,
+    rotationDurationMs: 36000,
+    pulseDurationMs: 5400,
+    strokeWidth: 4.7,
+    point: lissajousDriftPoint,
   },
 };
 

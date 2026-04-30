@@ -1,9 +1,11 @@
 import { useCallback, useMemo, type ComponentType } from "react";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import { Platform, Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { MessagesSquare, Server, Settings, Users } from "lucide-react-native";
+import { isNative } from "@/constants/platform";
 
 export type MobileTab = "chats" | "devices" | "community" | "settings";
 
@@ -35,15 +37,32 @@ const TABS: readonly TabSpec[] = [
  */
 export function MobileTabBar({ activeTab, onSelect }: MobileTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { theme } = useUnistyles();
   const containerStyle = useMemo(
     () => [styles.container, { paddingBottom: Math.max(insets.bottom, 8) }],
     [insets.bottom],
   );
+  const tabs = TABS.map((tab) => (
+    <TabButton key={tab.id} tab={tab} active={tab.id === activeTab} onSelect={onSelect} />
+  ));
+  if (isNative) {
+    return (
+      <BlurView
+        tint={
+          theme.colorScheme === "dark" ? "systemChromeMaterialDark" : "systemChromeMaterialLight"
+        }
+        intensity={80}
+        experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+        style={containerStyle}
+        accessibilityRole="tablist"
+      >
+        {tabs}
+      </BlurView>
+    );
+  }
   return (
     <View style={containerStyle} accessibilityRole="tablist">
-      {TABS.map((tab) => (
-        <TabButton key={tab.id} tab={tab} active={tab.id === activeTab} onSelect={onSelect} />
-      ))}
+      {tabs}
     </View>
   );
 }

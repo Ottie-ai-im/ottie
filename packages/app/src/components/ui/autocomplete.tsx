@@ -288,10 +288,11 @@ const styles = StyleSheet.create((theme: Theme) => ({
     gap: theme.spacing[1],
   },
   detailCard: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceGlassStrong,
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.borderAccent,
-    borderRadius: theme.borderRadius.lg,
+    borderColor: theme.colors.borderGlass,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous" as const,
     paddingHorizontal: theme.spacing[3],
     paddingVertical: theme.spacing[3],
     ...theme.shadow.md,
@@ -312,10 +313,11 @@ const styles = StyleSheet.create((theme: Theme) => ({
     marginTop: theme.spacing[1],
   },
   container: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surfaceGlassStrong,
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.borderAccent,
-    borderRadius: theme.borderRadius.lg,
+    borderColor: theme.colors.borderGlass,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous" as const,
     overflow: "hidden",
     ...theme.shadow.md,
   },
@@ -340,7 +342,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
     marginRight: theme.spacing[1],
   },
   itemActive: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: theme.colors.surfaceGlassHover,
   },
   itemMain: {
     flex: 1,

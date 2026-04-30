@@ -4,11 +4,11 @@ How to go from a fresh checkout to a running Ottie desktop window.
 
 ## Prerequisites
 
-| Tool | Min version | Why | Install |
-|---|---|---|---|
-| Node.js | 20 | runtime for the daemon (in dev AND when the desktop app spawns it), app build, scripts | mise / nvm / brew install node |
-| pnpm | 9 | monorepo / workspace manager | `curl -fsSL https://get.pnpm.io/install.sh \| sh -` |
-| Rust toolchain | stable | builds the Tauri v2 desktop shell | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Tool           | Min version | Why                                                                                    | Install                                                           |
+| -------------- | ----------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Node.js        | 20          | runtime for the daemon (in dev AND when the desktop app spawns it), app build, scripts | mise / nvm / brew install node                                    |
+| pnpm           | 9           | monorepo / workspace manager                                                           | `curl -fsSL https://get.pnpm.io/install.sh \| sh -`               |
+| Rust toolchain | stable      | builds the Tauri v2 desktop shell                                                      | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 
 > The daemon is bundled with esbuild and runs on the user's system Node.
 > No Bun is required at runtime; we may revisit Node packaging for end-user
@@ -52,6 +52,7 @@ pnpm dev:desktop
 ```
 
 Step 4 will:
+
 - run `pnpm --filter @ottie/app web` (Expo Metro on `localhost:8081`) via
   Tauri's `beforeDevCommand`,
 - wait for `8081` to return 200,
@@ -62,12 +63,12 @@ Subsequent runs are incremental and finish in seconds.
 
 ## Daily Development
 
-| What you changed | What to do |
-|---|---|
-| Frontend (`packages/app`) | nothing — Metro hot-reloads automatically |
-| Tauri Rust (`packages/desktop/src-tauri`) | nothing — `tauri dev` watches and recompiles |
-| Daemon (`packages/server`) | `pnpm build:sidecar`, then restart `pnpm dev:desktop` |
-| Other workspace deps (`@ottie/highlight`, `@ottie/relay`) | rebuild that package, then rebuild sidecar if used |
+| What you changed                                          | What to do                                            |
+| --------------------------------------------------------- | ----------------------------------------------------- |
+| Frontend (`packages/app`)                                 | nothing — Metro hot-reloads automatically             |
+| Tauri Rust (`packages/desktop/src-tauri`)                 | nothing — `tauri dev` watches and recompiles          |
+| Daemon (`packages/server`)                                | `pnpm build:sidecar`, then restart `pnpm dev:desktop` |
+| Other workspace deps (`@ottie/highlight`, `@ottie/relay`) | rebuild that package, then rebuild sidecar if used    |
 
 Run repo-wide checks before pushing:
 
@@ -90,19 +91,23 @@ pnpm build:desktop
 ## Troubleshooting
 
 ### `Failed to read icon ... unexpected end of file`
+
 The icon is empty. Check `packages/desktop/src-tauri/icons/icon.png` — it
 must be a real PNG, not zero-byte. The current placeholder is a 32×32
 transparent PNG; replace with the real Ottie logo when ready.
 
 ### `ERR_PNPM_FETCH_404 @ottie/expo-two-way-audio` on install
+
 pnpm v9 ships with `link-workspace-packages=false`. The repo's `.npmrc`
 sets it to `true` — verify the file is intact and re-run `pnpm install`.
 
 ### Tauri compile stalls on a single crate
+
 Usually a network issue when fetching the crate from crates.io. Configure a
 mirror in `~/.cargo/config.toml` (or a corporate proxy) and re-run.
 
 ### `ottie-daemon-wrapper: cannot find resources/server.mjs`
+
 The Tauri sidecar wrapper looked for the bundled daemon next to itself and
 its known fallback locations and found nothing. Run `pnpm build:sidecar` to
 re-stage the bundle. If the error persists, set
@@ -110,10 +115,12 @@ re-stage the bundle. If the error persists, set
 `packages/desktop/src-tauri/binaries/resources/`.
 
 ### `node: command not found` (from the daemon log)
+
 The wrapper exec's the system `node`. Install Node 20+ and ensure the
 shell that launched `pnpm dev:desktop` has it on PATH.
 
 ### Daemon binary missing for sidecar
+
 Tauri sidecars are looked up by target triple. Confirm your platform's
 files exist:
 
@@ -125,6 +132,7 @@ ls packages/desktop/src-tauri/binaries/      # ottie-daemon-<triple> + resources
 If missing, run `pnpm build:sidecar`.
 
 ### Port 6767 already in use
+
 A previous Ottie daemon is still listening. Find and
 stop it before starting dev:
 

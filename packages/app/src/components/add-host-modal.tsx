@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Alert, Text, TextInput, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { Link2 } from "lucide-react-native";
 import type { HostProfile } from "@/types/host-connection";
@@ -153,6 +154,7 @@ export interface AddHostModalProps {
 
 export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostModalProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const daemons = useHosts();
   const { upsertDirectConnection } = useHostMutations();
   const isMobile = useIsCompactFormFactor();
@@ -192,11 +194,11 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
 
     const raw = endpointRawRef.current.trim();
     if (!raw) {
-      setErrorMessage("Host is required");
+      setErrorMessage(t("addHost.hostRequired"));
       return;
     }
     if (!isHostPortOnly(raw)) {
-      setErrorMessage("Enter host:port only (no ws://, no /ws)");
+      setErrorMessage(t("addHost.hostFormatError"));
       return;
     }
 
@@ -246,7 +248,7 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
     } finally {
       setIsSaving(false);
     }
-  }, [daemons, handleClose, isMobile, isSaving, onSaved, upsertDirectConnection]);
+  }, [daemons, handleClose, isMobile, isSaving, onSaved, t, upsertDirectConnection]);
 
   const handleChangeEndpoint = useCallback((next: string) => {
     endpointRawRef.current = next;
@@ -262,22 +264,22 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
 
   return (
     <AdaptiveModalSheet
-      title="Direct connection"
+      title={t("addHost.title")}
       visible={visible}
       onClose={handleClose}
       testID="add-host-modal"
     >
-      <Text style={styles.helper}>Enter the address of a Ottie server.</Text>
+      <Text style={styles.helper}>{t("addHost.subtitle")}</Text>
 
       <View style={styles.field}>
-        <Text style={styles.label}>Host</Text>
+        <Text style={styles.label}>{t("addHost.hostLabel")}</Text>
         <AdaptiveTextInput
           ref={hostInputRef}
           testID="direct-host-input"
           nativeID="direct-host-input"
           accessibilityLabel="direct-host-input"
           onChangeText={handleChangeEndpoint}
-          placeholder="hostname:port"
+          placeholder={t("addHost.hostPlaceholder")}
           placeholderTextColor={theme.colors.foregroundMuted}
           style={styles.input}
           autoCapitalize="none"
@@ -297,7 +299,7 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
           onPress={handleCancel}
           disabled={isSaving}
         >
-          Cancel
+          {t("addHost.cancel")}
         </Button>
         <Button
           style={FLEX_ONE_STYLE}
@@ -307,7 +309,7 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
           leftIcon={connectIcon}
           testID="direct-host-submit"
         >
-          {isSaving ? "Connecting..." : "Connect"}
+          {isSaving ? t("addHost.connecting") : t("addHost.connect")}
         </Button>
       </View>
     </AdaptiveModalSheet>

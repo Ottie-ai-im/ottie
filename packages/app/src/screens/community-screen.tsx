@@ -1,5 +1,6 @@
 import { Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
 import { Users } from "lucide-react-native";
 
 import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
@@ -10,6 +11,7 @@ import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
  */
 export function CommunityScreen() {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   return (
     <View style={styles.container}>
       <MobileTabHeader title={null} testID="community-header" />
@@ -17,11 +19,9 @@ export function CommunityScreen() {
         <View style={styles.iconBubble}>
           <Users size={32} color={theme.colors.foregroundMuted} />
         </View>
-        <Text style={styles.title}>社群</Text>
-        <Text style={styles.subtitle}>Coming soon</Text>
-        <Text style={styles.body}>
-          这里之后能让你连上别人的 agent，一起协作或借用别人公开出来的工作流。
-        </Text>
+        <Text style={styles.title}>{t("community.title")}</Text>
+        <Text style={styles.subtitle}>{t("community.comingSoon")}</Text>
+        <Text style={styles.body}>{t("community.body")}</Text>
       </View>
     </View>
   );

@@ -572,11 +572,18 @@ const styles = StyleSheet.create((theme) => ({
   content: {
     paddingVertical: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.xl,
-    backgroundColor: theme.colors.popover,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous",
+    backgroundColor: theme.colors.surfaceGlassStrong,
     borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.borderAccent,
-    ...theme.shadow.md,
+    borderColor: theme.colors.borderGlass,
+    ...theme.shadow.glass,
     zIndex: 1000,
+    ...(isWeb
+      ? ({
+          backdropFilter: "blur(28px) saturate(180%)",
+          WebkitBackdropFilter: "blur(28px) saturate(180%)",
+        } as unknown as object)
+      : {}),
   },
 }));

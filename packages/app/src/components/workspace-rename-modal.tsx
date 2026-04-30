@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
 
 import { AdaptiveModalSheet, AdaptiveTextInput } from "./adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ export function WorkspaceRenameModal({
   currentAlias,
 }: WorkspaceRenameModalProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const toast = useToast();
   const inputRef = useRef<TextInput>(null);
   const draftRef = useRef(currentAlias ?? "");
@@ -55,12 +57,12 @@ export function WorkspaceRenameModal({
     if (isSaving) return;
     const next = draftRef.current.trim();
     if (next.length > 200) {
-      setErrorMessage("Alias is too long (max 200 characters)");
+      setErrorMessage(t("rename.tooLong"));
       return;
     }
     const client = getHostRuntimeStore().getClient(serverId);
     if (!client) {
-      setErrorMessage("Host is not connected");
+      setErrorMessage(t("rename.hostNotConnected"));
       return;
     }
     try {
@@ -72,13 +74,13 @@ export function WorkspaceRenameModal({
       }
       onClose();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to set alias";
+      const message = error instanceof Error ? error.message : t("rename.failed");
       setErrorMessage(message);
       toast.error(message);
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, onClose, serverId, toast, workspaceId]);
+  }, [isSaving, onClose, serverId, t, toast, workspaceId]);
 
   const handleSavePress = useCallback(() => {
     void handleSave();
@@ -90,19 +92,18 @@ export function WorkspaceRenameModal({
 
   return (
     <AdaptiveModalSheet
-      title="Rename workspace"
+      title={t("rename.title")}
       visible={visible}
       onClose={handleClose}
       testID="workspace-rename-modal"
       desktopMaxWidth={420}
     >
       <Text style={styles.helper}>
-        Set a custom alias. The original name shows in parentheses: e.g.{" "}
-        <Text style={styles.helperEm}>{`my design (${workspaceName})`}</Text>. Leave blank to clear.
+        {t("rename.helper", { example: `${t("rename.exampleAlias")} (${workspaceName})` })}
       </Text>
 
       <View style={styles.field}>
-        <Text style={styles.label}>Alias</Text>
+        <Text style={styles.label}>{t("rename.label")}</Text>
         <AdaptiveTextInput
           ref={inputRef}
           testID="workspace-rename-input"
@@ -128,7 +129,7 @@ export function WorkspaceRenameModal({
           onPress={handleClose}
           disabled={isSaving}
         >
-          Cancel
+          {t("rename.cancel")}
         </Button>
         <Button
           style={FLEX_ONE_STYLE}
@@ -137,7 +138,7 @@ export function WorkspaceRenameModal({
           disabled={isSaving}
           testID="workspace-rename-submit"
         >
-          {isSaving ? "Saving..." : "Save"}
+          {isSaving ? t("rename.saving") : t("rename.save")}
         </Button>
       </View>
     </AdaptiveModalSheet>

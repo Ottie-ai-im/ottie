@@ -260,7 +260,8 @@
     "saving": "保存中…",
     "tooLong": "别名过长（最多 200 字符）",
     "hostNotConnected": "未连接到主机",
-    "failed": "保存别名失败"
+    "failed": "保存别名失败",
+    "exampleAlias": "我的设计"
   },
   "addHost": {
     "title": "直连主机",
@@ -272,5 +273,52 @@
     "connecting": "连接中…",
     "hostRequired": "请输入主机地址",
     "hostFormatError": "请只输入 host:port（不要带 ws:// 或 /ws）"
+  },
+  "workspace": {
+    "hostNotConnected": "未连接到主机",
+    "pathUnavailable": "工作区路径不可用",
+    "pathLabel": "工作区路径",
+    "branchLabel": "分支名",
+    "branchUnavailable": "分支名不可用",
+    "copyFailed": "复制失败",
+    "resumeUnavailable": "无可恢复命令",
+    "resumeLabel": "恢复命令",
+    "reloadedAgent": "已重新加载 agent",
+    "failedReloadAgent": "重新加载 agent 失败",
+    "closeTabsLeftTitle": "关闭左侧标签页？",
+    "closeTabsRightTitle": "关闭右侧标签页？",
+    "closeOtherTabsTitle": "关闭其他标签页？",
+    "closeButton": "关闭",
+    "cancelButton": "取消"
+  },
+  "workspaceMenu": {
+    "actions": "工作区操作",
+    "newAgent": "新建 agent",
+    "newTerminal": "新建终端",
+    "copyWorkspacePath": "复制工作区路径",
+    "copyBranchName": "复制分支名",
+    "showSetup": "查看初始化",
+    "copyPath": "复制路径",
+    "archiveWorktree": "归档 worktree",
+    "hideFromSidebar": "从侧栏隐藏",
+    "hiding": "隐藏中…",
+    "archiving": "归档中…",
+    "confirmArchiveTitle": "归档 worktree？",
+    "confirmArchiveMessage": "归档「{{name}}」？\n\nworktree 将从磁盘移除，相关终端会被停止，里面的 agent 也会被归档。\n\n如果你已经提交，分支仍然可以访问。",
+    "confirmArchiveButton": "归档",
+    "confirmHideTitle": "隐藏工作区？",
+    "confirmHideMessage": "从侧栏隐藏「{{name}}」？\n\n磁盘上的文件不会变化。",
+    "confirmHideButton": "隐藏",
+    "confirmCancel": "取消",
+    "pathUnavailable": "工作区路径不可用",
+    "hostNotConnected": "未连接到主机",
+    "failedHide": "隐藏工作区失败",
+    "failedArchive": "归档 worktree 失败",
+    "pathCopied": "已复制路径",
+    "branchCopied": "已复制分支名",
+    "confirmRemoveProjectTitle": "移除项目？",
+    "confirmRemoveProjectMessage": "从侧栏移除「{{name}}」？\n\n磁盘上的文件不会变化。",
+    "confirmRemoveProjectButton": "移除",
+    "failedRemoveSome": "部分工作区移除失败"
   }
 }

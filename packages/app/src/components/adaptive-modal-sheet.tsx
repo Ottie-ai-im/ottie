@@ -1,8 +1,9 @@
 import { forwardRef, useCallback, useEffect, useMemo } from "react";
 import type { ReactNode, Ref } from "react";
 import { createPortal } from "react-dom";
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { TextInputProps } from "react-native";
+import { BlurView } from "expo-blur";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { getOverlayRoot, OVERLAY_Z } from "../lib/overlay-root";
@@ -19,7 +20,7 @@ import {
   IsolatedBottomSheetModal,
   useIsolatedBottomSheetVisibility,
 } from "@/components/ui/isolated-bottom-sheet-modal";
-import { isWeb } from "@/constants/platform";
+import { isNative, isWeb } from "@/constants/platform";
 
 type EscHandler = () => void;
 const escStack: EscHandler[] = [];
@@ -156,6 +157,7 @@ const styles = StyleSheet.create((theme) => ({
 
 function SheetBackground({ style }: BottomSheetBackgroundProps) {
   const { theme } = useUnistyles();
+  const isDark = theme.colorScheme === "dark";
   const combinedStyle = useMemo(
     () => [
       style,
@@ -166,6 +168,7 @@ function SheetBackground({ style }: BottomSheetBackgroundProps) {
         borderCurve: "continuous" as const,
         borderTopWidth: 1,
         borderColor: theme.colors.borderGlass,
+        overflow: "hidden" as const,
         ...(isWeb ? ({ backdropFilter: "blur(40px) saturate(180%)" } as unknown as object) : {}),
       },
     ],
@@ -176,6 +179,16 @@ function SheetBackground({ style }: BottomSheetBackgroundProps) {
       theme.borderRadius.glassSheet,
     ],
   );
+  if (isNative) {
+    return (
+      <BlurView
+        tint={isDark ? "systemThickMaterialDark" : "systemThickMaterialLight"}
+        intensity={70}
+        experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+        style={combinedStyle}
+      />
+    );
+  }
   return <View style={combinedStyle} />;
 }
 
@@ -313,16 +326,28 @@ export function AdaptiveModalSheet({
     </>
   );
 
+  const cardWithDrop = onFilesDropped ? (
+    <FileDropZone onFilesDropped={onFilesDropped}>{cardInner}</FileDropZone>
+  ) : (
+    cardInner
+  );
+  const card = isNative ? (
+    <BlurView
+      tint={theme.colorScheme === "dark" ? "systemThickMaterialDark" : "systemThickMaterialLight"}
+      intensity={70}
+      experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+      style={desktopCardStyle}
+    >
+      {cardWithDrop}
+    </BlurView>
+  ) : (
+    <View style={desktopCardStyle}>{cardWithDrop}</View>
+  );
+
   const desktopContent = (
     <View style={styles.desktopOverlay} testID={testID}>
       <Pressable accessibilityLabel="Dismiss" style={ABSOLUTE_FILL_STYLE} onPress={onClose} />
-      <View style={desktopCardStyle}>
-        {onFilesDropped ? (
-          <FileDropZone onFilesDropped={onFilesDropped}>{cardInner}</FileDropZone>
-        ) : (
-          cardInner
-        )}
-      </View>
+      {card}
     </View>
   );
 

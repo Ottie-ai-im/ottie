@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useTranslation } from "react-i18next";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useIsFocused } from "@react-navigation/native";
 import { ActivityIndicator, BackHandler, Keyboard, Pressable, Text, View } from "react-native";
@@ -763,6 +764,7 @@ function WorkspaceHeaderMenu({
   onOpenSetupTab,
   onRename,
 }: WorkspaceHeaderMenuProps) {
+  const { t } = useTranslation();
   const renderTriggerIcon = useCallback(
     ({ hovered, open }: { hovered: boolean; open: boolean }) => (
       <WorkspaceHeaderMenuTriggerIcon hovered={hovered} open={open} isMobile={isMobile} />
@@ -776,7 +778,7 @@ function WorkspaceHeaderMenu({
         testID="workspace-header-menu-trigger"
         style={styles.headerActionButton}
         accessibilityRole="button"
-        accessibilityLabel="Workspace actions"
+        accessibilityLabel={t("workspaceMenu.actions")}
       >
         {renderTriggerIcon}
       </DropdownMenuTrigger>
@@ -786,7 +788,7 @@ function WorkspaceHeaderMenu({
           leading={menuRenameIcon}
           onSelect={onRename}
         >
-          Rename
+          {t("rename.menuItem")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
@@ -794,7 +796,7 @@ function WorkspaceHeaderMenu({
           leading={menuNewAgentIcon}
           onSelect={onCreateDraftTab}
         >
-          New agent
+          {t("workspaceMenu.newAgent")}
         </DropdownMenuItem>
         <DropdownMenuItem
           testID="workspace-header-new-terminal"
@@ -802,7 +804,7 @@ function WorkspaceHeaderMenu({
           disabled={createTerminalDisabled}
           onSelect={onCreateTerminal}
         >
-          New terminal
+          {t("workspaceMenu.newTerminal")}
         </DropdownMenuItem>
         <DropdownMenuItem
           testID="workspace-header-copy-path"
@@ -810,7 +812,7 @@ function WorkspaceHeaderMenu({
           disabled={!isAbsolutePath(normalizedWorkspaceId)}
           onSelect={onCopyWorkspacePath}
         >
-          Copy workspace path
+          {t("workspaceMenu.copyWorkspacePath")}
         </DropdownMenuItem>
         {currentBranchName ? (
           <DropdownMenuItem
@@ -818,7 +820,7 @@ function WorkspaceHeaderMenu({
             leading={menuCopyIcon}
             onSelect={onCopyBranchName}
           >
-            Copy branch name
+            {t("workspaceMenu.copyBranchName")}
           </DropdownMenuItem>
         ) : null}
         {showWorkspaceSetup ? (
@@ -829,7 +831,7 @@ function WorkspaceHeaderMenu({
               leading={menuSettingsIcon}
               onSelect={onOpenSetupTab}
             >
-              Show setup
+              {t("workspaceMenu.showSetup")}
             </DropdownMenuItem>
           </>
         ) : null}
@@ -1178,6 +1180,7 @@ function WorkspaceScreenContent({
   isRouteFocused,
 }: WorkspaceScreenContentProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const _insets = useSafeAreaInsets();
   const mainBackgroundColor = theme.colors.surfaceWorkspace;
   const toast = useToast();
@@ -2167,63 +2170,63 @@ function WorkspaceScreenContent({
           sessionId: providerSessionId,
         }) ?? null;
       if (!command) {
-        toast.error("Resume command not available");
+        toast.error(t("workspace.resumeUnavailable"));
         return;
       }
       try {
         await Clipboard.setStringAsync(command);
-        toast.copied("resume command");
+        toast.copied(t("workspace.resumeLabel"));
       } catch {
-        toast.error("Copy failed");
+        toast.error(t("workspace.copyFailed"));
       }
     },
-    [normalizedServerId, toast],
+    [normalizedServerId, t, toast],
   );
 
   const handleReloadAgent = useCallback(
     async (agentId: string) => {
       if (!client || !isConnected) {
-        toast.error("Host is not connected");
+        toast.error(t("workspace.hostNotConnected"));
         return;
       }
 
       try {
         await client.refreshAgent(agentId);
-        toast.show("Reloaded agent", { variant: "success" });
+        toast.show(t("workspace.reloadedAgent"), { variant: "success" });
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to reload agent");
+        toast.error(error instanceof Error ? error.message : t("workspace.failedReloadAgent"));
       }
     },
-    [client, isConnected, toast],
+    [client, isConnected, t, toast],
   );
 
   const handleCopyWorkspacePath = useCallback(async () => {
     if (!workspaceDirectory) {
-      toast.error("Workspace path not available");
+      toast.error(t("workspace.pathUnavailable"));
       return;
     }
 
     try {
       await Clipboard.setStringAsync(workspaceDirectory);
-      toast.copied("Workspace path");
+      toast.copied(t("workspace.pathLabel"));
     } catch {
-      toast.error("Copy failed");
+      toast.error(t("workspace.copyFailed"));
     }
-  }, [toast, workspaceDirectory]);
+  }, [t, toast, workspaceDirectory]);
 
   const handleCopyBranchName = useCallback(async () => {
     if (!currentBranchName) {
-      toast.error("Branch name not available");
+      toast.error(t("workspace.branchUnavailable"));
       return;
     }
 
     try {
       await Clipboard.setStringAsync(currentBranchName);
-      toast.copied("Branch name");
+      toast.copied(t("workspace.branchLabel"));
     } catch {
-      toast.error("Copy failed");
+      toast.error(t("workspace.copyFailed"));
     }
-  }, [currentBranchName, toast]);
+  }, [currentBranchName, t, toast]);
 
   const handleOpenSetupTab = useCallback(() => {
     if (!persistenceKey) {
@@ -2250,8 +2253,8 @@ function WorkspaceScreenContent({
       const confirmed = await confirmDialog({
         title,
         message: buildBulkCloseConfirmationMessage(groups),
-        confirmLabel: "Close",
-        cancelLabel: "Cancel",
+        confirmLabel: t("workspace.closeButton"),
+        cancelLabel: t("workspace.cancelButton"),
         destructive: true,
       });
       if (!confirmed) {
@@ -2278,7 +2281,7 @@ function WorkspaceScreenContent({
       setHoveredTabKey((current) => (current && closedKeys.has(current) ? null : current));
       setHoveredCloseTabKey((current) => (current && closedKeys.has(current) ? null : current));
     },
-    [client, closeTab, closeWorkspaceTabWithCleanup, persistenceKey],
+    [client, closeTab, closeWorkspaceTabWithCleanup, persistenceKey, t],
   );
 
   const handleCloseTabsToLeftInPane = useCallback(
@@ -2289,11 +2292,11 @@ function WorkspaceScreenContent({
       }
       await handleBulkCloseTabs({
         tabsToClose: paneTabs.slice(0, index),
-        title: "Close tabs to the left?",
+        title: t("workspace.closeTabsLeftTitle"),
         logLabel: "to the left",
       });
     },
-    [handleBulkCloseTabs],
+    [handleBulkCloseTabs, t],
   );
 
   const handleCloseTabsToLeft = useCallback(
@@ -2311,11 +2314,11 @@ function WorkspaceScreenContent({
       }
       await handleBulkCloseTabs({
         tabsToClose: paneTabs.slice(index + 1),
-        title: "Close tabs to the right?",
+        title: t("workspace.closeTabsRightTitle"),
         logLabel: "to the right",
       });
     },
-    [handleBulkCloseTabs],
+    [handleBulkCloseTabs, t],
   );
 
   const handleCloseTabsToRight = useCallback(
@@ -2330,11 +2333,11 @@ function WorkspaceScreenContent({
       const tabsToClose = paneTabs.filter((tab) => tab.tabId !== tabId);
       await handleBulkCloseTabs({
         tabsToClose,
-        title: "Close other tabs?",
+        title: t("workspace.closeOtherTabsTitle"),
         logLabel: "from close other tabs",
       });
     },
-    [handleBulkCloseTabs],
+    [handleBulkCloseTabs, t],
   );
 
   const handleCloseOtherTabs = useCallback(

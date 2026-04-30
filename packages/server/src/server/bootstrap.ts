@@ -96,7 +96,12 @@ import type { LocalSpeechProviderConfig } from "./speech/providers/local/config.
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
 import { createSpeechService } from "./speech/speech-runtime.js";
 import { AgentManager } from "./agent/agent-manager.js";
-import { DurableAgentTimelineStore } from "./agent/durable-agent-timeline-store.js";
+import {
+  SqliteAgentTimelineStore,
+  defaultTimelineDbPath,
+} from "./agent/sqlite-agent-timeline-store.js";
+import { importLegacyJsonlIfNeeded } from "./agent/timeline-jsonl-import.js";
+import { createTimelineBackupScheduler } from "./agent/timeline-backup.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
@@ -460,8 +465,39 @@ export async function createOttieDaemon(
       github,
     },
   });
-  const durableTimelineStore = new DurableAgentTimelineStore({
-    rootDir: path.join(config.ottieHome, "timeline"),
+  const timelineRootDir = path.join(config.ottieHome, "timeline");
+  const durableTimelineStore = new SqliteAgentTimelineStore({
+    dbPath: defaultTimelineDbPath(config.ottieHome),
+  });
+  // One-shot import of the previous JSONL-format history into SQLite. Idempotent
+  // and writes a sentinel file inside `timelineRootDir` so subsequent boots no-op.
+  // Failures here are logged but never fail the daemon — losing chat history is
+  // bad, but a busted import shouldn't keep the user out of Ottie entirely.
+  await importLegacyJsonlIfNeeded({
+    jsonlRootDir: timelineRootDir,
+    store: durableTimelineStore,
+    logger: {
+      info: (msg, meta) => logger.info(meta ?? {}, msg),
+      warn: (msg, meta) => logger.warn(meta ?? {}, msg),
+    },
+  }).catch((err) => {
+    logger.warn(
+      { error: err instanceof Error ? err.message : String(err) },
+      "legacy timeline import threw — continuing daemon startup",
+    );
+  });
+
+  // Local timeline backups. SQLite's VACUUM INTO produces a hot-snapshot
+  // consistent file every 24h; we keep the last 7 under $OTTIE_HOME/backups.
+  // No cloud, no external service — purely "if the DB ever goes sideways
+  // there's a recent file you can copy in".
+  const timelineBackupScheduler = createTimelineBackupScheduler({
+    liveDb: durableTimelineStore.getDatabaseHandleForInternalUse(),
+    backupsDir: path.join(config.ottieHome, "backups"),
+    logger: {
+      info: (msg, meta) => logger.info(meta ?? {}, msg),
+      warn: (msg, meta) => logger.warn(meta ?? {}, msg),
+    },
   });
   const agentManager = new AgentManager({
     clients: {
@@ -875,10 +911,12 @@ export async function createOttieDaemon(
     // model loading doesn't block the server from accepting connections.
     speechService.start();
     scriptHealthMonitor.start();
+    timelineBackupScheduler.start();
   };
 
   const stop = async () => {
     scriptHealthMonitor.stop();
+    timelineBackupScheduler.stop();
     await closeAllAgents(logger, agentManager);
     await agentManager.flush().catch(() => undefined);
     detachAgentStoragePersistence();
@@ -900,6 +938,16 @@ export async function createOttieDaemon(
     // Clean up socket files
     if (listenTarget.type === "socket" && existsSync(listenTarget.path)) {
       unlinkSync(listenTarget.path);
+    }
+    // Close the SQLite handle last — anything queued ahead of this on the
+    // event loop has had a chance to drain through agentManager.flush().
+    try {
+      durableTimelineStore.close();
+    } catch (err) {
+      logger.warn(
+        { error: err instanceof Error ? err.message : String(err) },
+        "failed to close timeline sqlite handle on shutdown",
+      );
     }
   };
 

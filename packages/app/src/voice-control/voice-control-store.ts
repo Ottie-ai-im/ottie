@@ -100,9 +100,7 @@ export const useVoiceControlStore = create<VoiceControlState>((set) => ({
 
   updateAction: (id, patch) =>
     set((state) => ({
-      actionLog: state.actionLog.map((entry) =>
-        entry.id === id ? { ...entry, ...patch } : entry,
-      ),
+      actionLog: state.actionLog.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
     })),
 
   finish: () =>

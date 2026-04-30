@@ -78,6 +78,10 @@ export type {
 
 const HISTORY_STALE_AFTER_MS = 60_000;
 const AUTHORITATIVE_REVALIDATION_DEBOUNCE_MS = 300;
+// Outgoing messages flip from "pending" (✓) to "failed" (❗) if the daemon
+// hasn't ack'd within this window — keeps a wedged WS connection from
+// leaving a message stuck on the single-tick "pending" indicator forever.
+const DELIVERY_ACK_TIMEOUT_MS = 30_000;
 
 function hasAgentUsageChanged(
   incomingUsage: Agent["lastUsage"] | undefined,
@@ -1719,6 +1723,15 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         updateDeliveryState("failed");
         return;
       }
+
+      // WhatsApp-style ack timeout: if the daemon doesn't acknowledge within
+      // 30s the bubble flips from pending (single ✓) to failed (red ❗).
+      // Otherwise the user is stuck staring at "pending" forever when the WS
+      // socket is silently dead.
+      const ackTimeout = setTimeout(() => {
+        updateDeliveryState("failed");
+      }, DELIVERY_ACK_TIMEOUT_MS);
+
       void client
         .sendAgentMessage(agentId, message, {
           messageId,
@@ -1726,10 +1739,12 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           ...(attachments && attachments.length > 0 ? { attachments } : {}),
         })
         .then(() => {
+          clearTimeout(ackTimeout);
           updateDeliveryState("sent");
           return undefined;
         })
         .catch((error) => {
+          clearTimeout(ackTimeout);
           console.error("[Session] Failed to send agent message:", error);
           updateDeliveryState("failed");
         });

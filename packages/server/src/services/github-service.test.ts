@@ -1845,8 +1845,6 @@ describe("GitHubService", () => {
       },
     };
 
-    await expect(resolveGitHubRepo("/repo", { workspaceGitService })).resolves.toBe(
-      "ottie/ottie",
-    );
+    await expect(resolveGitHubRepo("/repo", { workspaceGitService })).resolves.toBe("ottie/ottie");
   });
 });

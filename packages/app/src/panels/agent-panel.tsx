@@ -9,6 +9,7 @@ import { shallow, useShallow } from "zustand/shallow";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/components/agent-stream-view";
 import { ArchivedAgentCallout } from "@/components/archived-agent-callout";
+import { DaemonConnectionDot } from "@/components/daemon-connection-dot";
 import { Composer } from "@/components/composer";
 import { FileDropZone } from "@/components/file-drop-zone";
 import type { ImageAttachment } from "@/components/message-input";
@@ -1152,19 +1153,41 @@ function AgentStreamSection({
   ]);
 
   return (
-    <AgentStreamView
-      ref={streamViewRef}
-      agentId={agent.id}
-      serverId={serverId}
-      agent={agent}
-      streamItems={shouldUseOptimisticStream ? mergedStreamItems : streamItems}
-      pendingPermissions={pendingPermissions}
-      routeBottomAnchorRequest={routeBottomAnchorRequest}
-      isAuthoritativeHistoryReady={hasAppliedAuthoritativeHistory}
-      onOpenWorkspaceFile={onOpenWorkspaceFile}
-    />
+    <View style={agentPanelStreamSectionStyles.container}>
+      <AgentStreamView
+        ref={streamViewRef}
+        agentId={agent.id}
+        serverId={serverId}
+        agent={agent}
+        streamItems={shouldUseOptimisticStream ? mergedStreamItems : streamItems}
+        pendingPermissions={pendingPermissions}
+        routeBottomAnchorRequest={routeBottomAnchorRequest}
+        isAuthoritativeHistoryReady={hasAppliedAuthoritativeHistory}
+        onOpenWorkspaceFile={onOpenWorkspaceFile}
+      />
+      {/* WhatsApp-style "is the daemon online?" dot. Pinned to the chat
+          panel's top-right corner so users can confirm at a glance that the
+          local daemon is reachable without leaving the conversation. The
+          same dot appears on the Devices screen — same colors, same hook. */}
+      <View pointerEvents="none" style={agentPanelStreamSectionStyles.connectionDotOverlay}>
+        <DaemonConnectionDot serverId={serverId} />
+      </View>
+    </View>
   );
 }
+
+const agentPanelStreamSectionStyles = StyleSheet.create((theme) => ({
+  container: {
+    flex: 1,
+    position: "relative",
+  },
+  connectionDotOverlay: {
+    position: "absolute",
+    top: theme.spacing[2],
+    right: theme.spacing[3],
+    zIndex: 10,
+  },
+}));
 
 function AgentComposerSection({
   agentId,

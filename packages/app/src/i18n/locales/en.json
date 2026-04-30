@@ -260,7 +260,8 @@
     "saving": "Saving...",
     "tooLong": "Alias is too long (max 200 characters)",
     "hostNotConnected": "Host is not connected",
-    "failed": "Failed to set alias"
+    "failed": "Failed to set alias",
+    "exampleAlias": "my design"
   },
   "addHost": {
     "title": "Direct connection",
@@ -272,5 +273,52 @@
     "connecting": "Connecting...",
     "hostRequired": "Host is required",
     "hostFormatError": "Enter host:port only (no ws://, no /ws)"
+  },
+  "workspace": {
+    "hostNotConnected": "Host is not connected",
+    "pathUnavailable": "Workspace path not available",
+    "pathLabel": "Workspace path",
+    "branchLabel": "Branch name",
+    "branchUnavailable": "Branch name not available",
+    "copyFailed": "Copy failed",
+    "resumeUnavailable": "Resume command not available",
+    "resumeLabel": "resume command",
+    "reloadedAgent": "Reloaded agent",
+    "failedReloadAgent": "Failed to reload agent",
+    "closeTabsLeftTitle": "Close tabs to the left?",
+    "closeTabsRightTitle": "Close tabs to the right?",
+    "closeOtherTabsTitle": "Close other tabs?",
+    "closeButton": "Close",
+    "cancelButton": "Cancel"
+  },
+  "workspaceMenu": {
+    "actions": "Workspace actions",
+    "newAgent": "New agent",
+    "newTerminal": "New terminal",
+    "copyWorkspacePath": "Copy workspace path",
+    "copyBranchName": "Copy branch name",
+    "showSetup": "Show setup",
+    "copyPath": "Copy path",
+    "archiveWorktree": "Archive worktree",
+    "hideFromSidebar": "Hide from sidebar",
+    "hiding": "Hiding...",
+    "archiving": "Archiving...",
+    "confirmArchiveTitle": "Archive worktree?",
+    "confirmArchiveMessage": "Archive \"{{name}}\"?\n\nThe worktree will be removed from disk, terminals will be stopped, and agents inside will be archived.\n\nYour branch is still accessible if you committed.",
+    "confirmArchiveButton": "Archive",
+    "confirmHideTitle": "Hide workspace?",
+    "confirmHideMessage": "Hide \"{{name}}\" from the sidebar?\n\nFiles on disk will not be changed.",
+    "confirmHideButton": "Hide",
+    "confirmCancel": "Cancel",
+    "pathUnavailable": "Workspace path not available",
+    "hostNotConnected": "Host is not connected",
+    "failedHide": "Failed to hide workspace",
+    "failedArchive": "Failed to archive worktree",
+    "pathCopied": "Path copied",
+    "branchCopied": "Branch name copied",
+    "confirmRemoveProjectTitle": "Remove project?",
+    "confirmRemoveProjectMessage": "Remove \"{{name}}\" from the sidebar?\n\nFiles on disk will not be changed.",
+    "confirmRemoveProjectButton": "Remove",
+    "failedRemoveSome": "Failed to remove some workspaces"
   }
 }

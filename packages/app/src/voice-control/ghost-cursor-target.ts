@@ -1,8 +1,5 @@
 import { isWeb } from "@/constants/platform";
-import {
-  useGhostCursorStore,
-  type GhostCursorPoint,
-} from "@/voice-control/ghost-cursor-store";
+import { useGhostCursorStore, type GhostCursorPoint } from "@/voice-control/ghost-cursor-store";
 
 /**
  * DOM-anchored ghost-cursor targeting.

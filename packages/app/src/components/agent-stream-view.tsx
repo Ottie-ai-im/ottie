@@ -22,18 +22,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import Animated, {
-  FadeIn,
-  FadeInUp,
-  FadeOut,
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
+import Animated, { FadeIn, FadeInUp, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { Check, ChevronDown, X } from "lucide-react-native";
 import { usePanelStore } from "@/stores/panel-store";
 import {
@@ -49,6 +38,7 @@ import {
   type InlinePathTarget,
 } from "./message";
 import { PlanCard } from "./plan-card";
+import { MathCurveLoader } from "@/components/math-curve-loader";
 import type { StreamItem } from "@/types/stream";
 import type { PendingPermission } from "@/types/shared";
 import type {
@@ -80,11 +70,6 @@ import { normalizeInlinePathTarget } from "@/utils/inline-path";
 import { resolveWorkspaceIdByExecutionDirectory } from "@/utils/workspace-execution";
 import { prepareWorkspaceTab } from "@/utils/workspace-navigation";
 import { useStableEvent } from "@/hooks/use-stable-event";
-import {
-  getWorkingIndicatorDotStrength,
-  WORKING_INDICATOR_CYCLE_MS,
-  WORKING_INDICATOR_OFFSETS,
-} from "@/utils/working-indicator";
 import { isWeb } from "@/constants/platform";
 import { formatTimeMarker } from "@/utils/time";
 
@@ -432,6 +417,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         index: number,
         items: StreamItem[],
         seamAboveItem: StreamItem | null,
+        isLive = false,
       ) => {
         const aboveItem =
           getStreamNeighborItem({
@@ -462,6 +448,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             serverId={serverId}
             client={client}
             spacing={spacing}
+            isLive={isLive}
           />
         );
       },
@@ -553,13 +540,14 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         index: number,
         items: StreamItem[],
         seamAboveItem: StreamItem | null = null,
+        isLive = false,
       ) => {
         switch (item.kind) {
           case "user_message":
             return renderUserMessageItem(item, index, items, seamAboveItem);
 
           case "assistant_message":
-            return renderAssistantMessageItem(item, index, items, seamAboveItem);
+            return renderAssistantMessageItem(item, index, items, seamAboveItem, isLive);
 
           case "thought":
             return renderThoughtItem(item, index, items);
@@ -598,7 +586,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         seamAboveItem: StreamItem | null = null,
         animateEntrance = false,
       ) => {
-        const content = renderStreamItemContent(item, index, items, seamAboveItem);
+        const content = renderStreamItemContent(item, index, items, seamAboveItem, animateEntrance);
         if (!content) {
           return null;
         }
@@ -845,65 +833,17 @@ const TimeMarker = memo(function TimeMarker({ label }: TimeMarkerProps) {
   );
 });
 
+// Sits inside the chat stream while the agent is mid-turn but hasn't emitted
+// any timeline items yet — i.e. between user "send" and the first thought /
+// assistant chunk arriving. Used to be three pulsing dots; now renders the
+// Lissajous Drift parametric curve so the placeholder bubble has the same
+// visual language as the rest of the loading indicators in the app
+// (composer button spinner, ThinkingIconSlot inside thought badges).
 function WorkingIndicator() {
-  const progress = useSharedValue(0);
-
-  useEffect(() => {
-    progress.value = 0;
-    progress.value = withRepeat(
-      withTiming(1, {
-        duration: WORKING_INDICATOR_CYCLE_MS,
-        easing: Easing.linear,
-      }),
-      -1,
-      false,
-    );
-
-    return () => {
-      cancelAnimation(progress);
-      progress.value = 0;
-    };
-  }, [progress]);
-
-  const translateDistance = -2;
-  const dotOneStyle = useAnimatedStyle(() => {
-    const strength = getWorkingIndicatorDotStrength(progress.value, WORKING_INDICATOR_OFFSETS[0]);
-    return {
-      opacity: 0.3 + strength * 0.7,
-      transform: [{ translateY: strength * translateDistance }],
-    };
-  });
-
-  const dotTwoStyle = useAnimatedStyle(() => {
-    const strength = getWorkingIndicatorDotStrength(progress.value, WORKING_INDICATOR_OFFSETS[1]);
-    return {
-      opacity: 0.3 + strength * 0.7,
-      transform: [{ translateY: strength * translateDistance }],
-    };
-  });
-
-  const dotThreeStyle = useAnimatedStyle(() => {
-    const strength = getWorkingIndicatorDotStrength(progress.value, WORKING_INDICATOR_OFFSETS[2]);
-    return {
-      opacity: 0.3 + strength * 0.7,
-      transform: [{ translateY: strength * translateDistance }],
-    };
-  });
-
-  const dotOneCombinedStyle = useMemo(() => [stylesheet.workingDot, dotOneStyle], [dotOneStyle]);
-  const dotTwoCombinedStyle = useMemo(() => [stylesheet.workingDot, dotTwoStyle], [dotTwoStyle]);
-  const dotThreeCombinedStyle = useMemo(
-    () => [stylesheet.workingDot, dotThreeStyle],
-    [dotThreeStyle],
-  );
-
+  const { theme } = useUnistyles();
   return (
     <View style={stylesheet.workingIndicatorBubble}>
-      <View style={stylesheet.workingDotsRow}>
-        <Animated.View style={dotOneCombinedStyle} />
-        <Animated.View style={dotTwoCombinedStyle} />
-        <Animated.View style={dotThreeCombinedStyle} />
-      </View>
+      <MathCurveLoader curve="lissajous-drift" size={26} color={theme.colors.foregroundMuted} />
     </View>
   );
 }
@@ -1316,17 +1256,6 @@ const stylesheet = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.bubbleOther,
     borderWidth: 0,
     alignSelf: "flex-start",
-  },
-  workingDotsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-  },
-  workingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: theme.colors.foregroundMuted,
   },
   syncingIndicator: {
     flexDirection: "row",

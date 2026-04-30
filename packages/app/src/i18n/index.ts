@@ -47,9 +47,7 @@ export async function initI18n(): Promise<void> {
     stored = null;
   }
 
-  const lng: SupportedLanguage = isSupported(stored)
-    ? stored
-    : detectDeviceLanguage();
+  const lng: SupportedLanguage = isSupported(stored) ? stored : detectDeviceLanguage();
 
   await i18n.use(initReactI18next).init({
     resources: {

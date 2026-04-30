@@ -4,8 +4,8 @@
 
 Controlled by `APP_VARIANT` in `packages/app/app.config.js` (vanilla Expo, no custom Gradle plugin):
 
-| Variant       | App name    | Package ID       |
-| ------------- | ----------- | ---------------- |
+| Variant       | App name    | Package ID        |
+| ------------- | ----------- | ----------------- |
 | `production`  | Ottie       | `com.ottie`       |
 | `development` | Ottie Debug | `com.ottie.debug` |
 

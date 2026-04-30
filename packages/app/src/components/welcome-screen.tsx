@@ -48,9 +48,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   title: {
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.xl,
-    fontWeight: theme.fontWeight.medium,
+    fontSize: theme.fontSize["2xl"],
+    fontWeight: theme.fontWeight.semibold,
     textAlign: "center",
+    letterSpacing: -0.4,
   },
   subtitle: {
     color: theme.colors.foregroundMuted,
@@ -60,6 +61,7 @@ const styles = StyleSheet.create((theme) => ({
   copyBlock: {
     alignItems: "center",
     gap: theme.spacing[2],
+    marginTop: theme.spacing[6],
     marginBottom: theme.spacing[12],
   },
   actions: {
@@ -74,13 +76,13 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[3],
     paddingVertical: theme.spacing[4],
     borderRadius: theme.borderRadius.xl,
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
   actionButtonPrimary: {
-    backgroundColor: theme.colors.accent,
-    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.foreground,
+    borderColor: theme.colors.foreground,
   },
   actionText: {
     color: theme.colors.foreground,
@@ -88,7 +90,7 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.medium,
   },
   actionTextPrimary: {
-    color: theme.colors.accentForeground,
+    color: theme.colors.surface0,
   },
   setupLink: {
     flexDirection: "row",
@@ -97,9 +99,10 @@ const styles = StyleSheet.create((theme) => ({
     gap: 6,
   },
   setupLinkText: {
-    color: theme.colors.accent,
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
+    textDecorationLine: "underline",
   },
   versionLabel: {
     color: theme.colors.foregroundMuted,
@@ -277,7 +280,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
                 {isNative ? (
                   <Pressable style={styles.setupLink} onPress={handleOpenOttieSite}>
                     <Text style={styles.setupLinkText}>ottie.app</Text>
-                    <ExternalLink size={14} color={theme.colors.accent} />
+                    <ExternalLink size={14} color={theme.colors.foregroundMuted} />
                   </Pressable>
                 ) : null}
               </>

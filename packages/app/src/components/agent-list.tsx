@@ -268,7 +268,11 @@ function SessionRow({
         <Text style={styles.trailingTime} numberOfLines={1}>
           {timeAgo}
         </Text>
-        {showAttentionDot ? <View style={styles.unreadDot} /> : <View style={styles.unreadDotPlaceholder} />}
+        {showAttentionDot ? (
+          <View style={styles.unreadDot} />
+        ) : (
+          <View style={styles.unreadDotPlaceholder} />
+        )}
       </View>
     </Pressable>
   );

@@ -220,7 +220,16 @@ export class DurableAgentTimelineStore implements AgentTimelineStore {
       return selectTail(rows, limit, selectAll, minSeq, direction, window);
     }
     if (direction === "after") {
-      return selectAfter(rows, cursor?.seq ?? 0, limit, selectAll, minSeq, maxSeq, direction, window);
+      return selectAfter(
+        rows,
+        cursor?.seq ?? 0,
+        limit,
+        selectAll,
+        minSeq,
+        maxSeq,
+        direction,
+        window,
+      );
     }
     return selectBefore(rows, cursor?.seq ?? nextSeq, limit, selectAll, minSeq, direction, window);
   }

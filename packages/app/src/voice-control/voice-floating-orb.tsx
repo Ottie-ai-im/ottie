@@ -12,10 +12,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Mic } from "lucide-react-native";
 import { isNative } from "@/constants/platform";
 import { useAppSettings } from "@/hooks/use-settings";
-import {
-  selectVoicePhase,
-  useVoiceControlStore,
-} from "@/voice-control/voice-control-store";
+import { selectVoicePhase, useVoiceControlStore } from "@/voice-control/voice-control-store";
 import { voiceController } from "@/voice-control/voice-controller";
 
 /**
@@ -101,8 +98,7 @@ export function VoiceFloatingOrb() {
       // Snap to nearest edge (left or right) for that "magnetic toolbar" feel
       // most floating-mic implementations use.
       const center = translationX.value + ORB_SIZE / 2;
-      const targetX =
-        center < windowWidth / 2 ? ORB_MARGIN : windowWidth - ORB_SIZE - ORB_MARGIN;
+      const targetX = center < windowWidth / 2 ? ORB_MARGIN : windowWidth - ORB_SIZE - ORB_MARGIN;
       translationX.value = withSpring(targetX, { damping: 18 });
       offsetX.value = targetX;
     });

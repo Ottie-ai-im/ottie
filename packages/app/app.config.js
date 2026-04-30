@@ -114,6 +114,7 @@ export default {
     },
     plugins: [
       "expo-router",
+      "expo-sqlite",
       [
         "expo-camera",
         {
@@ -174,7 +175,10 @@ export default {
     // this block automatically.
     extra: {
       router: {},
+      eas: {
+        projectId: "5202b471-f4da-4f0e-b83d-3d3daa06dc09",
+      },
     },
-    owner: "ottie",
+    owner: "gdbzriww",
   },
 };

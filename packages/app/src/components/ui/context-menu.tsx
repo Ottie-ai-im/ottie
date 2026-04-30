@@ -21,6 +21,7 @@ import {
   Pressable,
   ScrollView,
   StatusBar,
+  StyleSheet as RNStyleSheet,
   Text,
   View,
   type GestureResponderEvent,
@@ -40,6 +41,7 @@ import {
   useIsolatedBottomSheetVisibility,
 } from "@/components/ui/isolated-bottom-sheet-modal";
 import { isWeb, isNative } from "@/constants/platform";
+import { BlurView } from "expo-blur";
 import { useWebScrollbarStyle } from "@/hooks/use-web-scrollbar-style";
 
 // Keep parity with dropdown-menu action statuses.
@@ -417,11 +419,11 @@ export function ContextMenuContent({
     () => [
       styles.sheetBackground,
       {
-        backgroundColor: theme.colors.surface0,
-        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surfaceGlassStrong,
+        borderColor: theme.colors.borderGlass,
       },
     ],
-    [theme.colors.surface0, theme.colors.border],
+    [theme.colors.surfaceGlassStrong, theme.colors.borderGlass],
   );
   const sheetHandleStyle = useMemo(
     () => [styles.sheetHandle, { backgroundColor: theme.colors.surface2 }],
@@ -580,6 +582,19 @@ export function ContextMenuContent({
           onLayout={handleContentLayout}
           style={animatedContentStyle}
         >
+          {isNative ? (
+            <BlurView
+              tint={
+                theme.colorScheme === "dark"
+                  ? "systemChromeMaterialDark"
+                  : "systemChromeMaterialLight"
+              }
+              intensity={70}
+              experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+              style={RNStyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+          ) : null}
           <ScrollView
             bounces={false}
             showsVerticalScrollIndicator

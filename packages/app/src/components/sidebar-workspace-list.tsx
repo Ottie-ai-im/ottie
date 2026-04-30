@@ -714,6 +714,7 @@ function WorkspaceKebabMenu({
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
 }) {
+  const { t } = useTranslation();
   const copyLeadingIcon = useMemo(
     () => <Copy size={14} color={theme.colors.foregroundMuted} />,
     [theme.colors.foregroundMuted],
@@ -746,7 +747,7 @@ function WorkspaceKebabMenu({
         hitSlop={8}
         style={workspaceKebabStyle}
         accessibilityRole="button"
-        accessibilityLabel="Workspace actions"
+        accessibilityLabel={t("workspaceMenu.actions")}
         testID={`sidebar-workspace-kebab-${workspaceKey}`}
       >
         {renderTriggerIcon}
@@ -758,7 +759,7 @@ function WorkspaceKebabMenu({
             leading={renameLeadingIcon}
             onSelect={onRename}
           >
-            Rename
+            {t("rename.menuItem")}
           </DropdownMenuItem>
         ) : null}
         {onCopyPath ? (
@@ -767,7 +768,7 @@ function WorkspaceKebabMenu({
             leading={copyLeadingIcon}
             onSelect={onCopyPath}
           >
-            Copy path
+            {t("workspaceMenu.copyPath")}
           </DropdownMenuItem>
         ) : null}
         {onCopyBranchName ? (
@@ -776,7 +777,7 @@ function WorkspaceKebabMenu({
             leading={copyLeadingIcon}
             onSelect={onCopyBranchName}
           >
-            Copy branch name
+            {t("workspaceMenu.copyBranchName")}
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem
@@ -787,7 +788,7 @@ function WorkspaceKebabMenu({
           pendingLabel={archivePendingLabel}
           onSelect={onArchive}
         >
-          {archiveLabel ?? "Archive"}
+          {archiveLabel ?? t("workspaceMenu.archiveWorktree")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1204,6 +1205,33 @@ function stripDragHandleButtonRole(
   return next;
 }
 
+function ProjectRowMetaColumn({
+  subtitleText,
+  unreadCount,
+}: {
+  subtitleText: string;
+  unreadCount: number;
+}): ReactElement | null {
+  if (!subtitleText && unreadCount <= 0) {
+    return null;
+  }
+  const unreadLabel = unreadCount > 99 ? "99+" : `${unreadCount}`;
+  return (
+    <View style={styles.projectMetaColumn}>
+      {subtitleText ? (
+        <Text style={styles.projectMetaTime} numberOfLines={1}>
+          {subtitleText}
+        </Text>
+      ) : null}
+      {unreadCount > 0 ? (
+        <View style={styles.unreadBadge}>
+          <Text style={styles.unreadBadgeText}>{unreadLabel}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function ProjectHeaderRow({
   project,
   displayName,
@@ -1298,18 +1326,9 @@ function ProjectHeaderRow({
           <Text style={styles.projectTitle} numberOfLines={1}>
             {displayName}
           </Text>
-          {subtitleText ? (
-            <Text style={styles.projectSubtitle} numberOfLines={1}>
-              {subtitleText}
-            </Text>
-          ) : null}
         </View>
       </View>
-      {unreadCount > 0 ? (
-        <View style={styles.unreadBadge}>
-          <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
-        </View>
-      ) : null}
+      <ProjectRowMetaColumn subtitleText={subtitleText} unreadCount={unreadCount} />
       <ProjectRowTrailingActions
         project={project}
         displayName={displayName}
@@ -1546,6 +1565,7 @@ function WorkspaceRowWithMenu({
   canCopyBranchName: boolean;
   isCreating?: boolean;
 }) {
+  const { t } = useTranslation();
   const toast = useToast();
   const archiveWorktree = useCheckoutGitActionsStore((state) => state.archiveWorktree);
   const [isArchivingWorkspace, setIsArchivingWorkspace] = useState(false);
@@ -1577,10 +1597,10 @@ function WorkspaceRowWithMenu({
 
     void (async () => {
       const confirmed = await confirmDialog({
-        title: "Archive worktree?",
-        message: `Archive "${workspace.name}"?\n\nThe worktree will be removed from disk, terminals will be stopped, and agents inside will be archived.\n\nYour branch is still accessible if you committed.`,
-        confirmLabel: "Archive",
-        cancelLabel: "Cancel",
+        title: t("workspaceMenu.confirmArchiveTitle"),
+        message: t("workspaceMenu.confirmArchiveMessage", { name: workspace.name }),
+        confirmLabel: t("workspaceMenu.confirmArchiveButton"),
+        cancelLabel: t("workspaceMenu.confirmCancel"),
         destructive: true,
       });
 
@@ -1594,12 +1614,12 @@ function WorkspaceRowWithMenu({
           workspaceDirectory: workspace.workspaceDirectory,
         });
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Workspace path not available");
+        toast.error(error instanceof Error ? error.message : t("workspaceMenu.pathUnavailable"));
         return;
       }
 
       if (!archiveDirectory) {
-        toast.error("Workspace path not available");
+        toast.error(t("workspaceMenu.pathUnavailable"));
         return;
       }
 
@@ -1610,7 +1630,7 @@ function WorkspaceRowWithMenu({
         cwd: archiveDirectory,
         worktreePath: archiveDirectory,
       }).catch((error) => {
-        const message = error instanceof Error ? error.message : "Failed to archive worktree";
+        const message = error instanceof Error ? error.message : t("workspaceMenu.failedArchive");
         toast.error(message);
       });
     })();
@@ -1618,6 +1638,7 @@ function WorkspaceRowWithMenu({
     archiveWorktree,
     isArchiving,
     redirectAfterArchive,
+    t,
     toast,
     workspace.name,
     workspace.workspaceDirectory,
@@ -1632,10 +1653,10 @@ function WorkspaceRowWithMenu({
 
     void (async () => {
       const confirmed = await confirmDialog({
-        title: "Hide workspace?",
-        message: `Hide "${workspace.name}" from the sidebar?\n\nFiles on disk will not be changed.`,
-        confirmLabel: "Hide",
-        cancelLabel: "Cancel",
+        title: t("workspaceMenu.confirmHideTitle"),
+        message: t("workspaceMenu.confirmHideMessage", { name: workspace.name }),
+        confirmLabel: t("workspaceMenu.confirmHideButton"),
+        cancelLabel: t("workspaceMenu.confirmCancel"),
         destructive: true,
       });
       if (!confirmed) {
@@ -1644,7 +1665,7 @@ function WorkspaceRowWithMenu({
 
       const client = getHostRuntimeStore().getClient(workspace.serverId);
       if (!client) {
-        toast.error("Host is not connected");
+        toast.error(t("workspaceMenu.hostNotConnected"));
         return;
       }
 
@@ -1658,7 +1679,7 @@ function WorkspaceRowWithMenu({
             throw new Error(payload.error);
           }
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : "Failed to hide workspace");
+          toast.error(error instanceof Error ? error.message : t("workspaceMenu.failedHide"));
         } finally {
           setIsArchivingWorkspace(false);
         }
@@ -1667,6 +1688,7 @@ function WorkspaceRowWithMenu({
   }, [
     isArchivingWorkspace,
     redirectAfterArchive,
+    t,
     toast,
     workspace.name,
     workspace.serverId,
@@ -1681,17 +1703,17 @@ function WorkspaceRowWithMenu({
         workspaceDirectory: workspace.workspaceDirectory,
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Workspace path not available");
+      toast.error(error instanceof Error ? error.message : t("workspaceMenu.pathUnavailable"));
       return;
     }
     void Clipboard.setStringAsync(copyTargetDirectory);
-    toast.copied("Path copied");
-  }, [toast, workspace.workspaceDirectory, workspace.workspaceId]);
+    toast.copied(t("workspaceMenu.pathCopied"));
+  }, [t, toast, workspace.workspaceDirectory, workspace.workspaceId]);
 
   const handleCopyBranchName = useCallback(() => {
     void Clipboard.setStringAsync(workspace.name);
-    toast.copied("Branch name copied");
-  }, [toast, workspace.name]);
+    toast.copied(t("workspaceMenu.branchCopied"));
+  }, [t, toast, workspace.name]);
 
   const archiveShortcutKeys = useShortcutKeys("archive-worktree");
 
@@ -1728,9 +1750,11 @@ function WorkspaceRowWithMenu({
         isCreating={isCreating}
         dragHandleProps={dragHandleProps}
         menuController={null}
-        archiveLabel={isWorktree ? "Archive worktree" : "Hide from sidebar"}
+        archiveLabel={
+          isWorktree ? t("workspaceMenu.archiveWorktree") : t("workspaceMenu.hideFromSidebar")
+        }
         archiveStatus={getWorkspaceArchiveStatus(isWorktree, archiveStatus, isArchivingWorkspace)}
-        archivePendingLabel={isWorktree ? "Archiving..." : "Hiding..."}
+        archivePendingLabel={isWorktree ? t("workspaceMenu.archiving") : t("workspaceMenu.hiding")}
         onArchive={isWorktree ? handleArchiveWorktree : handleArchiveWorkspace}
         onCopyBranchName={canCopyBranchName ? handleCopyBranchName : undefined}
         onCopyPath={handleCopyPath}
@@ -1774,6 +1798,7 @@ function NonGitProjectRowWithMenuContent({
   isDragging: boolean;
   dragHandleProps?: DraggableListDragHandleProps;
 }) {
+  const { t } = useTranslation();
   const toast = useToast();
   const contextMenu = useContextMenu();
   const [isArchivingWorkspace, setIsArchivingWorkspace] = useState(false);
@@ -1794,10 +1819,10 @@ function NonGitProjectRowWithMenuContent({
 
     void (async () => {
       const confirmed = await confirmDialog({
-        title: "Hide workspace?",
-        message: `Hide "${workspace.name}" from the sidebar?\n\nFiles on disk will not be changed.`,
-        confirmLabel: "Hide",
-        cancelLabel: "Cancel",
+        title: t("workspaceMenu.confirmHideTitle"),
+        message: t("workspaceMenu.confirmHideMessage", { name: workspace.name }),
+        confirmLabel: t("workspaceMenu.confirmHideButton"),
+        cancelLabel: t("workspaceMenu.confirmCancel"),
         destructive: true,
       });
       if (!confirmed) {
@@ -1806,7 +1831,7 @@ function NonGitProjectRowWithMenuContent({
 
       const client = getHostRuntimeStore().getClient(workspace.serverId);
       if (!client) {
-        toast.error("Host is not connected");
+        toast.error(t("workspaceMenu.hostNotConnected"));
         return;
       }
 
@@ -1820,7 +1845,7 @@ function NonGitProjectRowWithMenuContent({
             throw new Error(payload.error);
           }
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : "Failed to hide workspace");
+          toast.error(error instanceof Error ? error.message : t("workspaceMenu.failedHide"));
         } finally {
           setIsArchivingWorkspace(false);
         }
@@ -1829,6 +1854,7 @@ function NonGitProjectRowWithMenuContent({
   }, [
     isArchivingWorkspace,
     redirectAfterArchive,
+    t,
     toast,
     workspace.name,
     workspace.serverId,
@@ -1865,16 +1891,16 @@ function NonGitProjectRowWithMenuContent({
           testID={`sidebar-workspace-context-${workspace.workspaceKey}-rename`}
           onSelect={handleOpenRename}
         >
-          Rename
+          {t("rename.menuItem")}
         </ContextMenuItem>
         <ContextMenuItem
           testID={`sidebar-workspace-context-${workspace.workspaceKey}-archive`}
           status={isArchivingWorkspace ? "pending" : "idle"}
-          pendingLabel="Hiding..."
+          pendingLabel={t("workspaceMenu.hiding")}
           destructive
           onSelect={handleArchiveWorkspace}
         >
-          Hide from sidebar
+          {t("workspaceMenu.hideFromSidebar")}
         </ContextMenuItem>
       </ContextMenuContent>
       <WorkspaceRenameModal
@@ -2145,6 +2171,7 @@ function ProjectBlock({
   useNestable: boolean;
   creatingWorkspaceIds: ReadonlySet<string>;
 }) {
+  const { t } = useTranslation();
   const rowModel = useMemo(
     () =>
       buildSidebarProjectRowModel({
@@ -2235,10 +2262,10 @@ function ProjectBlock({
 
     void (async () => {
       const confirmed = await confirmDialog({
-        title: "Remove project?",
-        message: `Remove "${displayName}" from the sidebar?\n\nFiles on disk will not be changed.`,
-        confirmLabel: "Remove",
-        cancelLabel: "Cancel",
+        title: t("workspaceMenu.confirmRemoveProjectTitle"),
+        message: t("workspaceMenu.confirmRemoveProjectMessage", { name: displayName }),
+        confirmLabel: t("workspaceMenu.confirmRemoveProjectButton"),
+        cancelLabel: t("workspaceMenu.confirmCancel"),
         destructive: true,
       });
       if (!confirmed) {
@@ -2247,7 +2274,7 @@ function ProjectBlock({
 
       const client = getHostRuntimeStore().getClient(serverId);
       if (!client) {
-        toast.error("Host is not connected");
+        toast.error(t("workspaceMenu.hostNotConnected"));
         return;
       }
 
@@ -2264,13 +2291,13 @@ function ProjectBlock({
       ).then((results) => {
         const failed = results.filter(isRejected);
         if (failed.length > 0) {
-          toast.error("Failed to remove some workspaces");
+          toast.error(t("workspaceMenu.failedRemoveSome"));
         }
         setIsRemovingProject(false);
         return;
       });
     })();
-  }, [isRemovingProject, serverId, displayName, toast, project.workspaces]);
+  }, [isRemovingProject, serverId, displayName, t, toast, project.workspaces]);
 
   const flattenedRowWorkspaceId =
     rowModel.kind === "workspace_link" ? rowModel.workspace.workspaceId : null;
@@ -2719,20 +2746,23 @@ const styles = StyleSheet.create((theme) => ({
     textAlign: "center",
   },
   projectRow: {
-    minHeight: 44,
+    // IM-style cell — taller row, hairline divider between rows (instead of
+    // floating-card spacing), bigger avatar/title. Matches WeChat / Messages
+    // chat list density. Used in both mobile and desktop sidebars.
+    minHeight: 60,
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
-    marginBottom: theme.spacing[1],
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: theme.spacing[2],
+    gap: theme.spacing[3],
     userSelect: "none",
     // 3px transparent left "accent rail" reserved up front so the row width
     // doesn't shift when an item becomes selected (selected state fills it).
     borderLeftWidth: 3,
     borderLeftColor: "transparent",
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
   projectRowHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,
@@ -2766,6 +2796,19 @@ const styles = StyleSheet.create((theme) => ({
   },
   projectSubtitle: {
     color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.normal,
+  },
+  projectMetaColumn: {
+    // WeChat-style top-right meta column: time on top, unread below.
+    flexDirection: "column",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  projectMetaTime: {
+    color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.normal,
   },
@@ -2776,8 +2819,8 @@ const styles = StyleSheet.create((theme) => ({
   },
   projectLeadingVisualSlot: {
     position: "relative",
-    width: 24,
-    height: 24,
+    width: 36,
+    height: 36,
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
@@ -2798,13 +2841,13 @@ const styles = StyleSheet.create((theme) => ({
   projectIconFallbackText: {
     fontFamily: theme.fontFamily.system,
     color: theme.colors.foregroundMuted,
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: theme.fontWeight.semibold,
     letterSpacing: -0.1,
   },
   projectTitle: {
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.medium,
     minWidth: 0,
     flexShrink: 1,

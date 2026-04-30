@@ -15,6 +15,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  StyleSheet as RNStyleSheet,
   Text,
   View,
   Dimensions,
@@ -30,7 +31,8 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Check, CheckCircle } from "lucide-react-native";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useWebScrollbarStyle } from "@/hooks/use-web-scrollbar-style";
-import { isWeb } from "@/constants/platform";
+import { isNative, isWeb } from "@/constants/platform";
+import { BlurView } from "expo-blur";
 
 // Action status for menu items with loading/success feedback
 export type ActionStatus = "idle" | "pending" | "success";
@@ -331,6 +333,7 @@ export function DropdownMenuContent({
 }>): ReactElement | null {
   const { open, setOpen, triggerRef, flushPendingSelect } =
     useDropdownMenuContext("DropdownMenuContent");
+  const { theme } = useUnistyles();
   const [modalVisible, setModalVisible] = useState(false);
   const webScrollbarStyle = useWebScrollbarStyle();
   const [closing, setClosing] = useState(false);
@@ -495,6 +498,19 @@ export function DropdownMenuContent({
             onLayout={handleContentLayout}
             style={contentStyle}
           >
+            {isNative ? (
+              <BlurView
+                tint={
+                  theme.colorScheme === "dark"
+                    ? "systemChromeMaterialDark"
+                    : "systemChromeMaterialLight"
+                }
+                intensity={70}
+                experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+                style={RNStyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+            ) : null}
             <ScrollView
               bounces={false}
               showsVerticalScrollIndicator

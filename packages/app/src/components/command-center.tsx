@@ -41,10 +41,10 @@ const CommandCenterRow = memo(function CommandCenterRow({
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.row,
       (Boolean(hovered) || pressed || active) && {
-        backgroundColor: theme.colors.surface1,
+        backgroundColor: theme.colors.surfaceGlassHover,
       },
     ],
-    [active, theme.colors.surface1],
+    [active, theme.colors.surfaceGlassHover],
   );
 
   return (
@@ -297,13 +297,13 @@ export function CommandCenter() {
   const panelStyle = useMemo(
     () => [
       styles.panel,
-      { borderColor: theme.colors.border, backgroundColor: theme.colors.surface0 },
+      { borderColor: theme.colors.borderGlass, backgroundColor: theme.colors.surfaceGlassStrong },
     ],
-    [theme.colors.border, theme.colors.surface0],
+    [theme.colors.borderGlass, theme.colors.surfaceGlassStrong],
   );
   const headerStyle = useMemo(
-    () => [styles.header, { borderBottomColor: theme.colors.border }],
-    [theme.colors.border],
+    () => [styles.header, { borderBottomColor: theme.colors.borderGlass }],
+    [theme.colors.borderGlass],
   );
   const inputStyle = useMemo(
     () => [styles.input, { color: theme.colors.foreground }],
@@ -318,8 +318,8 @@ export function CommandCenter() {
     [theme.colors.foregroundMuted],
   );
   const sectionDividerStyle = useMemo(
-    () => [styles.sectionDivider, { backgroundColor: theme.colors.border }],
-    [theme.colors.border],
+    () => [styles.sectionDivider, { backgroundColor: theme.colors.borderGlass }],
+    [theme.colors.borderGlass],
   );
 
   if (isNative || !open) return null;
@@ -408,10 +408,13 @@ const styles = StyleSheet.create((theme) => ({
     maxWidth: "92%",
     maxHeight: "80%",
     borderWidth: 1,
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.glassSheet,
+    borderCurve: "continuous",
     overflow: "hidden",
-    ...theme.shadow.lg,
-  },
+    ...theme.shadow.glassDeep,
+    backdropFilter: "blur(40px) saturate(180%)",
+    WebkitBackdropFilter: "blur(40px) saturate(180%)",
+  } as object,
   header: {
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[3],

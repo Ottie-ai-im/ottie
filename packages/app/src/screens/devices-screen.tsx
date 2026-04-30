@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
 import { Plus, Server, Smartphone } from "lucide-react-native";
 
 import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
@@ -13,6 +14,7 @@ import type { HostProfile } from "@/types/host-connection";
 export function DevicesScreen() {
   const hosts = useHosts();
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
 
   const [isAddHostOpen, setIsAddHostOpen] = useState(false);
   const [isPairDeviceOpen, setIsPairDeviceOpen] = useState(false);
@@ -32,20 +34,18 @@ export function DevicesScreen() {
 
   return (
     <View style={styles.container}>
-      <MobileTabHeader title="设备" testID="devices-header" />
+      <MobileTabHeader title={t("devices.title")} testID="devices-header" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.heading}>
-          <Text style={styles.subtitle}>已配对的 daemon 主机</Text>
+          <Text style={styles.subtitle}>{t("devices.subtitle")}</Text>
         </View>
 
         <View style={styles.list}>
           {hosts.length === 0 ? (
             <View style={styles.emptyCard}>
               <Server size={28} color={theme.colors.foregroundMuted} />
-              <Text style={styles.emptyTitle}>还没有设备</Text>
-              <Text style={styles.emptyHint}>
-                添加一个 Ottie daemon 主机，或者用手机扫码配对一台 Mac。
-              </Text>
+              <Text style={styles.emptyTitle}>{t("devices.emptyTitle")}</Text>
+              <Text style={styles.emptyHint}>{t("devices.emptyHint")}</Text>
             </View>
           ) : (
             hosts.map((host) => <DeviceRow key={host.serverId} host={host} />)
@@ -60,7 +60,7 @@ export function DevicesScreen() {
             onPress={handleOpenAddHost}
             testID="devices-add-host"
           >
-            添加主机
+            {t("devices.addHost")}
           </Button>
           <Button
             style={styles.actionButton}
@@ -69,7 +69,7 @@ export function DevicesScreen() {
             onPress={handleOpenPairDevice}
             testID="devices-pair-device"
           >
-            扫码配对
+            {t("devices.pairDevice")}
           </Button>
         </View>
       </ScrollView>
@@ -87,18 +87,19 @@ export function DevicesScreen() {
 function DeviceRow({ host }: { host: HostProfile }) {
   const snapshot = useHostRuntimeSnapshot(host.serverId);
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const status = snapshot?.connectionStatus ?? "offline";
   let dotColor: string;
   let statusText: string;
   if (status === "online") {
     dotColor = theme.colors.palette.green[400];
-    statusText = "在线";
+    statusText = t("devices.online");
   } else if (status === "connecting") {
     dotColor = theme.colors.palette.amber[500];
-    statusText = "连接中";
+    statusText = t("devices.connecting");
   } else {
     dotColor = theme.colors.palette.red[500];
-    statusText = "离线";
+    statusText = t("devices.offline");
   }
 
   const dotStyle = useMemo(() => [styles.statusDot, { backgroundColor: dotColor }], [dotColor]);

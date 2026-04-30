@@ -148,10 +148,7 @@ async function routeWithClaude(args: RouteWithClaudeArgs): Promise<VoiceRouteRes
     return failure("No matching command");
   }
   if (!allowedNames.has(parsed.command)) {
-    args.logger.warn(
-      { picked: parsed.command },
-      "voice-intent-routing: model picked unknown tool",
-    );
+    args.logger.warn({ picked: parsed.command }, "voice-intent-routing: model picked unknown tool");
     return failure(`Model picked unknown command "${parsed.command}"`);
   }
 

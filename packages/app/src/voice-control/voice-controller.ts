@@ -7,10 +7,7 @@ import {
   type CommandResult,
   type VoiceCommand,
 } from "@/voice-control/voice-commands";
-import {
-  useVoiceControlStore,
-  type ActionLogEntry,
-} from "@/voice-control/voice-control-store";
+import { useVoiceControlStore, type ActionLogEntry } from "@/voice-control/voice-control-store";
 import { flyGhostCursorForCommand } from "@/voice-control/ghost-cursor-target";
 import {
   routeVoiceIntent,
@@ -67,9 +64,7 @@ function humanizeCommandName(name: string): string {
  * yet (first frame after mount).
  */
 function readAppSettingsSnapshot(): AppSettings {
-  return (
-    queryClient.getQueryData<AppSettings>([...APP_SETTINGS_QUERY_KEY]) ?? DEFAULT_APP_SETTINGS
-  );
+  return queryClient.getQueryData<AppSettings>([...APP_SETTINGS_QUERY_KEY]) ?? DEFAULT_APP_SETTINGS;
 }
 
 class VoiceController {
@@ -288,11 +283,7 @@ class VoiceController {
     }, COUNTDOWN_TOTAL_MS);
   }
 
-  private async runCommand(
-    command: VoiceCommand,
-    params: unknown,
-    entryId: string,
-  ): Promise<void> {
+  private async runCommand(command: VoiceCommand, params: unknown, entryId: string): Promise<void> {
     const store = useVoiceControlStore.getState();
     store.setCountdownRemainingMs(null);
     store.updateAction(entryId, { status: "running", message: "Running…" });

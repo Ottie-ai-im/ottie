@@ -42,10 +42,9 @@ function Skills() {
             <strong>Desktop app:</strong> Settings → Integrations → Install
           </li>
           <li>
-            <strong>Manual:</strong>{" "}
-            <code className="font-mono">npx skills add ottie/ottie</code> — this installs to{" "}
-            <code className="font-mono">~/.agents/skills/</code> and sets up symlinks for each
-            agent.
+            <strong>Manual:</strong> <code className="font-mono">npx skills add ottie/ottie</code> —
+            this installs to <code className="font-mono">~/.agents/skills/</code> and sets up
+            symlinks for each agent.
           </li>
         </ul>
       </section>

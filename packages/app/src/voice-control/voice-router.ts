@@ -125,7 +125,8 @@ export function matchIntent(transcript: string): IntentMatch | null {
         const schemaShape = (command.schema as unknown as { _def?: { shape?: unknown } })._def
           ?.shape;
         const isZeroParam =
-          !schemaShape || (typeof schemaShape === "object" && Object.keys(schemaShape).length === 0);
+          !schemaShape ||
+          (typeof schemaShape === "object" && Object.keys(schemaShape).length === 0);
         if (!isZeroParam) {
           continue;
         }

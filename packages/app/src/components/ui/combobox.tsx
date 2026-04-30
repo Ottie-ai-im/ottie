@@ -38,7 +38,8 @@ import {
   shouldShowCustomComboboxOption,
 } from "./combobox-options";
 import type { ComboboxOptionModel } from "./combobox-options";
-import { isWeb } from "@/constants/platform";
+import { isNative, isWeb } from "@/constants/platform";
+import { BlurView } from "expo-blur";
 import {
   IsolatedBottomSheetModal,
   useIsolatedBottomSheetVisibility,
@@ -118,14 +119,27 @@ function ComboboxSheetBackground({ style }: BottomSheetBackgroundProps) {
     () => [
       style,
       {
-        backgroundColor: theme.colors.surface0,
-        borderTopLeftRadius: theme.borderRadius["2xl"],
-        borderTopRightRadius: theme.borderRadius["2xl"],
+        backgroundColor: theme.colors.surfaceGlassStrong,
+        borderTopLeftRadius: theme.borderRadius.glassSheet,
+        borderTopRightRadius: theme.borderRadius.glassSheet,
+        borderCurve: "continuous" as const,
+        overflow: "hidden" as const,
       },
     ],
-    [style, theme.colors.surface0, theme.borderRadius],
+    [style, theme.colors.surfaceGlassStrong, theme.borderRadius],
   );
 
+  if (isNative) {
+    return (
+      <BlurView
+        tint={theme.colorScheme === "dark" ? "systemThickMaterialDark" : "systemThickMaterialLight"}
+        intensity={70}
+        experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+        style={combinedStyle}
+        pointerEvents="none"
+      />
+    );
+  }
   return <Animated.View pointerEvents="none" style={combinedStyle} />;
 }
 
@@ -1625,13 +1639,20 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
   },
   desktopContainer: {
-    backgroundColor: theme.colors.surface0,
-    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surfaceGlassStrong,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous" as const,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadow.md,
+    borderColor: theme.colors.borderGlass,
+    ...theme.shadow.glass,
     maxHeight: 400,
     overflow: "hidden",
+    ...(isWeb
+      ? ({
+          backdropFilter: "blur(28px) saturate(180%)",
+          WebkitBackdropFilter: "blur(28px) saturate(180%)",
+        } as unknown as object)
+      : {}),
   },
   desktopScroll: {
     flexShrink: 1,

@@ -16,6 +16,7 @@ pnpm lint
 ```
 
 Reasons for pnpm internally:
+
 - mature `workspace:` protocol
 - content-addressed store, faster cold installs
 - stricter peer-dep resolution catches issues earlier
@@ -33,7 +34,7 @@ Do not rewrite these to pnpm. The user is not expected to have pnpm installed.
 
 ## Quick rule
 
-| Audience            | Tool        | Example                       |
-| ------------------- | ----------- | ----------------------------- |
-| Contributor / dev   | pnpm        | `pnpm dev:desktop`            |
-| End user (CLI install) | npm      | `npm install -g @ottie/cli`   |
+| Audience               | Tool | Example                     |
+| ---------------------- | ---- | --------------------------- |
+| Contributor / dev      | pnpm | `pnpm dev:desktop`          |
+| End user (CLI install) | npm  | `npm install -g @ottie/cli` |

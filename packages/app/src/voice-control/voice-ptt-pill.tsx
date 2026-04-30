@@ -142,14 +142,13 @@ function PillBody({
 
   const isCountdownActive =
     phase === "executing" && countdownRemainingMs !== null && countdownRemainingMs > 0;
-  const countdownSeconds = countdownRemainingMs
-    ? Math.ceil(countdownRemainingMs / 1000)
-    : 0;
+  const countdownSeconds = countdownRemainingMs ? Math.ceil(countdownRemainingMs / 1000) : 0;
 
   const headline = useMemo(() => {
     if (phase === "recording") return "Listening…";
     if (phase === "processing") return "Processing";
-    if (phase === "executing") return isCountdownActive ? `Running in ${countdownSeconds}s` : "Running";
+    if (phase === "executing")
+      return isCountdownActive ? `Running in ${countdownSeconds}s` : "Running";
     if (phase === "done") return errorMessage ? "Couldn't run that" : "Done";
     return "";
   }, [phase, isCountdownActive, countdownSeconds, errorMessage]);
@@ -221,9 +220,7 @@ function TranscriptOrPlaceholder({ phase, transcript }: TranscriptOrPlaceholderP
     );
   }
   if (phase === "recording") {
-    return (
-      <Text style={styles.placeholderText}>Speak now — release the hotkey to execute.</Text>
-    );
+    return <Text style={styles.placeholderText}>Speak now — release the hotkey to execute.</Text>;
   }
   return null;
 }

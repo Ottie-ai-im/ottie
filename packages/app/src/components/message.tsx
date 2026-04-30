@@ -50,7 +50,7 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { UnicodeSpinner } from "@/components/unicode-spinner";
+import { MathCurveLoader } from "@/components/math-curve-loader";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -80,6 +80,7 @@ import { getMarkdownListMarker } from "@/utils/markdown-list";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { markScrollInvestigationEvent } from "@/utils/scroll-jank";
 import { splitMarkdownBlocks } from "@/utils/split-markdown-blocks";
+import { useSmoothedText } from "@/hooks/use-smoothed-text";
 import {
   getAssistantImageMetadata,
   setAssistantImageMetadata,
@@ -516,6 +517,12 @@ interface AssistantMessageProps {
   client?: DaemonClient | null;
   disableOuterSpacing?: boolean;
   spacing?: "default" | "compactTop" | "compactBottom" | "compactBoth";
+  /**
+   * When true, the message is currently streaming — apply a smoothing buffer
+   * so visual cadence is decoupled from network chunk cadence. Snaps to the
+   * full text the moment this flips back to false.
+   */
+  isLive?: boolean;
 }
 
 export const assistantMessageStylesheet = StyleSheet.create((theme) => ({
@@ -1380,6 +1387,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   client,
   disableOuterSpacing,
   spacing = "default",
+  isLive = false,
 }: AssistantMessageProps) {
   const { theme } = useUnistyles();
   const [selectableModalOpen, setSelectableModalOpen] = useState(false);
@@ -1629,7 +1637,8 @@ export const AssistantMessage = memo(function AssistantMessage({
     };
   }, [client, handleLinkPress, markdownParser, onInlinePathPress, serverId, workspaceRoot]);
 
-  const blocks = useMemo(() => splitMarkdownBlocks(message), [message]);
+  const visibleMessage = useSmoothedText(message, isLive);
+  const blocks = useMemo(() => splitMarkdownBlocks(visibleMessage), [visibleMessage]);
   const keyedBlocks = useMemo(
     () => blocks.map((block, index) => ({ key: `${index}:${block.slice(0, 32)}`, block })),
     [blocks],
@@ -2272,12 +2281,14 @@ function resolveExpandableBadgeIconColor({
 }
 
 // Animated icon used inside ExpandableBadge while an agent is actively
-// thinking. Cycles through the unicode-animations dots glyph set so the
-// "is the agent doing anything?" question reads at a glance regardless of
-// theme — same visual language as a CLI spinner.
+// thinking. Renders the "Lissajous Drift" parametric curve from the
+// math-curve-loader library — a 3:4 Lissajous figure with a 90° phase
+// offset that reads as a calm braided knot drifting in place. Replaced
+// the older "•••" unicode dots so the indicator has more personality
+// than a plain CLI spinner.
 function ThinkingIconSlot() {
   const { theme } = useUnistyles();
-  return <UnicodeSpinner animation="dots" size={16} color={theme.colors.accent} fps={12} />;
+  return <MathCurveLoader curve="lissajous-drift" size={18} color={theme.colors.accent} />;
 }
 
 function renderExpandableBadgeIcon({

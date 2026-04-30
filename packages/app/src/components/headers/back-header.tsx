@@ -58,6 +58,7 @@ const styles = StyleSheet.create((theme) => ({
       xs: theme.spacing[3],
       md: theme.spacing[2],
     },
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.glassPill,
+    borderCurve: "continuous" as const,
   },
 }));
