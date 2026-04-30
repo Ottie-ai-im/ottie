@@ -175,6 +175,63 @@ for stale in "$OUT_DIR"/ottie-daemon-*-apple-darwin "$OUT_DIR"/ottie-daemon-*-li
   fi
 done
 
+# Step 4: deep-sign every Mach-O inside resources/ on macOS.
+#
+# Tauri's tauri build only signs Ottie.app's own executable + the wrapper
+# script. Anything inside Resources/binaries/resources/ — the bundled Node,
+# the Anthropic `claude` CLI, every *.node, every *.dylib — keeps whatever
+# signature it shipped with (mostly ad-hoc or a third-party Team ID).
+#
+# Once the host process runs under Hardened Runtime, dyld enforces Library
+# Validation: it refuses to load any Mach-O whose Team ID differs from the
+# host. Even with `disable-library-validation` in entitlements, Gatekeeper
+# at first launch still verifies that every embedded executable is properly
+# signed (notarization staples to the .app, not to nested binaries).
+#
+# Re-signing every Mach-O here with our Developer ID + Hardened Runtime +
+# entitlements is what makes the bundle launch cleanly on a fresh Mac.
+if [[ "$NODE_OS" == "darwin" && -n "${MACOS_SIGN_IDENTITY:-}" ]]; then
+  ENTITLEMENTS="${MACOS_ENTITLEMENTS:-$REPO_ROOT/packages/desktop/src-tauri/entitlements.plist}"
+  if [[ ! -f "$ENTITLEMENTS" ]]; then
+    echo "error: MACOS_SIGN_IDENTITY set but entitlements file missing: $ENTITLEMENTS" >&2
+    exit 1
+  fi
+  echo "==> deep-sign embedded binaries with '$MACOS_SIGN_IDENTITY'"
+  sign_one() {
+    local target="$1"
+    codesign --force --options runtime --timestamp \
+      --sign "$MACOS_SIGN_IDENTITY" \
+      --entitlements "$ENTITLEMENTS" \
+      "$target" >/dev/null 2>&1 || {
+        echo "error: codesign failed for $target" >&2
+        codesign --force --options runtime --timestamp \
+          --sign "$MACOS_SIGN_IDENTITY" \
+          --entitlements "$ENTITLEMENTS" \
+          "$target"
+        exit 1
+      }
+  }
+
+  # All native modules (.node) and shared libraries (.dylib).
+  while IFS= read -r -d '' lib; do sign_one "$lib"; done < <(
+    find "$OUT_DIR/resources" \( -name "*.node" -o -name "*.dylib" \) -type f -print0
+  )
+
+  # The bundled Node runtime.
+  if [[ -f "$OUT_DIR/resources/node" ]]; then
+    sign_one "$OUT_DIR/resources/node"
+  fi
+
+  # The Anthropic claude CLI binary (every platform-specific package
+  # ships its own; only the host's was actually copied).
+  while IFS= read -r -d '' claude_bin; do sign_one "$claude_bin"; done < <(
+    find "$OUT_DIR/resources/node_modules/@anthropic-ai" \
+      -type f -name claude -perm -u+x -print0 2>/dev/null
+  )
+
+  echo "  ✓ all embedded Mach-Os re-signed"
+fi
+
 size_human="$(du -sh "$OUT_DIR/resources" 2>/dev/null | awk '{print $1}')"
 wrapper_size="$(wc -c <"$OUT_PATH" | tr -d ' ')"
 echo "==> done"

@@ -19,6 +19,7 @@ import type { AgentProviderDefinition } from "@server/server/agent/provider-mani
 const IS_WEB = platformIsWeb;
 
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
+import { MathCurveLoader } from "@/components/math-curve-loader";
 
 const EMPTY_COMBOBOX_OPTIONS: ReadonlyArray<ComboboxOption> = [];
 
@@ -103,6 +104,7 @@ interface SelectorContentProps {
   canSelectProvider: (provider: string) => boolean;
   onToggleFavorite?: (provider: string, modelId: string) => void;
   onDrillDown: (providerId: string, providerLabel: string) => void;
+  isLoading: boolean;
 }
 
 function resolveDefaultModelLabel(models: AgentModelDefinition[] | undefined): string {
@@ -477,6 +479,34 @@ function ProviderSearchInput({
   );
 }
 
+function SelectorEmptyState({ isLoading, hasAnyRow }: { isLoading: boolean; hasAnyRow: boolean }) {
+  const { theme } = useUnistyles();
+  // Three distinct empty states: still fetching from the daemon (fancy loader),
+  // fetched but provider list is genuinely empty, or fetched but the user's
+  // search filter happens to match nothing.
+  if (isLoading && !hasAnyRow) {
+    return (
+      <View style={styles.emptyState}>
+        <MathCurveLoader
+          curve="lemniscate-bloom"
+          size={56}
+          color={theme.colors.foregroundMuted}
+          ariaLabel="Loading models"
+        />
+        <Text style={styles.emptyStateText}>Loading models…</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.emptyState}>
+      <Search size={theme.iconSize.md} color={theme.colors.foregroundMuted} />
+      <Text style={styles.emptyStateText}>
+        {hasAnyRow ? "No models match your search" : "No models available yet"}
+      </Text>
+    </View>
+  );
+}
+
 function SelectorContent({
   view,
   providerDefinitions,
@@ -490,8 +520,8 @@ function SelectorContent({
   canSelectProvider,
   onToggleFavorite,
   onDrillDown,
+  isLoading,
 }: SelectorContentProps) {
-  const { theme } = useUnistyles();
   const allRows = useMemo(
     () => buildModelRows(providerDefinitions, allProviderModels),
     [allProviderModels, providerDefinitions],
@@ -562,10 +592,7 @@ function SelectorContent({
       ) : null}
 
       {!hasResults ? (
-        <View style={styles.emptyState}>
-          <Search size={theme.iconSize.md} color={theme.colors.foregroundMuted} />
-          <Text style={styles.emptyStateText}>No models match your search</Text>
-        </View>
+        <SelectorEmptyState isLoading={isLoading} hasAnyRow={allRows.length > 0} />
       ) : null}
     </View>
   );
@@ -817,6 +844,7 @@ export function CombinedModelSelector({
             canSelectProvider={canSelectProvider}
             onToggleFavorite={onToggleFavorite}
             onDrillDown={handleDrillDown}
+            isLoading={isLoading}
           />
         ) : (
           <View style={styles.sheetLoadingState}>

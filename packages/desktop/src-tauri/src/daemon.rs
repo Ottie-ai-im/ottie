@@ -30,16 +30,6 @@ impl DaemonHandle {
 }
 
 pub fn spawn<R: Runtime>(app: &AppHandle<R>) -> Result<DaemonHandle, String> {
-    // In dev, Tauri copies the externalBin into target/<profile>/, so the
-    // wrapper's siblings are not the staged resources/. Pin the resources
-    // directory at compile time to the source layout. For bundled builds this
-    // path will not exist, and the wrapper's relative-path search will take
-    // over.
-    let dev_resources_dir = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/binaries/resources",
-    );
-
     // Origins the renderer can connect from. In dev the renderer is served
     // by Expo at http://localhost:8081; in packaged builds Tauri's webview
     // uses tauri://localhost on macOS / Linux and http://tauri.localhost on
@@ -52,8 +42,19 @@ pub fn spawn<R: Runtime>(app: &AppHandle<R>) -> Result<DaemonHandle, String> {
         .sidecar("ottie-daemon")
         .map_err(|e| format!("failed to resolve ottie-daemon sidecar: {e}"))?
         .env("OTTIE_DESKTOP_MANAGED", "1")
-        .env("OTTIE_DAEMON_RESOURCES_DIR", dev_resources_dir)
         .env("OTTIE_CORS_ORIGINS", cors_origins);
+
+    // In dev, Tauri copies the externalBin into target/<profile>/, so the
+    // wrapper's siblings are not the staged resources/. Pin the resources
+    // directory at compile time to the source layout. Gated to debug builds
+    // so release packages never leak the build machine's path — that env var
+    // would point to a non-existent directory on the user's machine and
+    // cause the wrapper's fallback search to behave inconsistently.
+    #[cfg(debug_assertions)]
+    let sidecar = sidecar.env(
+        "OTTIE_DAEMON_RESOURCES_DIR",
+        concat!(env!("CARGO_MANIFEST_DIR"), "/binaries/resources"),
+    );
 
     let (mut rx, child) = sidecar
         .spawn()
