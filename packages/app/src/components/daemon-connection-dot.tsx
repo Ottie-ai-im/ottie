@@ -40,13 +40,13 @@ export function DaemonConnectionDot({
   let dotColor: string;
   let label: string;
   if (status === "online") {
-    dotColor = theme.colors.palette.green[400];
+    dotColor = theme.status.online;
     label = t("devices.online");
   } else if (status === "connecting") {
-    dotColor = theme.colors.palette.amber[500];
+    dotColor = theme.status.connecting;
     label = t("devices.connecting");
   } else {
-    dotColor = theme.colors.palette.red[500];
+    dotColor = theme.status.offline;
     label = t("devices.offline");
   }
 
@@ -86,8 +86,8 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
   },
   label: {
-    fontFamily: theme.fontFamily.system,
-    fontSize: theme.fontSize.xs,
-    color: theme.colors.foregroundMuted,
+    fontFamily: theme.typography.fontFamily.system,
+    fontSize: theme.typography.fontSize.xs,
+    color: theme.text.muted,
   },
 }));
