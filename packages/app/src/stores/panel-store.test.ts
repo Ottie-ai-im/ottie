@@ -246,3 +246,28 @@ describe("panel-store checkout-intent file explorer actions", () => {
     expect(usePanelStore.getState().explorerTab).toBe("files");
   });
 });
+
+describe("panel-store NAV-A2 auto-collapse", () => {
+  beforeEach(() => {
+    resetPanelStore();
+  });
+
+  it("collapseOverlayOnCompact() drops agent-list to agent (Test 1)", () => {
+    usePanelStore.setState({ mobileView: "agent-list" });
+    usePanelStore.getState().collapseOverlayOnCompact();
+    expect(usePanelStore.getState().mobileView).toBe("agent");
+  });
+
+  it("collapseOverlayOnCompact() drops file-explorer to agent (Test 1)", () => {
+    usePanelStore.setState({ mobileView: "file-explorer" });
+    usePanelStore.getState().collapseOverlayOnCompact();
+    expect(usePanelStore.getState().mobileView).toBe("agent");
+  });
+
+  it("collapseOverlayOnCompact() is a no-op when already on agent (Test 2)", () => {
+    usePanelStore.setState({ mobileView: "agent" });
+    const before = usePanelStore.getState().mobileView;
+    usePanelStore.getState().collapseOverlayOnCompact();
+    expect(usePanelStore.getState().mobileView).toBe(before);
+  });
+});
