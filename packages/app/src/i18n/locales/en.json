@@ -100,7 +100,8 @@
     "selectAModel": "Select a model",
     "copyLogs": "Copy logs",
     "openGithubIssue": "Open GitHub issue",
-    "docs": "Docs"
+    "docs": "Docs",
+    "localTokenRequired": "This daemon requires a local token. If you're on the same machine, find it at $OTTIE_HOME/local-token. See $OTTIE_HOME/daemon.log for details."
   },
   "settings": {
     "title": "Settings",
@@ -164,7 +165,30 @@
     "defaultWorkspaceRootWillCreate": "Will be created when you create a task here",
     "defaultWorkspaceRootNotDirectory": "Path exists but is not a folder",
     "defaultWorkspaceRootNotWritable": "Folder is not writable on the daemon machine",
-    "defaultWorkspaceRootError": "Could not check path on the daemon"
+    "defaultWorkspaceRootError": "Could not check path on the daemon",
+    "localDaemon": {
+      "title": "Local daemon",
+      "description": "Required when other clients connect to this daemon. Auto-managed by the desktop app.",
+      "statusRow": {
+        "title": "Token status",
+        "absent": "No token (loopback-trust mode)",
+        "present": "Token present",
+        "explicit": "Token via OTTIE_LOCAL_TOKEN env",
+        "unknown": "Unknown"
+      },
+      "viewToken": "Locate token",
+      "viewTokenHint": "The token is stored on disk; the value is never sent over the network.",
+      "viewTokenConfirm": {
+        "title": "Locate local token",
+        "message": "The token is at $OTTIE_HOME/local-token. The token grants full access to your daemon — do not share it."
+      },
+      "regenerate": "Regenerate token",
+      "regenerateHint": "Replaces the existing token. Other paired clients will need to re-pair.",
+      "regenerateConfirm": {
+        "title": "Regenerate token?",
+        "message": "Other paired clients will need to re-pair."
+      }
+    }
   },
   "usage": {
     "totalTitle": "Total",
