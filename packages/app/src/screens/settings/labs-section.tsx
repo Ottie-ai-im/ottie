@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { ChevronDown, Mic } from "lucide-react-native";
+import { ChevronDown } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { settingsStyles } from "@/styles/settings";
 import { SettingsSection } from "@/screens/settings/settings-section";
+import { LabsRow } from "@/components/settings/labs-row";
+import { type LabsStability } from "@/components/settings/labs-badge";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   DropdownMenu,
@@ -14,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   type AppSettings,
+  type BetaFeatureSettings,
   type VoiceControlSettings,
   type VoiceIntentProvider,
   useAppSettings,
@@ -35,18 +38,72 @@ const ON_OFF_OPTIONS: { value: ToggleValue; label: string }[] = [
 
 const toToggleValue = (enabled: boolean): ToggleValue => (enabled ? "on" : "off");
 
+// ---------------------------------------------------------------------------
+// LABS_REGISTRY (Plan 02d / D-10)
+// ---------------------------------------------------------------------------
+//
+// Author-set stability + opt-in entry table. Adding a new experiment = add a
+// row here + extend `BetaFeatureSettings` (inside `hooks/use-settings.ts`).
+// Stability labels (Experimental / Beta / Stable) are author judgment, not
+// daemon-driven. Reset-all writes each entry's `defaultEnabled` value back.
+//
+// SET-01 / D-11 (additive migration): every existing flag in
+// `BetaFeatureSettings` MUST appear here so toggling through the new
+// registry-driven UI matches the prior hand-rolled card behavior. Right now
+// the only experiment is Voice Control — the rich sub-controls (hotkey
+// picker, intent provider, model selector, quick test, diagnostics) render
+// as `children` of `<LabsRow>` so the existing functionality is preserved.
+
+interface LabsEntry {
+  id: keyof BetaFeatureSettings;
+  stability: LabsStability;
+  titleKey: string;
+  descriptionKey: string;
+  defaultEnabled: boolean;
+}
+
+const LABS_REGISTRY: readonly LabsEntry[] = [
+  {
+    id: "voiceControl",
+    stability: "beta",
+    titleKey: "settings.labsVoice.title",
+    descriptionKey: "settings.labsVoice.description",
+    defaultEnabled: false,
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Per-feature `enabled` lookup. The canonical "is this experiment on?" flag
+// lives next to its sub-config inside `BetaFeatureSettings` — all current
+// shapes are `{ enabled: boolean, ... }` (see VoiceControlSettings) so we
+// can extract the bit uniformly. `defaultEnabled` covers the case where a
+// user hasn't yet stored a value for a freshly added experiment.
+// ---------------------------------------------------------------------------
+function getEntryEnabled(settings: AppSettings, entry: LabsEntry): boolean {
+  const sub = settings.betaFeatures[entry.id];
+  if (sub && typeof sub === "object" && "enabled" in sub && typeof sub.enabled === "boolean") {
+    return sub.enabled;
+  }
+  return entry.defaultEnabled;
+}
+
 /**
- * Labs settings section. Houses opt-in beta features. Currently exposes:
- *   - Voice Control · Beta master toggle
- *   - Push-to-talk hotkey picker (web/desktop)
- *   - Floating mic orb visibility (mobile)
+ * Labs settings section. Houses opt-in beta features and exposes a
+ * registry-driven row per experiment + a "Reset all labs to default" button.
  *
- * Adding a future beta? Wrap a new card in <SettingsSection> below the voice
- * card and gate it behind its own settings.betaFeatures.<feature> field.
+ * Currently the only experiment is Voice Control · Beta:
+ *   - Master toggle (rendered as `<LabsRow>` from `LABS_REGISTRY`)
+ *   - Push-to-talk hotkey picker (web/desktop) — rendered as `LabsRow` child
+ *   - Floating mic orb visibility (mobile) — rendered as `LabsRow` child
+ *   - Intent provider + routing-model selectors
+ *   - Quick test buttons + Diagnostics
+ *
+ * Adding a future beta? Append to `LABS_REGISTRY` (above), extend
+ * `BetaFeatureSettings` in `hooks/use-settings.ts`, and wire any rich
+ * sub-controls inside the matching `<LabsRow>` children block below.
  */
 export function LabsSection() {
   const { t } = useTranslation();
-  const { theme } = useUnistyles();
   const { settings, updateSettings } = useAppSettings();
   const voice = settings.betaFeatures.voiceControl;
 
@@ -115,115 +172,135 @@ export function LabsSection() {
     ? formatHotkeyLabel(voice.pushToTalkHotkey)
     : t("settings.labsVoice.hotkeyUnset", { defaultValue: "Not set" });
 
+  // Reset-all writes each registry entry's `defaultEnabled` back to its
+  // sub-config without losing other (non-`enabled`) fields. Stable items keep
+  // their shipped defaults — `defaultEnabled` is the author-set baseline.
+  const handleResetAll = useCallback(() => {
+    const nextBetaFeatures: BetaFeatureSettings = { ...settings.betaFeatures };
+    for (const entry of LABS_REGISTRY) {
+      const sub = nextBetaFeatures[entry.id];
+      if (sub && typeof sub === "object" && "enabled" in sub) {
+        // Preserve sub-config fields (hotkey, provider, etc.) — only the
+        // master `enabled` toggle resets. CONTEXT D-10 phrasing: "Reset all
+        // labs to default" maps to opt-in flags, not the per-experiment
+        // configuration.
+        nextBetaFeatures[entry.id] = { ...sub, enabled: entry.defaultEnabled } as never;
+      }
+    }
+    void updateSettings({ betaFeatures: nextBetaFeatures });
+  }, [settings.betaFeatures, updateSettings]);
+
+  const voiceEntry = LABS_REGISTRY[0];
+  const voiceEnabled = getEntryEnabled(settings, voiceEntry);
+  const handleVoiceToggle = useCallback(
+    (value: boolean) => handleEnableChange(value ? "on" : "off"),
+    [handleEnableChange],
+  );
+
   return (
     <SettingsSection title={t("settings.labs.title", { defaultValue: "Labs" })}>
       <View style={settingsStyles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderIcon}>
-            <Mic size={theme.iconSize.md} color={theme.colors.foreground} />
-          </View>
-          <View style={styles.cardHeaderText}>
-            <View style={styles.cardTitleRow}>
-              <Text style={styles.cardTitle}>
-                {t("settings.labsVoice.title", { defaultValue: "Voice Control" })}
-              </Text>
-              <View style={styles.betaPill}>
-                <Text style={styles.betaPillText}>BETA</Text>
+        {/*
+          Plan 02d / D-10: registry-driven LabsRow replaces the prior bespoke
+          mic-icon + BETA pill header card. The registry entry owns the
+          stability badge + master toggle; the rich Voice Control sub-controls
+          (hotkey picker, intent routing, model selector, quick test,
+          diagnostics) render as children of the LabsRow so existing
+          functionality is preserved verbatim (SET-01: nothing removed).
+        */}
+        <LabsRow
+          title={t(voiceEntry.titleKey, { defaultValue: "Voice Control" })}
+          description={t(voiceEntry.descriptionKey, {
+            defaultValue:
+              "Hold a hotkey to speak. Ottie parses your intent and runs commands across the app.",
+          })}
+          stability={voiceEntry.stability}
+          enabled={voiceEnabled}
+          onToggle={handleVoiceToggle}
+          testID={`labs-row-${voiceEntry.id}`}
+        >
+          {isWeb ? (
+            <View style={ROW_WITH_BORDER_STYLE}>
+              <View style={settingsStyles.rowContent}>
+                <Text style={settingsStyles.rowTitle}>
+                  {t("settings.labsVoice.hotkey", { defaultValue: "Push-to-talk hotkey" })}
+                </Text>
+                <Text style={settingsStyles.rowHint}>
+                  {t("settings.labsVoice.hotkeyHint", {
+                    defaultValue: "Hold this key combo to speak. Release to execute.",
+                  })}
+                </Text>
               </View>
+              <Pressable
+                accessibilityRole="button"
+                style={hotkeyChipStyle}
+                onPress={openPicker}
+                disabled={!voice.enabled}
+              >
+                <Text style={styles.hotkeyChipText}>{hotkeyLabel}</Text>
+              </Pressable>
             </View>
-            <Text style={settingsStyles.rowHint}>
-              {t("settings.labsVoice.description", {
-                defaultValue:
-                  "Hold a hotkey to speak. Ottie parses your intent and runs commands across the app.",
-              })}
-            </Text>
-          </View>
-        </View>
+          ) : null}
 
-        <View style={settingsStyles.row}>
-          <View style={settingsStyles.rowContent}>
-            <Text style={settingsStyles.rowTitle}>
-              {t("settings.labsVoice.enable", { defaultValue: "Enable voice control" })}
-            </Text>
-            <Text style={settingsStyles.rowHint}>
-              {t("settings.labsVoice.enableHint", {
-                defaultValue: "Master switch for the entire feature.",
-              })}
-            </Text>
-          </View>
-          <SegmentedControl
-            size="sm"
-            value={toToggleValue(voice.enabled)}
-            onValueChange={handleEnableChange}
-            options={ON_OFF_OPTIONS}
-          />
-        </View>
-
-        {isWeb ? (
-          <View style={ROW_WITH_BORDER_STYLE}>
-            <View style={settingsStyles.rowContent}>
-              <Text style={settingsStyles.rowTitle}>
-                {t("settings.labsVoice.hotkey", { defaultValue: "Push-to-talk hotkey" })}
-              </Text>
-              <Text style={settingsStyles.rowHint}>
-                {t("settings.labsVoice.hotkeyHint", {
-                  defaultValue: "Hold this key combo to speak. Release to execute.",
-                })}
-              </Text>
+          {!isWeb ? (
+            <View style={ROW_WITH_BORDER_STYLE}>
+              <View style={settingsStyles.rowContent}>
+                <Text style={settingsStyles.rowTitle}>
+                  {t("settings.labsVoice.floatingOrb", {
+                    defaultValue: "Floating mic orb",
+                  })}
+                </Text>
+                <Text style={settingsStyles.rowHint}>
+                  {t("settings.labsVoice.floatingOrbHint", {
+                    defaultValue:
+                      "Always-on draggable mic button. Long-press to talk, release to execute.",
+                  })}
+                </Text>
+              </View>
+              <SegmentedControl
+                size="sm"
+                value={toToggleValue(voice.showFloatingOrb)}
+                onValueChange={handleOrbChange}
+                options={ON_OFF_OPTIONS}
+              />
             </View>
-            <Pressable
-              accessibilityRole="button"
-              style={hotkeyChipStyle}
-              onPress={openPicker}
-              disabled={!voice.enabled}
-            >
-              <Text style={styles.hotkeyChipText}>{hotkeyLabel}</Text>
-            </Pressable>
-          </View>
-        ) : null}
+          ) : null}
 
-        {!isWeb ? (
-          <View style={ROW_WITH_BORDER_STYLE}>
-            <View style={settingsStyles.rowContent}>
-              <Text style={settingsStyles.rowTitle}>
-                {t("settings.labsVoice.floatingOrb", {
-                  defaultValue: "Floating mic orb",
-                })}
-              </Text>
-              <Text style={settingsStyles.rowHint}>
-                {t("settings.labsVoice.floatingOrbHint", {
-                  defaultValue:
-                    "Always-on draggable mic button. Long-press to talk, release to execute.",
-                })}
-              </Text>
-            </View>
-            <SegmentedControl
-              size="sm"
-              value={toToggleValue(voice.showFloatingOrb)}
-              onValueChange={handleOrbChange}
-              options={ON_OFF_OPTIONS}
-            />
-          </View>
-        ) : null}
-
-        <IntentProviderRow
-          provider={voice.intentProvider}
-          enabled={voice.enabled}
-          onChange={handleIntentProviderChange}
-        />
-
-        {voice.intentProvider !== "heuristic" ? (
-          <IntentModelRow
+          <IntentProviderRow
             provider={voice.intentProvider}
-            modelId={voice.intentModelId}
             enabled={voice.enabled}
-            onChange={handleIntentModelChange}
+            onChange={handleIntentProviderChange}
           />
-        ) : null}
 
-        <QuickTestRow enabled={voice.enabled} />
-        <DiagnosticsRow />
+          {voice.intentProvider !== "heuristic" ? (
+            <IntentModelRow
+              provider={voice.intentProvider}
+              modelId={voice.intentModelId}
+              enabled={voice.enabled}
+              onChange={handleIntentModelChange}
+            />
+          ) : null}
+
+          <QuickTestRow enabled={voice.enabled} />
+          <DiagnosticsRow />
+        </LabsRow>
       </View>
+
+      {/*
+        Plan 02d / D-10 — bottom "Reset all labs to default" button. Tapping
+        rewrites every registry entry's `enabled` flag back to its
+        author-set `defaultEnabled` baseline. Sub-config (e.g. hotkey
+        bindings) is intentionally preserved.
+      */}
+      <Pressable
+        testID="labs-reset-all"
+        accessibilityRole="button"
+        accessibilityLabel={t("settings.labs.resetAll")}
+        onPress={handleResetAll}
+        style={resetButtonPressableStyle}
+      >
+        <Text style={styles.resetLabel}>{t("settings.labs.resetAll")}</Text>
+      </Pressable>
 
       {isPickerOpen ? (
         <HotkeyPickerModal
@@ -235,6 +312,10 @@ export function LabsSection() {
       ) : null}
     </SettingsSection>
   );
+}
+
+function resetButtonPressableStyle({ pressed }: { pressed: boolean }) {
+  return [styles.resetButton, pressed && styles.resetButtonPressed];
 }
 
 // Stable composite style — labs section reuses the same shared row+border
@@ -715,46 +796,22 @@ function HotkeyPickerModal({ currentHotkey, onSelect, onClear, onCancel }: Hotke
 }
 
 const styles = StyleSheet.create((theme) => ({
-  cardHeader: {
-    flexDirection: "row",
-    gap: theme.spacing[3],
-    paddingVertical: theme.spacing[4],
+  // Plan 02d / D-10: bottom "Reset all labs to default" button. The
+  // destructive-tone foreground signals the rewrite is non-trivial without
+  // implying it's irreversible (sub-config like hotkeys is preserved).
+  resetButton: {
+    paddingVertical: theme.spacing[3],
     paddingHorizontal: theme.spacing[4],
-  },
-  cardHeaderIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.surface2,
     alignItems: "center",
-    justifyContent: "center",
+    marginTop: theme.spacing[6],
   },
-  cardHeaderText: {
-    flex: 1,
-    minWidth: 0,
+  resetButtonPressed: {
+    opacity: 0.6,
   },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    marginBottom: 2,
-  },
-  cardTitle: {
-    color: theme.colors.foreground,
+  resetLabel: {
     fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.semibold,
-  },
-  betaPill: {
-    paddingHorizontal: theme.spacing[2],
-    paddingVertical: 2,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.accent,
-  },
-  betaPillText: {
-    color: theme.colors.accentForeground,
-    fontSize: 10,
-    fontWeight: theme.fontWeight.bold,
-    letterSpacing: 0.5,
+    fontWeight: theme.fontWeight.normal,
+    color: theme.colors.destructive,
   },
   hotkeyChip: {
     paddingHorizontal: theme.spacing[3],
