@@ -20,12 +20,12 @@ import {
   type WorkspaceSetupSnapshot,
   type WSHelloMessage,
   type WSInboundMessage,
-  WSInboundMessageSchema,
   type ServerCapabilityState,
   type ServerCapabilities,
   type WSOutboundMessage,
   wrapSessionMessage,
 } from "./messages.js";
+import { parseInboundMessage } from "./session/parse.js";
 import { asUint8Array, decodeTerminalStreamFrame } from "../shared/terminal-stream-protocol.js";
 import type { HostnamesConfig } from "./hostnames.js";
 import { isHostnameAllowed } from "./hostnames.js";
@@ -1347,12 +1347,12 @@ export class VoiceAssistantWebSocketServer {
       }
 
       const parsed = JSON.parse(buffer.toString());
-      const parsedMessage = WSInboundMessageSchema.safeParse(parsed);
-      if (!parsedMessage.success) {
+      const parseResult = parseInboundMessage(parsed);
+      if (!parseResult.ok) {
         this.handleInvalidInboundMessage({
           ws,
           parsed,
-          parsedMessage,
+          parsedMessage: { success: false, error: parseResult.error },
           pendingConnection,
           activeConnection,
           log,
@@ -1360,7 +1360,7 @@ export class VoiceAssistantWebSocketServer {
         return;
       }
 
-      const message = parsedMessage.data;
+      const message = parseResult.message;
       this.recordInboundMessageType(message.type);
 
       if (message.type === "ping") {
