@@ -49,7 +49,7 @@ Plans:
 ### Phase 2: Onboarding, Navigation, Settings, Theme & Native-Feel Polish
 
 **Goal**: Sweep the user-visible polish in one coherent pass on top of the seams that now exist. Onboarding feels obvious, navigation has one model across mobile and desktop, settings reorganize around user intent, every glass surface uses the same primitive, and native-feel interactions (haptics, voice/keyboard/long-press parity, smoothed AI text) are consistent across the app.
-**Depends on**: Phase 2 (needs optimistic UI patterns proven; needs voice handler carved before voice parity refactor; needs theme token skeleton stable before surface migration)
+**Depends on**: Phase 1 (theme token skeleton landed; optimistic UI / voice handler carve out of milestone scope)
 **Requirements**: ONB-01, ONB-02, ONB-03, ONB-04, NAV-A1, NAV-A2, NAV-A5, SET-01, SET-03, SET-04, THM-02, THM-03, THM-04, NAT-01, NAT-02, NAT-04
 **Success Criteria** (what must be TRUE):
 
