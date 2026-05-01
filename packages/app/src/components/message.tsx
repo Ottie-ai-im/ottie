@@ -2430,6 +2430,7 @@ const ExpandableBadge = memo(function ExpandableBadge({
 }: ExpandableBadgeProps) {
   const { theme } = useUnistyles();
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
+  const isCompact = useIsCompactFormFactor();
   const [isHovered, setIsHovered] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const isInteractive = Boolean(onToggle);
@@ -2598,7 +2599,11 @@ const ExpandableBadge = memo(function ExpandableBadge({
     [isExpanded, isInteractive],
   );
 
-  const isActive = isHovered || isExpanded;
+  // NAV-A3 / CONCERNS H13: chevron must be visible on iOS, Android, and web
+  // compact form factor — hover doesn't fire on native (CLAUDE.md "Hover only
+  // works on web"). Combine isHovered with isNative + isCompact so the
+  // affordance is always shown on those platforms.
+  const isActive = isHovered || isExpanded || isNative || isCompact;
 
   const labelStyle = useMemo(
     () => [
@@ -2688,7 +2693,7 @@ const ExpandableBadge = memo(function ExpandableBadge({
             onLabelLayout={handleLabelLayout}
             onSecondaryLayout={handleSecondaryLayout}
           />
-          {isInteractive && isHovered ? (
+          {isInteractive && (isHovered || isNative || isCompact) ? (
             <ChevronRight size={14} color={theme.colors.foreground} style={chevronStyle} />
           ) : null}
         </View>

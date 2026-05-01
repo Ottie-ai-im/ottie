@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { View, type PointerEvent as RNPointerEvent } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { isWeb } from "@/constants/platform";
+
 export interface ResizeHandleProps {
   direction: "horizontal" | "vertical";
   groupId: string;
@@ -143,8 +145,12 @@ export function ResizeHandle({
         aria-orientation={direction === "horizontal" ? "vertical" : "horizontal"}
         style={hitAreaStyle}
         onPointerDown={handlePointerDown}
-        onPointerEnter={handlePointerEnter}
-        onPointerLeave={handlePointerLeave}
+        // NAT-03 / CONCERNS C12: onPointerEnter/onPointerLeave do NOT fire on
+        // native iOS (CLAUDE.md "NEVER use onPointerEnter/onPointerLeave").
+        // Gate to web only — onPointerDown is the native-safe gesture entry
+        // and remains ungated. Same shape as toast-host.tsx:257-258.
+        onPointerEnter={isWeb ? handlePointerEnter : undefined}
+        onPointerLeave={isWeb ? handlePointerLeave : undefined}
       />
     </View>
   );

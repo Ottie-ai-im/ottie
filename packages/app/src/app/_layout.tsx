@@ -426,7 +426,7 @@ const flexStyle = { flex: 1 } as const;
 interface AppContainerProps {
   children: ReactNode;
   selectedAgentId?: string;
-  chromeEnabled?: boolean;
+  chromeLayoutEnabled?: boolean;
 }
 
 const THEME_CYCLE_ORDER: ThemeName[] = ["dark", "zinc", "midnight", "claude", "ghostty", "light"];
@@ -434,7 +434,7 @@ const THEME_CYCLE_ORDER: ThemeName[] = ["dark", "zinc", "midnight", "claude", "g
 function AppContainer({
   children,
   selectedAgentId,
-  chromeEnabled: chromeEnabledOverride,
+  chromeLayoutEnabled: chromeLayoutEnabledOverride,
 }: AppContainerProps) {
   const { theme } = useUnistyles();
   const daemons = useHosts();
@@ -454,7 +454,7 @@ function AppContainer({
   }, [settings.theme, updateSettings]);
 
   const isCompactLayout = useIsCompactFormFactor();
-  const chromeEnabled = chromeEnabledOverride ?? daemons.length > 0;
+  const chromeLayoutEnabled = chromeLayoutEnabledOverride ?? daemons.length > 0;
   const pathname = usePathname();
   const activeServerId = useMemo(
     () => resolveActiveHost({ hosts: daemons, pathname })?.serverId ?? null,
@@ -476,11 +476,10 @@ function AppContainer({
         }),
     });
   }, [closeDesktopAgentList, closeDesktopFileExplorer, openDesktopAgentList]);
-  // TODO: stop matching pathname here as a branch. `chromeEnabled` should not
-  // conflate workspace/project-specific chrome (sidebar, mobile gesture) with
-  // global concerns like keyboard shortcuts. Split those out so settings (and
-  // other non-workspace routes) don't need a special-case to keep shortcuts alive.
-  const keyboardShortcutsEnabled = chromeEnabled || pathname.startsWith("/settings");
+  // chromeLayoutEnabled gates rendered chrome (sidebars, mobile gesture).
+  // keyboardShortcutsEnabled is its own derivation that ALSO enables shortcuts
+  // on /settings — split per SET-02 / CONCERNS C11.
+  const keyboardShortcutsEnabled = chromeLayoutEnabled || pathname.startsWith("/settings");
 
   useKeyboardShortcuts({
     enabled: keyboardShortcutsEnabled,
@@ -501,13 +500,13 @@ function AppContainer({
   const content = (
     <View style={containerStyle}>
       <View style={rowStyle}>
-        {!isCompactLayout && chromeEnabled && !isFocusModeEnabled && <DesktopNavRail />}
-        {!isCompactLayout && chromeEnabled && !isFocusModeEnabled && (
+        {!isCompactLayout && chromeLayoutEnabled && !isFocusModeEnabled && <DesktopNavRail />}
+        {!isCompactLayout && chromeLayoutEnabled && !isFocusModeEnabled && (
           <LeftSidebar selectedAgentId={selectedAgentId} />
         )}
         <View style={flexStyle}>{children}</View>
       </View>
-      {isCompactLayout && chromeEnabled && <LeftSidebar selectedAgentId={selectedAgentId} />}
+      {isCompactLayout && chromeLayoutEnabled && <LeftSidebar selectedAgentId={selectedAgentId} />}
       <DownloadToast />
       <UpdateCalloutSource />
       <DaemonVersionMismatchCalloutSource />
@@ -535,15 +534,17 @@ function AppContainer({
     return content;
   }
 
-  return <MobileGestureWrapper chromeEnabled={chromeEnabled}>{content}</MobileGestureWrapper>;
+  return (
+    <MobileGestureWrapper chromeLayoutEnabled={chromeLayoutEnabled}>{content}</MobileGestureWrapper>
+  );
 }
 
 function MobileGestureWrapper({
   children,
-  chromeEnabled,
+  chromeLayoutEnabled,
 }: {
   children: ReactNode;
-  chromeEnabled: boolean;
+  chromeLayoutEnabled: boolean;
 }) {
   const mobileView = usePanelStore((state) => state.mobileView);
   const showMobileAgentList = usePanelStore((state) => state.showMobileAgentList);
@@ -559,7 +560,7 @@ function MobileGestureWrapper({
     openGestureRef,
   } = useSidebarAnimation();
   const touchStartX = useSharedValue(0);
-  const openGestureEnabled = chromeEnabled && mobileView === "agent";
+  const openGestureEnabled = chromeLayoutEnabled && mobileView === "agent";
 
   const handleGestureOpen = useCallback(() => {
     gestureAnimatingRef.current = true;
@@ -851,7 +852,7 @@ function AppWithSidebar({ children }: { children: ReactNode }) {
   return (
     <AppContainer
       selectedAgentId={shouldShowAppChrome ? selectedAgentKey : undefined}
-      chromeEnabled={shouldShowAppChrome}
+      chromeLayoutEnabled={shouldShowAppChrome}
     >
       {children}
     </AppContainer>

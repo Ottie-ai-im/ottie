@@ -1,5 +1,7 @@
 import type { ChildProcess } from "node:child_process";
+import { promises as fsPromises } from "node:fs";
 import { homedir } from "node:os";
+import path from "node:path";
 import {
   createOpencodeClient,
   type AssistantMessage as OpenCodeAssistantMessage,
@@ -1169,10 +1171,28 @@ export class OpenCodeAgentClient implements AgentClient {
   }
 
   async listPersistedAgents(
-    _options?: ListPersistedAgentsOptions,
+    options?: ListPersistedAgentsOptions,
   ): Promise<PersistedAgentDescriptor[]> {
-    // TODO: Implement by listing sessions from OpenCode
-    return [];
+    // SES-02 / CONCERNS H4 — mirror claude-agent.ts:1190-1206 pipeline.
+    // OpenCode sessions live under <dataDir>/storage/session/ where:
+    //   - <dataDir>/storage/session/info/<sessionId>.json holds session info
+    //   - <dataDir>/storage/session/message/<sessionId>/*.json holds messages
+    // The data dir defaults to ${XDG_DATA_HOME ?? ~/.local/share}/opencode,
+    // overridable via OPENCODE_HOME or OTTIE_OPENCODE_HOME (test seam).
+    const sessionsRoot = resolveOpenCodeSessionsRoot();
+    if (!(await pathExists(sessionsRoot))) {
+      return [];
+    }
+    const limit = options?.limit ?? 20;
+    const candidates = await collectRecentOpenCodeSessions(sessionsRoot, limit * 3);
+    const parsed = await Promise.all(
+      candidates.map((candidate) =>
+        parseOpenCodeSessionDescriptor(candidate.path, candidate.mtime, this.logger),
+      ),
+    );
+    return parsed
+      .filter((descriptor): descriptor is PersistedAgentDescriptor => descriptor !== null)
+      .slice(0, limit);
   }
 
   async isAvailable(): Promise<boolean> {
@@ -2637,3 +2657,166 @@ class OpenCodeAgentSession implements AgentSession {
     return this.modelContextWindowsByModelKey.get(modelLookupKey);
   }
 }
+
+// ---------------------------------------------------------------------------
+// SES-02 / CONCERNS H4 — listPersistedAgents implementation helpers.
+//
+// Mirror claude-agent.ts:4346-4503 organization (file-local helpers at the
+// bottom). OpenCode persists session info as JSON files on disk; the
+// pipeline is: resolve sessions root → pathExists → collect recent
+// candidates → parse each → filter nulls → slice(limit).
+// ---------------------------------------------------------------------------
+
+interface OpenCodeSessionCandidate {
+  path: string;
+  mtime: Date;
+}
+
+/**
+ * OpenCode session info file shape (the relevant subset).
+ *
+ * The OpenCode CLI writes sessions to
+ *   <dataDir>/storage/session/info/<sessionId>.json
+ * and messages to
+ *   <dataDir>/storage/session/message/<sessionId>/<messageId>.json
+ *
+ * We only need the info file for the descriptor; the title and cwd are
+ * authoritative there. Messages are read on-demand for resume.
+ */
+interface OpenCodeSessionInfoFile {
+  id?: unknown;
+  title?: unknown;
+  directory?: unknown;
+  // OpenCode v2 nests cwd under projectID / directory keys; accept both.
+  projectID?: unknown;
+  time?: { created?: unknown; updated?: unknown };
+}
+
+/**
+ * Resolve the OpenCode sessions/info directory.
+ *
+ * Order of precedence:
+ *   1. OTTIE_OPENCODE_HOME (test seam — the test injects a temp dir here)
+ *   2. OPENCODE_HOME (matches the upstream OpenCode env-var convention)
+ *   3. ${XDG_DATA_HOME ?? ~/.local/share}/opencode (XDG default)
+ *
+ * The returned path points at the `info/` directory directly, mirroring
+ * Claude's `${configDir}/projects` shape so the rest of the pipeline can
+ * read JSON files at the leaf.
+ */
+function resolveOpenCodeSessionsRoot(env: NodeJS.ProcessEnv = process.env): string {
+  const ottieOverride = env.OTTIE_OPENCODE_HOME;
+  if (typeof ottieOverride === "string" && ottieOverride.length > 0) {
+    return path.join(ottieOverride, "storage", "session", "info");
+  }
+  const opencodeHome = env.OPENCODE_HOME;
+  if (typeof opencodeHome === "string" && opencodeHome.length > 0) {
+    return path.join(opencodeHome, "storage", "session", "info");
+  }
+  const xdgDataHome = env.XDG_DATA_HOME;
+  const dataHome =
+    typeof xdgDataHome === "string" && xdgDataHome.length > 0
+      ? xdgDataHome
+      : path.join(homedir(), ".local", "share");
+  return path.join(dataHome, "opencode", "storage", "session", "info");
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await fsPromises.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function collectRecentOpenCodeSessions(
+  root: string,
+  limit: number,
+): Promise<OpenCodeSessionCandidate[]> {
+  let entries: string[];
+  try {
+    entries = await fsPromises.readdir(root);
+  } catch {
+    return [];
+  }
+  const jsonFiles = entries.filter((name) => name.endsWith(".json"));
+  const statResults = await Promise.all(
+    jsonFiles.map(async (name) => {
+      const fullPath = path.join(root, name);
+      try {
+        const fileStats = await fsPromises.stat(fullPath);
+        if (!fileStats.isFile()) return null;
+        return { path: fullPath, mtime: fileStats.mtime };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const candidates: OpenCodeSessionCandidate[] = statResults.filter(
+    (entry): entry is OpenCodeSessionCandidate => entry !== null,
+  );
+  return candidates.sort((a, b) => b.mtime.getTime() - a.mtime.getTime()).slice(0, limit);
+}
+
+async function parseOpenCodeSessionDescriptor(
+  filePath: string,
+  mtime: Date,
+  logger: Logger,
+): Promise<PersistedAgentDescriptor | null> {
+  let content: string;
+  try {
+    content = await fsPromises.readFile(filePath, "utf8");
+  } catch {
+    return null;
+  }
+  let parsed: OpenCodeSessionInfoFile;
+  try {
+    parsed = JSON.parse(content) as OpenCodeSessionInfoFile;
+  } catch (err) {
+    // Per PITFALLS Integration Gotchas — log and skip malformed JSON,
+    // do NOT throw out of listPersistedAgents.
+    logger.debug({ path: filePath, err }, "Skipping malformed OpenCode session info file");
+    return null;
+  }
+  const sessionId = typeof parsed.id === "string" ? parsed.id : null;
+  let cwd: string | null = null;
+  if (typeof parsed.directory === "string") {
+    cwd = parsed.directory;
+  } else if (typeof parsed.projectID === "string") {
+    cwd = parsed.projectID;
+  }
+  if (!sessionId || !cwd) {
+    return null;
+  }
+  const rawTitle = typeof parsed.title === "string" ? parsed.title.trim() : "";
+  const title = rawTitle || `OpenCode session ${sessionId.slice(0, 8)}`;
+
+  const persistence: AgentPersistenceHandle = {
+    provider: "opencode",
+    sessionId,
+    nativeHandle: sessionId,
+    metadata: {
+      provider: "opencode",
+      cwd,
+    },
+  };
+
+  return {
+    provider: "opencode",
+    sessionId,
+    cwd,
+    title,
+    lastActivityAt: mtime,
+    persistence,
+    timeline: [],
+  };
+}
+
+// Test seam — exported for opencode-agent.list-persisted.test.ts so the
+// test can substitute a temp dir without going through the env var.
+export const __testing = {
+  resolveOpenCodeSessionsRoot,
+  collectRecentOpenCodeSessions,
+  parseOpenCodeSessionDescriptor,
+};
