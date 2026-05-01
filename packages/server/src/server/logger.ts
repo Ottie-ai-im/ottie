@@ -285,7 +285,18 @@ export function createRootLogger(
   });
 
   return pino(
-    { level: config.level },
+    {
+      level: config.level,
+      // ARCH-03 (T-05-03): redact bearer tokens and the OTTIE_LOCAL_TOKEN env
+      // value from log output. Wildcards cover any nested `headers.authorization`,
+      // `*.authorization`, `*.token` field that might appear in `req.headers`,
+      // structured error payloads, or env-snapshot helpers. The censor string
+      // makes accidental leaks visible in code review (`[REDACTED]`).
+      redact: {
+        paths: ["headers.authorization", "*.authorization", "*.token", "*.OTTIE_LOCAL_TOKEN"],
+        censor: "[REDACTED]",
+      },
+    },
     pino.multistream([
       { level: config.console.level, stream: consoleStream },
       { level: config.file.level, stream: fileStream },

@@ -52,6 +52,7 @@ import {
   findLatestPermissionRequest,
 } from "../shared/agent-attention-notification.js";
 import { createGitHubService, type GitHubService } from "../services/github-service.js";
+import { type LocalTokenMode, verifyBearerToken } from "./auth/local-token.js";
 
 export interface ExternalSocketMetadata {
   transport: "relay";
@@ -268,6 +269,7 @@ interface WebSocketRuntimeCounters {
   relayExternalSocketAttached: number;
   originRejected: number;
   hostRejected: number;
+  authRejected: number;
 }
 
 const SLOW_REQUEST_THRESHOLD_MS = 500;
@@ -360,6 +362,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly pushTokenStore: PushTokenStore;
   private readonly pushService: PushService;
   private readonly mcpBaseUrl: string | null;
+  private readonly localTokenMode: LocalTokenMode;
   private speech!: SpeechService | null;
   private terminalManager!: TerminalManager | null;
   private scriptRouteStore!: ScriptRouteStore | null;
@@ -399,6 +402,7 @@ export class VoiceAssistantWebSocketServer {
     relayExternalSocketAttached: 0,
     originRejected: 0,
     hostRejected: 0,
+    authRejected: 0,
   };
   private readonly inboundMessageCounts = new Map<string, number>();
   private readonly inboundSessionRequestCounts = new Map<string, number>();
@@ -453,6 +457,7 @@ export class VoiceAssistantWebSocketServer {
     workspaceGitService?: WorkspaceGitService,
     github?: GitHubService,
     chatSubscriptionManager?: ChatSubscriptionManager,
+    localTokenMode: LocalTokenMode = { kind: "loopback-trust" },
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.serverId = serverId;
@@ -482,6 +487,7 @@ export class VoiceAssistantWebSocketServer {
     this.ottieHome = ottieHome;
     this.daemonConfigStore = daemonConfigStore;
     this.mcpBaseUrl = mcpBaseUrl;
+    this.localTokenMode = localTokenMode;
     this.assignOptionalServices({
       speech,
       terminalManager,
@@ -600,6 +606,29 @@ export class VoiceAssistantWebSocketServer {
     const requestMetadata = extractSocketRequestMetadata(req);
     const origin = requestMetadata.origin;
     const requestHost = requestMetadata.host ?? null;
+
+    // ARCH-03: bearer-token gate. Mode A short-circuits accept (preserves the
+    // existing `npm run dev` behavior — no token configured, no gate). Mode B/C
+    // require `Authorization: Bearer <token>` with constant-time compare; failure
+    // returns HTTP 401 + WWW-Authenticate per D-14 (the user-facing copy lives
+    // client-side; the daemon's job is the structured 401).
+    if (this.localTokenMode.kind !== "loopback-trust") {
+      const authHeader = req.headers["authorization"];
+      const provided =
+        typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+          ? authHeader.slice("Bearer ".length).trim()
+          : undefined;
+      if (!verifyBearerToken(provided, this.localTokenMode)) {
+        this.incrementRuntimeCounter("authRejected");
+        this.logger.warn(
+          { ...requestMetadata },
+          "Rejected connection — missing or invalid local token",
+        );
+        callback(false, 401, 'Bearer realm="ottie-local"');
+        return;
+      }
+    }
+
     if (requestHost && !isHostnameAllowed(requestHost, hostnames)) {
       this.incrementRuntimeCounter("hostRejected");
       this.logger.warn(
