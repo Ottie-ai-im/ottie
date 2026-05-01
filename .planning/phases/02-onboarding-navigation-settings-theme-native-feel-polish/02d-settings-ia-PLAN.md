@@ -395,7 +395,9 @@ export const actionRegistry: { register; dispatch; ... };
     packages/app/src/components/settings/row.tsx,
     packages/app/src/components/settings/labs-row.tsx,
     packages/app/src/components/settings/labs-badge.tsx,
-    packages/app/src/screens/settings-screen.tsx
+    packages/app/src/screens/settings-screen.tsx,
+    packages/app/src/i18n/locales/en.json,
+    packages/app/src/i18n/locales/zh.json
   </files>
   <read_first>
     - packages/app/src/screens/settings/settings-section.tsx (analog: header + content shape, lines 1-51; PATTERNS lines 442-475)
@@ -477,12 +479,47 @@ export const actionRegistry: { register; dispatch; ... };
     }));
     ```
 
-    NOTE on row labels: many of the `t("settings.account.profile")` etc. keys may not exist yet. For each row label that doesn't have an existing key:
+    Step 1b — Add the en+zh settings-row label keys IN THIS TASK ACTION (closes checker W3 — do NOT defer to executor). Append to `packages/app/src/i18n/locales/en.json`:
 
-    1. Add `settings.{bucket}.{slug}` key to en.json + zh.json (planner discretion per UI-SPEC line 252-254 — "Per-row copy under each group is planner discretion")
-    2. Reuse existing keys where they already exist (search en.json first)
+    ```json
+    "settings.account.profile": "Profile",
+    "settings.account.identity": "Identity",
+    "settings.agents.integrations": "Integrations",
+    "settings.agents.permissions": "Permissions",
+    "settings.voice.stt": "Speech-to-text",
+    "settings.voice.tts": "Text-to-speech",
+    "settings.appearance.theme": "Theme",
+    "settings.appearance.language": "Language",
+    "settings.appearance.general": "General",
+    "settings.appearance.shortcuts": "Keyboard shortcuts",
+    "settings.advanced.localDaemon": "Local daemon",
+    "settings.advanced.diagnostics": "Diagnostics",
+    "settings.advanced.usage": "Usage",
+    "settings.advanced.about": "About",
+    "settings.labs.title": "Labs"
+    ```
 
-    The minimum constraint per CLAUDE.md: bilingual parity. Do NOT ship a row whose label key is missing in zh.json.
+    Append the matching zh.json entries (CLAUDE.md hard rule — bilingual parity in the SAME task):
+
+    ```json
+    "settings.account.profile": "个人资料",
+    "settings.account.identity": "身份",
+    "settings.agents.integrations": "集成",
+    "settings.agents.permissions": "权限",
+    "settings.voice.stt": "语音识别",
+    "settings.voice.tts": "语音合成",
+    "settings.appearance.theme": "主题",
+    "settings.appearance.language": "语言",
+    "settings.appearance.general": "通用",
+    "settings.appearance.shortcuts": "快捷键",
+    "settings.advanced.localDaemon": "本地 daemon",
+    "settings.advanced.diagnostics": "诊断",
+    "settings.advanced.usage": "用量",
+    "settings.advanced.about": "关于",
+    "settings.labs.title": "Labs"
+    ```
+
+    If any of these keys are ALREADY present (e.g. legacy from Phase 1), do NOT duplicate — reuse the existing key. Search both files first via `grep -n "settings.account.profile" packages/app/src/i18n/locales/en.json` etc. Only add the missing ones. Bilingual parity is non-negotiable: every key landing in en.json MUST have a parallel value in zh.json before this task is considered complete.
 
     Step 2 — Create `packages/app/src/components/settings/group.tsx` (copy from settings-section.tsx analog with refined typography per UI-SPEC line 94 — group header is `theme.fontSize.sm` + `weight.semibold` + `theme.text.primary`):
 
@@ -716,6 +753,12 @@ export const actionRegistry: { register; dispatch; ... };
       grep -q "SETTINGS_BUCKETS\\|settings.section.account" packages/app/src/components/settings/flat-list.tsx && \
       grep -q "SettingsGroup" packages/app/src/components/settings/group.tsx && \
       grep -q "fontWeight: theme.fontWeight.semibold" packages/app/src/components/settings/group.tsx && \
+      grep -q "settings.account.profile" packages/app/src/i18n/locales/en.json && \
+      grep -q "settings.account.profile" packages/app/src/i18n/locales/zh.json && \
+      grep -q "settings.appearance.theme" packages/app/src/i18n/locales/zh.json && \
+      grep -q "settings.advanced.localDaemon" packages/app/src/i18n/locales/zh.json && \
+      grep -q "个人资料" packages/app/src/i18n/locales/zh.json && \
+      grep -q "本地 daemon" packages/app/src/i18n/locales/zh.json && \
       grep -q "ChevronRight" packages/app/src/components/settings/row.tsx && \
       grep -q "buildSettingsBucketRoute\\|router.push" packages/app/src/components/settings/row.tsx && \
       grep -q "experimental\\|beta\\|stable" packages/app/src/components/settings/labs-badge.tsx && \
@@ -738,6 +781,7 @@ export const actionRegistry: { register; dispatch; ... };
     - `grep -c "borderWidth: 1" packages/app/src/components/settings/labs-badge.tsx` returns ≥1 (Beta outline variant)
     - `grep -c "SegmentedControl" packages/app/src/components/settings/labs-row.tsx` returns ≥1
     - `grep -c "SettingsFlatList" packages/app/src/screens/settings-screen.tsx` returns ≥1
+    - All 15 settings-row label keys present in EN AND ZH (W3 — bilingual parity inline): `for k in settings.account.profile settings.account.identity settings.agents.integrations settings.agents.permissions settings.voice.stt settings.voice.tts settings.appearance.theme settings.appearance.language settings.appearance.general settings.appearance.shortcuts settings.advanced.localDaemon settings.advanced.diagnostics settings.advanced.usage settings.advanced.about settings.labs.title; do grep -q "$k" packages/app/src/i18n/locales/en.json && grep -q "$k" packages/app/src/i18n/locales/zh.json || echo "MISS: $k"; done` returns no MISS lines
     - `npm run typecheck` exits 0
     - Lint passes for all 6 files
   </acceptance_criteria>

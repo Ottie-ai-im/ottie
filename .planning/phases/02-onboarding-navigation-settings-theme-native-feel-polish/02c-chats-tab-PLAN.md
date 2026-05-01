@@ -20,6 +20,10 @@ files_modified:
   - packages/app/src/screens/sessions-screen.tsx
   - packages/app/src/components/sidebar-workspace-list.tsx
   - packages/app/src/actions/chat-row-actions.ts
+  # NAV-A2 sidebar auto-collapse on compact (B2 — closes checker)
+  - packages/app/src/app/_layout.tsx
+  - packages/app/src/stores/panel-store.ts
+  - packages/app/src/stores/panel-store.test.ts
   - packages/app/src/i18n/locales/en.json
   - packages/app/src/i18n/locales/zh.json
 autonomous: true
@@ -29,12 +33,13 @@ must_haves:
   truths:
     - "Chats list renders <ChatRow> items with unread/muted/pinned state via token-driven theme variants"
     - "Long-press on mobile / right-click on web opens an 8-item context menu; each item dispatches via actionRegistry"
-    - "Swipe-left on native reveals 3 quick actions (mark-read / mute / delete); 90px = light haptic, 120px = heavy haptic, release past threshold = immediate delete + undo toast"
+    - "Swipe-left on native reveals 3 quick actions (mark-read / mute / delete); reanimated useAnimatedReaction observes dragX.value and fires light haptic at SWIPE_LIGHT_THRESHOLD=90px and heavy haptic at SWIPE_HEAVY_THRESHOLD=120px (B5 — exact-literal constants); release past threshold = immediate delete + undo toast"
     - "Web hover quick-actions render via isHovered || isCompact pattern (no isHovered alone)"
     - "Top-right + menu has 4 items (newChat / scanToPair / joinHost / createWorkspace) all dispatching via actionRegistry"
     - "Cold-open splash mounts <TotalUnreadPopup> for 1.5s when total unread > 0; module-flag prevents re-fire on subsequent route changes"
     - "Workspace tap in sidebar = immediate switch (D-07 — no two-tap workspace-then-confirm)"
     - "Pin/mute/unread state is client-only (Zustand+AsyncStorage) per CONTEXT Q1 — NO daemon schema change in this plan"
+    - "Sidebar overlay auto-collapses when form factor flips to compact (NAV-A2): _layout.tsx wires useIsCompactFormFactor() effect that calls panel-store.collapseOverlayOnCompact() (B2 — closes checker)"
   artifacts:
     - path: "packages/app/src/stores/chat-row-state-store.ts"
       provides: "Per-agent client-only pin/mute/unread/archived state, AsyncStorage-persisted"
@@ -78,6 +83,10 @@ must_haves:
       to: "packages/app/src/hooks/use-haptic.ts"
       via: "Replaces 3 inline Haptics.* call sites with useHaptic().fire(...)"
       pattern: "useHaptic"
+    - from: "packages/app/src/app/_layout.tsx"
+      to: "packages/app/src/stores/panel-store.ts"
+      via: "useEffect on useIsCompactFormFactor() flip → panel-store.collapseOverlayOnCompact() (NAV-A2 / B2)"
+      pattern: "collapseOverlayOnCompact"
 ---
 
 <objective>
@@ -698,20 +707,21 @@ export function prepareWorkspaceTab(...): void;
 
     Mirror Web variant but render the items list inside a `<BottomSheetScrollView>` from `@gorhom/bottom-sheet`, hosted by `<IsolatedBottomSheetModal>` per PATTERNS lines 322-344. Same item array, same handleSelect dispatching via actionRegistry. Anchor not used on native — modal slides up.
 
-    Step 4 — Create `packages/app/src/components/chat-row-swipe-actions.tsx`:
+    Step 4 — Create `packages/app/src/components/chat-row-swipe-actions.tsx` using a **reanimated-driven `useAnimatedReaction` approach (closes checker B5)**. The previous `onSwipeableWillOpen` strategy could not deliver the 90px / 120px split because gesture-handler's `Swipeable` callbacks do not expose drag-pixel offsets. Reanimated DOES expose them via `Swipeable.renderRightActions(progress, dragX)`, where `dragX` is a `SharedValue<number>` (negative on left-swipe). We observe `dragX.value` via `useAnimatedReaction` and fire haptics through `runOnJS`.
 
     ```typescript
     import { Pressable, Text, View } from "react-native";
     import { Swipeable } from "react-native-gesture-handler";
-    import { useRef } from "react";
+    import Animated, { useAnimatedReaction, useSharedValue, runOnJS } from "react-native-reanimated";
     import { useTranslation } from "react-i18next";
     import { StyleSheet, useUnistyles } from "react-native-unistyles";
     import { useHaptic } from "@/hooks/use-haptic";
     import { actionRegistry } from "@/actions/registry";
     import { useAppSettings } from "@/hooks/use-settings";
 
-    const HAPTIC_WARN_PX = 90;
-    const COMMIT_THRESHOLD_PX = 120;
+    // UI-SPEC line 60 — exact-literal threshold constants (B5 verify gates require these strings)
+    const SWIPE_LIGHT_THRESHOLD = 90;
+    const SWIPE_HEAVY_THRESHOLD = 120;
 
     export interface ChatRowSwipeActionsProps {
       serverId: string;
@@ -724,12 +734,39 @@ export function prepareWorkspaceTab(...): void;
       const { t } = useTranslation();
       const { theme } = useUnistyles();
       const { settings } = useAppSettings();
-      const haptic = useHaptic({ enabled: settings.haptics?.enabled ?? true, isLowPowerMode: false });
-      const firedLightRef = useRef(false);
-      const firedHeavyRef = useRef(false);
+      const haptic = useHaptic({ enabled: settings.haptics?.enabled ?? true });
+      // Per-gesture debounce flags on the UI thread; reset when finger returns near origin.
+      const firedLight = useSharedValue(false);
+      const firedHeavy = useSharedValue(false);
 
-      const renderRightActions = (_progress, dragX) => {
-        // dragX is animated; the haptic firing happens via onSwipeableWillOpen + onSwipeableOpen
+      const fireLight = () => haptic.fire("light");
+      const fireHeavy = () => haptic.fire("heavy");
+
+      const renderRightActions = (
+        _progress: Animated.SharedValue<number>,
+        dragX: Animated.SharedValue<number>,
+      ) => {
+        useAnimatedReaction(
+          () => Math.abs(dragX.value),
+          (current) => {
+            // Re-arm when finger near origin
+            if (current < 10) {
+              firedLight.value = false;
+              firedHeavy.value = false;
+              return;
+            }
+            if (current >= SWIPE_LIGHT_THRESHOLD && current < SWIPE_HEAVY_THRESHOLD && !firedLight.value) {
+              firedLight.value = true;
+              runOnJS(fireLight)();
+            }
+            if (current >= SWIPE_HEAVY_THRESHOLD && !firedHeavy.value) {
+              firedHeavy.value = true;
+              runOnJS(fireHeavy)();
+            }
+          },
+          [],
+        );
+
         return (
           <View style={styles.actionGroup}>
             <Pressable accessibilityLabel={t("chat.swipe.markRead")}
@@ -754,12 +791,8 @@ export function prepareWorkspaceTab(...): void;
       return (
         <Swipeable
           friction={2}
-          rightThreshold={COMMIT_THRESHOLD_PX}
+          rightThreshold={SWIPE_HEAVY_THRESHOLD}
           renderRightActions={renderRightActions}
-          onSwipeableOpenStartDrag={() => { firedLightRef.current = false; firedHeavyRef.current = false; }}
-          onSwipeableWillOpen={() => { if (!firedHeavyRef.current) { firedHeavyRef.current = true; haptic.fire("heavy"); } }}
-          // Note: gesture-handler doesn't expose drag-distance callbacks directly on Swipeable.
-          // The 90/120 split is approximated by friction + threshold; tune in Plan 02e UAT if necessary.
         >
           {children}
         </Swipeable>
@@ -773,7 +806,17 @@ export function prepareWorkspaceTab(...): void;
     }));
     ```
 
-    Constants `HAPTIC_WARN_PX = 90` and `COMMIT_THRESHOLD_PX = 120` are kept as named constants per UI-SPEC line 60.
+    Why this closes B5 (per checker):
+
+    - `Swipeable.renderRightActions` exposes `dragX: SharedValue<number>` from gesture-handler's reanimated-aware path; `useAnimatedReaction` observes the abs value on the UI thread.
+    - `runOnJS(fireLight/fireHeavy)()` bridges the haptic call back to the JS thread (`useHaptic` reads RN module state).
+    - The two shared-value flags `firedLight` / `firedHeavy` ensure each haptic fires at most once per gesture; resetting near origin (<10px) re-arms them so subsequent swipes still trigger.
+    - Constants are named `SWIPE_LIGHT_THRESHOLD = 90` and `SWIPE_HEAVY_THRESHOLD = 120` per UI-SPEC line 60. Verify gates check these exact literals.
+
+    Peer-dep caveat:
+
+    - `react-native-reanimated` MUST be installed and resolve to ≥3.x for `useAnimatedReaction` + `runOnJS` to work. Verify via `grep -q '"react-native-reanimated"' packages/app/package.json`. If older, escalate; do not fall back silently.
+    - `react-native-gesture-handler@~2.28.0` is already pinned per CONTEXT, which exposes `dragX` as a SharedValue when reanimated is present.
 
     Step 5 — Create `packages/app/src/components/chat-row-hover-actions.web.tsx`:
 
@@ -1076,10 +1119,12 @@ export function prepareWorkspaceTab(...): void;
       grep -q "actionRegistry.dispatch" packages/app/src/components/chat-row-context-menu.web.tsx && \
       grep -q "BottomSheet\\|IsolatedBottomSheet" packages/app/src/components/chat-row-context-menu.native.tsx && \
       grep -q "Swipeable" packages/app/src/components/chat-row-swipe-actions.tsx && \
-      grep -q "HAPTIC_WARN_PX = 90\\|90" packages/app/src/components/chat-row-swipe-actions.tsx && \
-      grep -q "COMMIT_THRESHOLD_PX = 120\\|120" packages/app/src/components/chat-row-swipe-actions.tsx && \
+      grep -q "SWIPE_LIGHT_THRESHOLD = 90" packages/app/src/components/chat-row-swipe-actions.tsx && \
+      grep -q "SWIPE_HEAVY_THRESHOLD = 120" packages/app/src/components/chat-row-swipe-actions.tsx && \
+      grep -q "useAnimatedReaction" packages/app/src/components/chat-row-swipe-actions.tsx && \
+      grep -q "runOnJS" packages/app/src/components/chat-row-swipe-actions.tsx && \
       grep -q "useHaptic" packages/app/src/components/chat-row-swipe-actions.tsx && \
-      grep -q "fire(\"heavy\")" packages/app/src/components/chat-row-swipe-actions.tsx && \
+      grep -q "haptic.fire" packages/app/src/components/chat-row-swipe-actions.tsx && \
       grep -q "isHovered \\|\\| isCompact" packages/app/src/components/chat-row-hover-actions.web.tsx && \
       grep -q "Plus" packages/app/src/components/top-right-add-menu.tsx && \
       grep -q "GlassSurface" packages/app/src/components/top-right-add-menu.tsx && \
@@ -1102,9 +1147,11 @@ export function prepareWorkspaceTab(...): void;
     - `grep -c "GlassSurface" packages/app/src/components/chat-row-context-menu.web.tsx` returns ≥1
     - `grep -c "BottomSheet" packages/app/src/components/chat-row-context-menu.native.tsx` returns ≥1
     - `grep -c "Swipeable" packages/app/src/components/chat-row-swipe-actions.tsx` returns ≥1
-    - `grep -c "90" packages/app/src/components/chat-row-swipe-actions.tsx` returns ≥1 (light haptic threshold)
-    - `grep -c "120" packages/app/src/components/chat-row-swipe-actions.tsx` returns ≥1 (commit threshold)
-    - `grep -c "fire(\"heavy\")" packages/app/src/components/chat-row-swipe-actions.tsx` returns ≥1
+    - `grep -c "SWIPE_LIGHT_THRESHOLD = 90" packages/app/src/components/chat-row-swipe-actions.tsx` returns ≥1 (B5 — exact-literal threshold)
+    - `grep -c "SWIPE_HEAVY_THRESHOLD = 120" packages/app/src/components/chat-row-swipe-actions.tsx` returns ≥1 (B5 — exact-literal threshold)
+    - `grep -c "useAnimatedReaction" packages/app/src/components/chat-row-swipe-actions.tsx` returns ≥1 (B5 — reanimated-driven)
+    - `grep -c "runOnJS" packages/app/src/components/chat-row-swipe-actions.tsx` returns ≥1 (UI→JS thread bridge)
+    - `grep -c "haptic.fire" packages/app/src/components/chat-row-swipe-actions.tsx` returns ≥1
     - `grep -c "isHovered\\|isCompact" packages/app/src/components/chat-row-hover-actions.web.tsx` returns ≥1
     - `grep -c "Plus" packages/app/src/components/top-right-add-menu.tsx` returns ≥1
     - `grep -c "actionRegistry.dispatch" packages/app/src/components/top-right-add-menu.tsx` returns ≥1
@@ -1288,6 +1335,120 @@ export function prepareWorkspaceTab(...): void;
     - `npm run lint -- packages/app/src/screens/sessions-screen.tsx packages/app/src/components/splash-overlay.tsx packages/app/src/components/sidebar-workspace-list.tsx` exits 0
   </acceptance_criteria>
   <done>Sessions screen reshaped into Chats tab; splash mounts TotalUnreadPopup; sidebar-workspace-list haptics refactored + tap-to-switch wired</done>
+</task>
+
+<task type="auto" tdd="true">
+  <name>Task 4: NAV-A2 — auto-collapse sidebar overlay when form factor flips to compact (closes checker B2)</name>
+  <files>
+    packages/app/src/app/_layout.tsx,
+    packages/app/src/stores/panel-store.ts,
+    packages/app/src/stores/panel-store.test.ts
+  </files>
+  <read_first>
+    - packages/app/src/stores/panel-store.ts (FULL FILE — sidebar overlay state owner: `mobileView: "agent" | "agent-list" | "file-explorer"` line 70; setters around lines 311-401)
+    - packages/app/src/app/_layout.tsx (FULL FILE — top-level layout; identify the right place to mount the auto-collapse useEffect — typically near the existing chrome-layout / breakpoint hooks around lines 478-561)
+    - packages/app/src/constants/layout.ts (`useIsCompactFormFactor()` hook — the breakpoint trigger)
+    - packages/app/src/contexts/sidebar-animation-context.tsx (existing consumer of panel-store `isOpen`)
+    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-RESEARCH.md NAV-A2 acceptance row ("sidebar overlay auto-collapses on compact form factor")
+    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-CONTEXT.md (search for NAV-A2 / "auto-collapse" mention; if absent, this task fills the gap inferred from REQUIREMENTS.md)
+  </read_first>
+  <behavior>
+    Test 1 (panel-store.test.ts): the store has a `collapseOverlayOnCompact()` action that sets mobileView from "agent-list"/"file-explorer" → "agent" idempotently
+    Test 2: when mobileView is already "agent", calling collapseOverlayOnCompact() is a no-op (returns same state)
+    Test 3 (manual smoke via typecheck): _layout.tsx imports `useIsCompactFormFactor` and wires a useEffect that calls `usePanelStore.getState().collapseOverlayOnCompact()` whenever isCompact transitions false → true
+  </behavior>
+  <action>
+    Step 1 — Add `collapseOverlayOnCompact()` action to `packages/app/src/stores/panel-store.ts`. Locate the existing actions block (around line 285 onwards where `mobileView: "agent"` defaults live). Add inside the actions chunk:
+
+    ```typescript
+    collapseOverlayOnCompact: () => {
+      const current = get().mobileView;
+      if (current === "agent") return; // idempotent — already collapsed
+      // Per NAV-A2 / B2: closing both overlay variants drops to the canonical "agent" view
+      set({ mobileView: "agent" });
+    },
+    ```
+
+    Update the `PanelStoreActions` (or whatever the action interface is named — read the file) TypeScript interface to include the new method.
+
+    Step 2 — Wire the effect in `packages/app/src/app/_layout.tsx`. Locate the top-level component (search for `export default function RootLayout` or `RootStack`). Add inside the body:
+
+    ```typescript
+    import { useIsCompactFormFactor } from "@/constants/layout";
+    import { usePanelStore } from "@/stores/panel-store";
+    // ...
+    const isCompact = useIsCompactFormFactor();
+    useEffect(() => {
+      // NAV-A2 / closes checker B2 — when the form factor flips to compact, drop sidebar overlays.
+      // This closes the case where a user resizes from desktop (sidebars pinned) to phone-width
+      // and the overlay state would otherwise pin the agent-list visible over the chats content.
+      if (isCompact) {
+        usePanelStore.getState().collapseOverlayOnCompact();
+      }
+    }, [isCompact]);
+    ```
+
+    Place the effect AFTER the existing chrome-layout hooks (line ~561 area near `useSidebarAnimation()`). Confirm `useEffect` is already imported; if not, extend the React import.
+
+    Step 3 — Add a focused test in `packages/app/src/stores/panel-store.test.ts` (create if absent) covering Tests 1-2:
+
+    ```typescript
+    import { describe, it, expect, beforeEach } from "vitest";
+    import { usePanelStore } from "./panel-store";
+
+    describe("panel-store NAV-A2 auto-collapse", () => {
+      beforeEach(() => {
+        // Reset to default so tests are isolated
+        usePanelStore.setState({ mobileView: "agent" });
+      });
+
+      it("collapseOverlayOnCompact() drops agent-list to agent", () => {
+        usePanelStore.setState({ mobileView: "agent-list" });
+        usePanelStore.getState().collapseOverlayOnCompact();
+        expect(usePanelStore.getState().mobileView).toBe("agent");
+      });
+
+      it("collapseOverlayOnCompact() drops file-explorer to agent", () => {
+        usePanelStore.setState({ mobileView: "file-explorer" });
+        usePanelStore.getState().collapseOverlayOnCompact();
+        expect(usePanelStore.getState().mobileView).toBe("agent");
+      });
+
+      it("collapseOverlayOnCompact() is a no-op when already on agent", () => {
+        usePanelStore.setState({ mobileView: "agent" });
+        const before = usePanelStore.getState().mobileView;
+        usePanelStore.getState().collapseOverlayOnCompact();
+        expect(usePanelStore.getState().mobileView).toBe(before);
+      });
+    });
+    ```
+
+    Run `npm run format -- packages/app/src/app/_layout.tsx packages/app/src/stores/panel-store.ts packages/app/src/stores/panel-store.test.ts`.
+
+    Note on side-effect ownership: this task touches `_layout.tsx`. If another plan (e.g. 02b for routing-on-welcome) also modifies `_layout.tsx` in this wave, declare a same-wave file conflict and resolve via wave bump (Plan 02c at wave 2 already depends on 02a; wave is fine for 02b which is also wave 2 but does not modify `_layout.tsx`).
+
+  </action>
+  <verify>
+    <automated>
+      cd /Users/a123456/Downloads/ottie-workspace/ottie && \
+      grep -q "collapseOverlayOnCompact" packages/app/src/stores/panel-store.ts && \
+      grep -q "useIsCompactFormFactor" packages/app/src/app/_layout.tsx && \
+      grep -q "collapseOverlayOnCompact" packages/app/src/app/_layout.tsx && \
+      grep -q "isCompact" packages/app/src/app/_layout.tsx && \
+      npx vitest run packages/app/src/stores/panel-store.test.ts --bail=1 && \
+      npm run typecheck && \
+      npm run lint -- packages/app/src/app/_layout.tsx packages/app/src/stores/panel-store.ts packages/app/src/stores/panel-store.test.ts
+    </automated>
+  </verify>
+  <acceptance_criteria>
+    - `grep -c "collapseOverlayOnCompact" packages/app/src/stores/panel-store.ts` returns ≥2 (interface + implementation)
+    - `grep -c "useIsCompactFormFactor" packages/app/src/app/_layout.tsx` returns ≥1 (B2 — auto-collapse hook wired)
+    - `grep -c "collapseOverlayOnCompact" packages/app/src/app/_layout.tsx` returns ≥1
+    - `npx vitest run packages/app/src/stores/panel-store.test.ts --bail=1` exits 0
+    - `npm run typecheck` exits 0
+    - Lint passes for the 3 files
+  </acceptance_criteria>
+  <done>NAV-A2 sidebar overlay auto-collapses when form factor flips to compact; B2 closed</done>
 </task>
 
 </tasks>

@@ -2,8 +2,8 @@
 phase: 02-onboarding-navigation-settings-theme-native-feel-polish
 plan: 02e
 type: execute
-wave: 2
-depends_on: [02a]
+wave: 3
+depends_on: [02a, 02c]
 files_modified:
   # Validation gate (Wave 0 of this plan)
   - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02e-glass-effect-validation-LOG.md
@@ -40,6 +40,16 @@ files_modified:
   - packages/app/src/utils/system-toast.test.ts
   - packages/app/src/utils/delight-toast.ts
   - packages/app/src/utils/delight-toast.test.ts
+  # Low-power-mode source for useHaptic (NAT-02 — closes checker B1)
+  - packages/app/src/hooks/use-low-power-mode.ts
+  - packages/app/src/hooks/use-low-power-mode.test.ts
+  - packages/app/src/hooks/use-haptic.ts
+  # Delight-toast call-site wiring (THM-04 — closes checker B3)
+  - packages/app/src/contexts/session-context.tsx
+  - packages/app/src/voice-control/voice-router.ts
+  - packages/app/src/stores/onboarding-state-store.ts
+  # Workspace first-time-empty Otter surface (THM-04 — closes checker B4)
+  - packages/app/src/screens/workspace/workspace-screen.tsx
   # Math-curve loader scope narrowing (THM-03) — register as canonical
   - packages/app/src/components/math-curve-loader/sanctioned-uses.ts
   # NAT-03 lint promotion (D-20) — flip the script + sweep violations
@@ -85,6 +95,9 @@ must_haves:
     - "Math-curve loader appears ONLY at three sanctioned sites (Chats list initial load, agent run-start, command-center search 'thinking') — anywhere else uses a neutral skeleton or system spinner (D-13)"
     - "Pointer-events lint exits 1 on ANY violation (no baseline tolerance) and the wired npm pipeline runs it on CI; current violators are migrated into .web.tsx Metro splits or gated by isWeb"
     - "Otter character lives at five sanctioned surfaces only — splash, welcome, first-time-empty (first workspace + first chats list), and three one-time delight toasts (first-agent-created, first-permission-approved, first-voice-command) — gated by useOnboardingStateStore flags from Plan 02b"
+    - "useHaptic() receives live isLowPowerMode from useLowPowerMode() (expo-battery on iOS/Android; false on web) so NAT-02 'low-power-mode aware' is satisfied with a real source, not a deferred input"
+    - "Three delight toasts fire at their actual call sites: sessions-screen first-agent transition, session-context permission decision, voice-router first successful dispatch — each gated by a per-event Zustand flag in useOnboardingStateStore"
+    - "Workspace screen first-time-empty (workspaces.length === 0 AND emptyOttiePlayedFirstWorkspace === false) renders the OtterEmpty surface; D-17's 5 sanctioned consumers count = 5 (welcome / splash / sessions-screen / workspace-screen / delight-toast)"
     - "expo-glass-effect adoption is gated by an iOS 26 dev-build validation checkpoint; if validation fails or is skipped, <GlassSurface> stays on expo-blur and the decision is recorded in 02e-glass-effect-validation-LOG.md"
     - "Every new user-visible string lands in BOTH packages/app/src/i18n/locales/en.json AND zh.json in the same task"
   artifacts:
@@ -324,7 +337,7 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
 | `packages/app/src/components/sidebar-workspace-list.tsx` | 1365–1366, 1388–1389, 1487–1488 | Gate via `isWeb ? handlePointerEnter : undefined` (file is cross-platform; cannot Metro-split entire file) |
 | `packages/app/src/components/terminal-emulator.tsx`      | 740–741                         | Gate via `isWeb ? handler : undefined` (file is cross-platform)                                            |
 | `packages/app/src/components/workspace-hover-card.tsx`   | 183–184                         | Gate via `isWeb ? handler : undefined`                                                                     |
-| `packages/app/src/components/ui/tooltip.tsx`             | 383–384, 407–408                | Already inside spread props — gate by `isWeb` at the assignment site                                       |
+| `packages/app/src/components/ui/tooltip.tsx`             | 383–384, 407–408                | **Fixed by Task 2** (W5) — gate by `isWeb` at the assignment site as part of the GlassSurface migration    |
 
 </audit_lists>
 </context>
@@ -353,6 +366,19 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
     1. Compare current `<GlassSurface>` (expo-blur path, lines 1-120) against the candidate adoption diff. Confirm the `<GlassSurface>` API surface (`children`, `radius`, `intensity`, `tint`, `bordered`, `strong`, `style`) does NOT change in either branch — adoption is reversible per UI-SPEC line 30 and RESEARCH.md line 416.
 
     2. Author the candidate adoption diff in a separate branch worktree (DO NOT commit yet): `glass-surface.tsx` imports `GlassView` from `expo-glass-effect` only when `Platform.OS === "ios"` AND iOS major >= 26 via `Platform.Version` runtime check; otherwise falls back to `BlurView` (existing path). Document the diff inline in `02e-glass-effect-validation-LOG.md` as the proposed change.
+
+       **iOS 26 carve-out — approved exception to platform-gating policy (W1 from checker):** Add this exact comment block above the iOS 26 branch in `glass-surface.tsx`:
+
+       ```typescript
+       // CLAUDE.md gates (`isWeb` / `isNative` / `getIsElectron()` / `useIsCompactFormFactor()`)
+       // cannot distinguish iOS 26 from iOS <26. expo-glass-effect's Liquid Glass
+       // backend requires iOS 26 (Apple's first SDK exposing the materials API),
+       // so this single file uses `Platform.OS === "ios" && Platform.Version >= 26`
+       // as an APPROVED carve-out. Do NOT replicate this pattern elsewhere — every
+       // other surface MUST use the four standard gates. See 02-CONTEXT.md D-?? and
+       // 02e-glass-effect-validation-LOG.md for the validation outcome that
+       // sanctions this exception.
+       ```
 
     3. Initialize `02e-glass-effect-validation-LOG.md` with the validation template (Decision field, Validated-on field, Side-by-side notes section, Adoption field, glass-surface.tsx diff field).
 
@@ -454,7 +480,7 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
     6. For `tooltip.tsx`: the existing implementation (per PATTERNS.md line 340) already imports `BlurView` from `expo-blur` — replace the `<BlurView>` element with `<GlassSurface radius="card" intensity={30}>` and drop the import.
     7. Run `npm run format -- <every file in this task>` after edits.
 
-    Per D-20 / NAT-03 — be careful: `tooltip.tsx` lines 383-384 and 407-408 contain `onPointerEnter`/`onPointerLeave` props. If you do not address them in this task, Task 7 (lint promotion) will sweep them. Both options are acceptable; document the choice in your task SUMMARY note.
+    Per D-20 / NAT-03 (and **W5 from checker — task ownership made firm**): `tooltip.tsx` lines 383-384 and 407-408 contain `onPointerEnter`/`onPointerLeave` props. Task 2 OWNS this fix (tooltip.tsx is already in Task 2's files list for the BlurView migration). Gate both assignments via `isWeb ? handler : undefined` here — do NOT defer to Task 7. Task 7's audit table marks these lines as "Fixed by Task 2".
 
     Bilingual i18n: NO new user-visible strings introduced by primitive migration — these are container wrappers only. Skip i18n updates for this task.
 
@@ -484,7 +510,7 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
 </task>
 
 <task type="auto">
-  <name>Task 3: Migrate leaf modals/popovers (15 files: add-host*, pair-link, project-picker, keyboard-shortcuts, new-task, selectable-text, workspace-rename, workspace-setup, workspace-hover-card, agent-status-bar, attachment-lightbox, combined-model-selector, provider-diagnostic-sheet, tool-call-sheet) to <GlassSurface></name>
+  <name>Task 3a: Migrate UI-primitives leaf consumers (6 files: add-host-method, add-host, pair-link, project-picker, keyboard-shortcuts, new-task, selectable-text) to <GlassSurface> — closes W2 split</name>
   <files>
     packages/app/src/components/add-host-method-modal.tsx,
     packages/app/src/components/add-host-modal.tsx,
@@ -492,7 +518,56 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
     packages/app/src/components/project-picker-modal.tsx,
     packages/app/src/components/keyboard-shortcuts-dialog.tsx,
     packages/app/src/components/new-task-modal.tsx,
-    packages/app/src/components/selectable-text-modal.tsx,
+    packages/app/src/components/selectable-text-modal.tsx
+  </files>
+  <read_first>
+    - packages/app/src/components/ui/glass-surface.tsx (interface — radius variants)
+    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-RESEARCH.md §"Common Pitfalls" Pitfall 5 (lines 471-508) — full audit list
+    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-UI-SPEC.md "Reorganized / migrated existing components" lines 287-296
+    - The audit table in this plan's `<audit_lists>` section — confirms target `radius` per file (all `sheet`)
+    - Each `<file>` in this task — locate its modal-content View root (typically inside `<Modal>` or `<BottomSheetModal>` or a Reanimated animated wrapper)
+    - One file from Task 2 already migrated (e.g. `adaptive-modal-sheet.tsx`) for the in-repo wrap pattern
+  </read_first>
+  <action>
+    For each file in `<files>` (all 7 are full-bleed modals / dialogs with `radius="sheet"`):
+
+    1. Add `import { GlassSurface } from "@/components/ui/glass-surface";`.
+    2. Confirm the file actually has a modal/popover root. If a file consumes `adaptive-modal-sheet.tsx` indirectly (i.e. wraps its content INSIDE the primitive Task 2 migrated), the inner content does NOT need its own GlassSurface — record "INHERITED from primitive migration" in the task summary and skip the wrap.
+    3. Wrap the OUTERMOST modal-content View in `<GlassSurface radius="sheet">`. Preserve `padding`, `gap`, layout. Remove sibling background-color tokens that paint a solid color (the GlassSurface owns the surface tint).
+    4. Per UI-SPEC §Light/Dark Contrast (line 158): the resolved background MUST allow body text at 4.5:1. Where existing code sets `backgroundColor: theme.colors.surface.elevated` on the inner View, remove it. The contrast audit in Task 8 verifies.
+    5. For modals using `Modal` from `react-native` directly: the `transparent={true}` prop MUST stay set; otherwise GlassSurface renders against an opaque OS chrome.
+    6. Run `npm run format -- <files in this task>`.
+
+    No new i18n strings.
+
+  </action>
+  <verify>
+    <automated>
+      \
+      MISSED=0 && \
+      for f in packages/app/src/components/add-host-method-modal.tsx packages/app/src/components/add-host-modal.tsx packages/app/src/components/pair-link-modal.tsx packages/app/src/components/project-picker-modal.tsx packages/app/src/components/keyboard-shortcuts-dialog.tsx packages/app/src/components/new-task-modal.tsx packages/app/src/components/selectable-text-modal.tsx; do \
+        if ! grep -q "GlassSurface\|adaptive-modal-sheet\|AdaptiveModalSheet\|isolated-bottom-sheet-modal\|IsolatedBottomSheetModal" "$f"; then \
+          echo "MISS: $f has no GlassSurface and does not consume a migrated primitive"; \
+          MISSED=$((MISSED+1)); \
+        fi; \
+      done && \
+      [ "$MISSED" -eq 0 ] && \
+      npm run typecheck && \
+      npm run lint -- packages/app/src/components/add-host-method-modal.tsx packages/app/src/components/add-host-modal.tsx packages/app/src/components/pair-link-modal.tsx packages/app/src/components/project-picker-modal.tsx packages/app/src/components/keyboard-shortcuts-dialog.tsx packages/app/src/components/new-task-modal.tsx packages/app/src/components/selectable-text-modal.tsx
+    </automated>
+  </verify>
+  <acceptance_criteria>
+    - Every file in `<files>` either contains `<GlassSurface` directly OR consumes a primitive migrated in Task 2; the verify-script output reports `MISSED=0`
+    - `npm run typecheck` exits 0
+    - `npm run lint -- <all 7 files>` exits 0
+    - `npm run lint:colors` exits 0 (no hardcoded-color regression)
+  </acceptance_criteria>
+  <done>7 UI-primitive-consumer leaf modals migrated to <GlassSurface>; first half of THM-02 audit list closed</done>
+</task>
+
+<task type="auto">
+  <name>Task 3b: Migrate workspace + agent surface leaf modals (8 files: workspace-rename, workspace-setup, workspace-hover-card, agent-status-bar, attachment-lightbox, combined-model-selector, provider-diagnostic-sheet, tool-call-sheet) to <GlassSurface> — closes W2 split</name>
+  <files>
     packages/app/src/components/workspace-rename-modal.tsx,
     packages/app/src/components/workspace-setup-dialog.tsx,
     packages/app/src/components/workspace-hover-card.tsx,
@@ -504,24 +579,29 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
   </files>
   <read_first>
     - packages/app/src/components/ui/glass-surface.tsx (interface — radius variants)
-    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-RESEARCH.md §"Common Pitfalls" Pitfall 5 (lines 471-508) — full audit list
-    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-UI-SPEC.md "Reorganized / migrated existing components" lines 287-296
-    - The audit table in this plan's `<audit_lists>` section — confirms target `radius` per file
-    - Each `<file>` in this task — locate its modal-content View root (typically inside `<Modal>` or `<BottomSheetModal>` or a Reanimated animated wrapper)
-    - One file from Task 2 already migrated (e.g. `adaptive-modal-sheet.tsx`) for the in-repo wrap pattern
+    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-RESEARCH.md §"Common Pitfalls" Pitfall 5 (lines 471-508)
+    - The audit table in this plan's `<audit_lists>` section — confirms target `radius` per file:
+      - workspace-rename-modal: `sheet`
+      - workspace-setup-dialog: `sheet`
+      - workspace-hover-card: `card`
+      - agent-status-bar: `pill`
+      - attachment-lightbox: `sheet` (no border on full-bleed)
+      - combined-model-selector: `sheet`
+      - provider-diagnostic-sheet: `sheet`
+      - tool-call-sheet: `sheet`
+    - Each `<file>` in this task — locate its modal-content View root
   </read_first>
   <action>
     For each file in `<files>`:
 
-    1. Determine the radius variant from the audit table (default = `sheet` for full-bleed modals, `pill` for `agent-status-bar.tsx`, `card` for `workspace-hover-card.tsx`).
-    2. Confirm the file actually has a modal/popover root. If a file consumes `adaptive-modal-sheet.tsx` indirectly (i.e. wraps its content INSIDE the primitive Task 2 migrated), the inner content does NOT need its own GlassSurface — skip and document in the task summary.
+    1. Determine the radius variant from the audit table (the variants vary in this batch — `card` for hover-card, `pill` for status-bar, `sheet` for everything else).
+    2. Confirm the file actually has a modal/popover root. If a file consumes `adaptive-modal-sheet.tsx` indirectly, record "INHERITED" and skip the wrap.
     3. Add `import { GlassSurface } from "@/components/ui/glass-surface";`.
-    4. Wrap the OUTERMOST modal-content View in `<GlassSurface radius="<variant>">`. Preserve `padding`, `gap`, layout. Remove sibling background-color tokens that paint a solid color (the GlassSurface owns the surface tint).
-    5. Per UI-SPEC §Light/Dark Contrast (line 158): the resolved background MUST allow body text at 4.5:1. Where existing code sets `backgroundColor: theme.colors.surface.elevated` on the inner View, remove it — the GlassSurface intensity + theme tint produces the same effective surface. The contrast audit in Task 8 verifies.
-    6. For modals using `Modal` from `react-native` directly: the `transparent={true}` prop MUST stay set; otherwise GlassSurface renders against an opaque OS chrome. Confirm by reading existing `<Modal>` props in each file.
-    7. Run `npm run format -- <files>`.
-
-    OUT-OF-SCOPE markers — NONE. The 15 files in this task are all in-scope. If during implementation a file turns out to consume `adaptive-modal-sheet.tsx` (and therefore inherits Task 2's wrap), record that in the task summary as "INHERITED from primitive migration — no additional GlassSurface" and remove that file from the wrap list. This is the only acceptable skip pattern; document the wrap source.
+    4. Wrap the OUTERMOST modal-content View in `<GlassSurface radius="<variant>">`. Preserve `padding`, `gap`, layout. Remove sibling solid background-color tokens.
+    5. Per UI-SPEC §Light/Dark Contrast (line 158): contrast audit (Task 8) verifies AA after the wrap.
+    6. For `attachment-lightbox.tsx`: pass `bordered={false}` because the lightbox is full-bleed and a border would create a visible frame.
+    7. For `agent-status-bar.tsx` (pill): the GlassSurface wraps only the status indicator; padding stays on the inner View.
+    8. Run `npm run format -- <files in this task>`.
 
     No new i18n strings.
 
@@ -530,25 +610,28 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
     <automated>
       cd /Users/a123456/Downloads/ottie-workspace/ottie && \
       MISSED=0 && \
-      for f in packages/app/src/components/add-host-method-modal.tsx packages/app/src/components/add-host-modal.tsx packages/app/src/components/pair-link-modal.tsx packages/app/src/components/project-picker-modal.tsx packages/app/src/components/keyboard-shortcuts-dialog.tsx packages/app/src/components/new-task-modal.tsx packages/app/src/components/selectable-text-modal.tsx packages/app/src/components/workspace-rename-modal.tsx packages/app/src/components/workspace-setup-dialog.tsx packages/app/src/components/workspace-hover-card.tsx packages/app/src/components/agent-status-bar.tsx packages/app/src/components/attachment-lightbox.tsx packages/app/src/components/combined-model-selector.tsx packages/app/src/components/provider-diagnostic-sheet.tsx packages/app/src/components/tool-call-sheet.tsx; do \
+      for f in packages/app/src/components/workspace-rename-modal.tsx packages/app/src/components/workspace-setup-dialog.tsx packages/app/src/components/workspace-hover-card.tsx packages/app/src/components/agent-status-bar.tsx packages/app/src/components/attachment-lightbox.tsx packages/app/src/components/combined-model-selector.tsx packages/app/src/components/provider-diagnostic-sheet.tsx packages/app/src/components/tool-call-sheet.tsx; do \
         if ! grep -q "GlassSurface\|adaptive-modal-sheet\|AdaptiveModalSheet\|isolated-bottom-sheet-modal\|IsolatedBottomSheetModal" "$f"; then \
           echo "MISS: $f has no GlassSurface and does not consume a migrated primitive"; \
           MISSED=$((MISSED+1)); \
         fi; \
       done && \
       [ "$MISSED" -eq 0 ] && \
+      grep -q 'radius="pill"' packages/app/src/components/agent-status-bar.tsx && \
+      grep -q 'radius="card"' packages/app/src/components/workspace-hover-card.tsx && \
       npm run typecheck && \
-      npm run lint -- packages/app/src/components/add-host-method-modal.tsx packages/app/src/components/add-host-modal.tsx packages/app/src/components/pair-link-modal.tsx packages/app/src/components/project-picker-modal.tsx packages/app/src/components/keyboard-shortcuts-dialog.tsx packages/app/src/components/new-task-modal.tsx packages/app/src/components/selectable-text-modal.tsx packages/app/src/components/workspace-rename-modal.tsx packages/app/src/components/workspace-setup-dialog.tsx packages/app/src/components/workspace-hover-card.tsx packages/app/src/components/agent-status-bar.tsx packages/app/src/components/attachment-lightbox.tsx packages/app/src/components/combined-model-selector.tsx packages/app/src/components/provider-diagnostic-sheet.tsx packages/app/src/components/tool-call-sheet.tsx
+      npm run lint -- packages/app/src/components/workspace-rename-modal.tsx packages/app/src/components/workspace-setup-dialog.tsx packages/app/src/components/workspace-hover-card.tsx packages/app/src/components/agent-status-bar.tsx packages/app/src/components/attachment-lightbox.tsx packages/app/src/components/combined-model-selector.tsx packages/app/src/components/provider-diagnostic-sheet.tsx packages/app/src/components/tool-call-sheet.tsx
     </automated>
   </verify>
   <acceptance_criteria>
-    - Every file in `<files>` either contains `<GlassSurface` directly OR consumes a primitive migrated in Task 2 (`adaptive-modal-sheet`/`isolated-bottom-sheet-modal`); the verify-script output reports `MISSED=0`
-    - `grep -c "rgba(" packages/app/src/components/add-host-method-modal.tsx packages/app/src/components/add-host-modal.tsx packages/app/src/components/pair-link-modal.tsx packages/app/src/components/project-picker-modal.tsx packages/app/src/components/keyboard-shortcuts-dialog.tsx packages/app/src/components/new-task-modal.tsx packages/app/src/components/selectable-text-modal.tsx packages/app/src/components/workspace-rename-modal.tsx packages/app/src/components/workspace-setup-dialog.tsx 2>/dev/null` does NOT increase versus pre-task baseline (run `git diff --stat` to confirm no new rgba literals — the hardcoded-color counter-baseline lint catches regressions)
+    - Every file in `<files>` either contains `<GlassSurface` directly OR consumes a primitive migrated in Task 2; verify reports `MISSED=0`
+    - `grep -c 'radius="pill"' packages/app/src/components/agent-status-bar.tsx` returns 1 (audit-mandated pill variant)
+    - `grep -c 'radius="card"' packages/app/src/components/workspace-hover-card.tsx` returns 1 (audit-mandated card variant)
     - `npm run typecheck` exits 0
-    - `npm run lint -- <all 15 files>` exits 0
-    - `npm run lint:colors` exits 0 (Phase 1 hardcoded-color counter-test passes — no regression)
+    - `npm run lint -- <all 8 files>` exits 0
+    - `npm run lint:colors` exits 0
   </acceptance_criteria>
-  <done>15 leaf modals/popovers migrated to <GlassSurface> directly or via a migrated primitive; THM-02 audit list closed (combined with Task 2 = full audit table coverage)</done>
+  <done>8 workspace + agent surface leaf modals migrated; second half of THM-02 audit list closed (combined with Task 3a = full 15-file audit cleared)</done>
 </task>
 
 <task type="auto" tdd="true">
@@ -769,6 +852,293 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
   <done>burnt-backed system-toast helper + Otter delight-toast helper exist with passing tests; en+zh parity for 16+ new keys; toast-host.tsx remains untouched (in-panel inline use case kept separate)</done>
 </task>
 
+<task type="auto" tdd="true">
+  <name>Task 4b: Wire live low-power-mode source into useHaptic via expo-battery (NAT-02 — closes checker B1)</name>
+  <files>
+    packages/app/src/hooks/use-low-power-mode.ts,
+    packages/app/src/hooks/use-low-power-mode.test.ts,
+    packages/app/src/hooks/use-haptic.ts,
+    packages/app/package.json
+  </files>
+  <read_first>
+    - packages/app/src/hooks/use-haptic.ts (Plan 02a — current consumer signature `useHaptic({ enabled, isLowPowerMode })`; Plan 02a deferred isLowPowerMode source to this plan)
+    - packages/app/src/constants/platform.ts (`isNative`, `isWeb`, `getIsElectron()` gates)
+    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-PATTERNS.md "use-haptic.ts" / "use-low-power-mode" sections (analog reference)
+    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-RESEARCH.md NAT-02 acceptance row + Common Pitfalls referencing low-power-mode wiring
+    - https://docs.expo.dev/versions/latest/sdk/battery/ (expo-battery API surface — `isLowPowerModeEnabledAsync()` + `addLowPowerModeListener`)
+    - packages/app/package.json (current Expo SDK version — confirm expo-battery~10.x compatible with Expo 54)
+  </read_first>
+  <behavior>
+    Test 1 (use-low-power-mode.test): on native (Platform.OS !== "web"), useLowPowerMode() reads `Battery.isLowPowerModeEnabledAsync()` on mount and reflects the resolved boolean
+    Test 2: useLowPowerMode() subscribes to `Battery.addLowPowerModeListener` and updates state when the listener fires
+    Test 3: Subscription is cleaned up on unmount (calls returned `.remove()`)
+    Test 4: On web (Platform.OS === "web"), useLowPowerMode() returns `false` synchronously without importing expo-battery
+    Test 5 (use-haptic.test — added or extended): the haptic hook now reads `useLowPowerMode()` internally — when isLowPowerMode resolves true, no Haptics.* calls fire (consistent with the existing Plan 02a Test 9)
+  </behavior>
+  <action>
+    Step 1 — Verify expo-battery compatibility with Expo SDK 54. Run `npm view expo-battery dist-tags.latest` and pick a version with peerDeps satisfying Expo 54. As of mid-2026 the matching line is roughly `expo-battery@~10.x` for Expo 54. Pin the exact version once confirmed.
+
+    Install the package via the workspace pnpm filter:
+
+    ```bash
+    pnpm --filter @ottie/app add expo-battery@<resolved-version>
+    ```
+
+    Confirm the new dependency lands in `packages/app/package.json`.
+
+    Step 2 — Create `packages/app/src/hooks/use-low-power-mode.ts`. The hook must:
+
+    - On `isNative` (iOS/Android): import `*` from `expo-battery` lazily inside the hook (or via a conditional dynamic import — keep the import path so Metro tree-shakes it on web). Read `Battery.isLowPowerModeEnabledAsync()` once on mount, then subscribe to `Battery.addLowPowerModeListener` for live updates. Return the latest boolean.
+    - On `isWeb`: return `false` synchronously. Web has no equivalent low-power-mode API; treat haptics as always available (haptics already no-op on web — this is belt-and-suspenders).
+    - On Tauri/Electron: return `false` (no haptic surface; no need to suppress).
+    - Always clean up the listener on unmount via the returned `.remove()` from `addLowPowerModeListener`.
+
+    Sketch (adapt to the actual expo-battery types — read the package's `.d.ts` first):
+
+    ```typescript
+    import { useEffect, useState } from "react";
+    import { isNative, isWeb } from "@/constants/platform";
+
+    export function useLowPowerMode(): boolean {
+      const [isLowPowerMode, setIsLowPowerMode] = useState(false);
+
+      useEffect(() => {
+        if (isWeb || !isNative) return;
+        let mounted = true;
+        let subscription: { remove(): void } | undefined;
+
+        // Lazy require so Metro web bundles never include expo-battery.
+        // Use require() (not import()) to keep this synchronous within useEffect.
+        // Adapt to the package's actual export shape.
+        const Battery = require("expo-battery");
+        Battery.isLowPowerModeEnabledAsync()
+          .then((value: boolean) => { if (mounted) setIsLowPowerMode(value); })
+          .catch(() => { /* leave default false on read error */ });
+
+        subscription = Battery.addLowPowerModeListener(({ lowPowerMode }: { lowPowerMode: boolean }) => {
+          if (mounted) setIsLowPowerMode(lowPowerMode);
+        });
+
+        return () => {
+          mounted = false;
+          subscription?.remove?.();
+        };
+      }, []);
+
+      return isLowPowerMode;
+    }
+    ```
+
+    If the linked `Battery.addLowPowerModeListener` event payload differs (some Expo versions yield `{ lowPowerMode: boolean }`, others a positional boolean), adapt the destructuring to whatever the installed version exports. Read `node_modules/expo-battery/build/Battery.d.ts` after install to confirm.
+
+    Step 3 — Create `packages/app/src/hooks/use-low-power-mode.test.ts` covering Tests 1-4. Mock `expo-battery` per existing vitest setup convention (vitest auto-mock is fine; assert subscription wiring + return value).
+
+    Step 4 — Wire `useLowPowerMode()` into `useHaptic()`. Modify `packages/app/src/hooks/use-haptic.ts` so that `isLowPowerMode` is sourced internally from the hook instead of the consumer-passed input field:
+
+    Two-step decision (record the chosen path inline as a comment):
+
+    - **Path A (preferred):** narrow the public input to `{ enabled: boolean }` and read `useLowPowerMode()` inside `useHaptic`. Update all current callers (Plan 02c chat-row, sidebar-workspace-list, swipe-actions; Plan 02e delight-toast-helper) to pass only `{ enabled }`. This is a fan-out edit that touches multiple files; coordinate with Plan 02c by noting the contract change in the task SUMMARY.
+    - **Path B (additive — backward-compat):** keep the public input shape but make `isLowPowerMode` optional; when omitted, the hook reads `useLowPowerMode()` itself. Existing callers do not need to change.
+
+    Default to **Path B** in this plan (smaller blast radius). The new shape:
+
+    ```typescript
+    import { useLowPowerMode } from "@/hooks/use-low-power-mode";
+
+    export interface UseHapticInput {
+      enabled: boolean;
+      /**
+       * @deprecated Pass nothing — useHaptic now reads `useLowPowerMode()` itself.
+       * Retained for backward compatibility with Plan 02a / Plan 02c call sites.
+       */
+      isLowPowerMode?: boolean;
+    }
+
+    export function useHaptic(input: UseHapticInput): { fire(event: HapticEvent): void } {
+      const liveLowPower = useLowPowerMode();
+      const isLowPowerMode = input.isLowPowerMode ?? liveLowPower;
+      // ...rest unchanged: still respects 200ms debounce, isNative gate, enabled toggle
+    }
+    ```
+
+    Update the existing Plan 02a tests if the deprecation warning trips them.
+
+    Step 5 — Run `npm run format -- packages/app/src/hooks/use-low-power-mode.ts packages/app/src/hooks/use-low-power-mode.test.ts packages/app/src/hooks/use-haptic.ts`.
+
+    Step 6 — If `expo-battery` cannot be installed (peer-dep conflict, native-build issue, or the team prefers to defer): **DO NOT silently fall back**. Instead, narrow the NAT-02 acceptance scope INLINE in this task's done-criteria to "low-power-mode-ready (input plumbed; source wires when expo-battery lands)" and add a follow-up backlog entry in `.planning/STATE.md` under "Deferred". State the decision verbatim in the task SUMMARY. The fallback hook then returns `false` always; the deprecation+optional contract still holds.
+
+  </action>
+  <verify>
+    <automated>
+      \
+      grep -q '"expo-battery"' packages/app/package.json && \
+      grep -c "isLowPowerModeEnabledAsync" packages/app/src/hooks/use-low-power-mode.ts | grep -qE '^[1-9]' && \
+      grep -c "addLowPowerModeListener" packages/app/src/hooks/use-low-power-mode.ts | grep -qE '^[1-9]' && \
+      grep -c "useLowPowerMode" packages/app/src/hooks/use-haptic.ts | grep -qE '^[1-9]' && \
+      npx vitest run packages/app/src/hooks/use-low-power-mode.test.ts --bail=1 && \
+      npx vitest run packages/app/src/hooks/use-haptic.test.ts --bail=1 && \
+      npm run typecheck && \
+      npm run lint -- packages/app/src/hooks/use-low-power-mode.ts packages/app/src/hooks/use-haptic.ts
+    </automated>
+  </verify>
+  <acceptance_criteria>
+    - `grep -c '"expo-battery"' packages/app/package.json` returns ≥1 (or, if deferred: STATE.md "Deferred" entry exists AND task SUMMARY records the narrowed acceptance)
+    - `grep -c "isLowPowerModeEnabledAsync" packages/app/src/hooks/use-low-power-mode.ts` returns ≥1
+    - `grep -c "addLowPowerModeListener" packages/app/src/hooks/use-low-power-mode.ts` returns ≥1
+    - `grep -c "useLowPowerMode()" packages/app/src/hooks/use-haptic.ts` returns ≥1
+    - `npx vitest run packages/app/src/hooks/use-low-power-mode.test.ts --bail=1` exits 0
+    - `npx vitest run packages/app/src/hooks/use-haptic.test.ts --bail=1` exits 0 (Plan 02a tests still pass with the new internal source)
+    - `npm run typecheck` exits 0
+    - `npm run lint -- packages/app/src/hooks/use-low-power-mode.ts packages/app/src/hooks/use-haptic.ts` exits 0
+  </acceptance_criteria>
+  <done>useHaptic() now receives a live isLowPowerMode value from expo-battery on iOS/Android (false on web/desktop); NAT-02 "low-power-mode aware" is satisfied with a real source, not a deferred input</done>
+</task>
+
+<task type="auto">
+  <name>Task 4c: Wire delight-toast call sites at sessions-screen / session-context / voice-router with per-event flags (THM-04 — closes checker B3)</name>
+  <files>
+    packages/app/src/stores/onboarding-state-store.ts,
+    packages/app/src/screens/sessions-screen.tsx,
+    packages/app/src/contexts/session-context.tsx,
+    packages/app/src/voice-control/voice-router.ts,
+    packages/app/src/i18n/locales/en.json,
+    packages/app/src/i18n/locales/zh.json
+  </files>
+  <read_first>
+    - packages/app/src/utils/delight-toast.ts (just-shipped helper from Task 4 — `fireDelightToast({ event, title })`)
+    - packages/app/src/stores/onboarding-state-store.ts (Plan 02b store — extend with three additional toast-fired booleans below)
+    - packages/app/src/screens/sessions-screen.tsx (Plan 02c reshapes this; this task hooks into the agents-length 0→1 transition)
+    - packages/app/src/contexts/session-context.tsx (existing — find the permission-decision handler; this is where firstPermission fires)
+    - packages/app/src/voice-control/voice-router.ts (existing — find the first-successful-dispatch path)
+    - packages/app/src/voice-control/voice-router.test.ts (analog: vitest setup for voice-router)
+    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-CONTEXT.md decision D-17 (3 sanctioned delight toasts)
+    - .planning/phases/02-onboarding-navigation-settings-theme-native-feel-polish/02-UI-SPEC.md "Copywriting Contract" lines 242-249 (delight.firstAgent.toast / delight.firstPermission.toast / delight.firstVoice.toast — bilingual already shipped by Task 4)
+  </read_first>
+  <action>
+    Step 1 — Extend `packages/app/src/stores/onboarding-state-store.ts` (Plan 02b) with three "toast fired" booleans separate from the existing `delightFired*` flags. The existing `delightFired*` flags are read+written by `fireDelightToast` itself for the ONE-SHOT guard inside the helper; the new `*ToastFired` flags below are a belt-and-suspenders idempotency lock at the call site (so a UI re-render on the same epoch can't try to fire twice within one mount). Add to the state shape:
+
+    ```typescript
+    interface OnboardingState {
+      // existing fields...
+      firstAgentToastFired: boolean;       // NEW — checker B3
+      firstPermissionToastFired: boolean;  // NEW — checker B3
+      firstVoiceToastFired: boolean;       // NEW — checker B3
+    }
+
+    interface OnboardingActions {
+      // existing actions...
+      setFirstAgentToastFired(value: boolean): void;
+      setFirstPermissionToastFired(value: boolean): void;
+      setFirstVoiceToastFired(value: boolean): void;
+    }
+    ```
+
+    Update `INITIAL` defaults (all false) and the `reset()` action. Persistence already uses `@ottie:onboarding-state` — no key change needed; bump the version constant if Plan 02b's existing store version requires migrating prior install state (set the new fields to false on hydration).
+
+    Step 2 — Wire firstAgent in `packages/app/src/screens/sessions-screen.tsx`. Plan 02c already reshapes this file; add a useEffect that fires once on the agents-length 0→1 transition:
+
+    ```typescript
+    import { fireDelightToast } from "@/utils/delight-toast";
+    import { useOnboardingStateStore } from "@/stores/onboarding-state-store";
+    import { useTranslation } from "react-i18next";
+    import { useRef, useEffect } from "react";
+
+    // Inside the component:
+    const { t } = useTranslation();
+    const firstAgentToastFired = useOnboardingStateStore((s) => s.firstAgentToastFired);
+    const setFirstAgentToastFired = useOnboardingStateStore((s) => s.setFirstAgentToastFired);
+    const prevAgentsCountRef = useRef<number>(agents.length);
+    useEffect(() => {
+      const prev = prevAgentsCountRef.current;
+      const curr = agents.length;
+      prevAgentsCountRef.current = curr;
+      if (firstAgentToastFired) return;
+      if (prev === 0 && curr >= 1) {
+        const fired = fireDelightToast({
+          event: "firstAgent",
+          title: t("delight.firstAgent.toast", { otter: "🦦" }),
+        });
+        if (fired) setFirstAgentToastFired(true);
+      }
+    }, [agents.length, firstAgentToastFired, setFirstAgentToastFired, t]);
+    ```
+
+    The Task 4-shipped helper already gates via `delightFiredFirstAgent` flag, so a duplicate guard is acceptable redundancy.
+
+    Step 3 — Wire firstPermission in `packages/app/src/contexts/session-context.tsx`. Locate the `agent_permission_request` handler / permission-decision dispatch (use `grep -n "permission" packages/app/src/contexts/session-context.tsx`). On the first approve OR deny call (both count as "first permission decided"), fire:
+
+    ```typescript
+    // After the existing permission decision is dispatched to the daemon:
+    const firstPermissionToastFired = useOnboardingStateStore.getState().firstPermissionToastFired;
+    if (!firstPermissionToastFired) {
+      const fired = fireDelightToast({
+        event: "firstPermission",
+        title: t("delight.firstPermission.toast"),
+      });
+      if (fired) useOnboardingStateStore.getState().setFirstPermissionToastFired(true);
+    }
+    ```
+
+    Use imperative `getState()` since this runs inside an event-handler closure, not a React render. The translation function `t` must be available in the context (read the existing imports — if `useTranslation` is already used elsewhere in the file, reuse; otherwise import once at the top of the relevant function).
+
+    If the permission-decision handler does NOT live in `session-context.tsx` directly but rather in a sub-module (e.g. a service file consumed by the context), wire there instead and update this task's `<files>` list. Document the actual location in the task SUMMARY.
+
+    Step 4 — Wire firstVoice in `packages/app/src/voice-control/voice-router.ts`. Locate the successful-dispatch return path (where a voice intent matches and `actionRegistry.dispatch(...)` is invoked). After a successful dispatch (the registry returned `true`), fire:
+
+    ```typescript
+    // After actionRegistry.dispatch(...) resolves true on a voice-driven dispatch:
+    const firstVoiceToastFired = useOnboardingStateStore.getState().firstVoiceToastFired;
+    if (!firstVoiceToastFired) {
+      const fired = fireDelightToast({
+        event: "firstVoice",
+        title: i18n.t("delight.firstVoice.toast"), // adapt to the file's existing i18n import shape
+      });
+      if (fired) useOnboardingStateStore.getState().setFirstVoiceToastFired(true);
+    }
+    ```
+
+    voice-router.ts may be outside the React tree (a plain TS module). Use the global `i18n` instance (existing pattern in this file — search for `i18n.t` or import from `@/i18n` if a singleton exists; otherwise pre-resolve the title at the dispatcher's call site and pass it in).
+
+    Step 5 — i18n keys for the three delight toasts already exist in en/zh from Task 4. This task does NOT add new keys. Verify with grep that `delight.firstAgent.toast`, `delight.firstPermission.toast`, `delight.firstVoice.toast` exist in both locale files.
+
+    Step 6 — Run `npm run format -- packages/app/src/stores/onboarding-state-store.ts packages/app/src/screens/sessions-screen.tsx packages/app/src/contexts/session-context.tsx packages/app/src/voice-control/voice-router.ts`.
+
+    Coordination note: this task touches `sessions-screen.tsx` which Plan 02c also modifies. Plan 02e is `wave: 2` and depends on 02a; Plan 02c is also `wave: 2` depending on 02a. To avoid the same-wave file conflict, declare 02e `depends_on: [02a, 02c]` (set in this task's wave-update step below) so Plan 02e runs after Plan 02c lands, and the read/write contract is: 02c reshapes the screen and adds `<ChatRow>` + first-time-empty branch; 02e adds the firstAgent useEffect to the same file.
+
+    Step 7 — Update this plan's frontmatter `depends_on` from `[02a]` to `[02a, 02c]` so the executor schedules 02e in a later wave than 02c. (Done as part of the frontmatter changes already applied for B1/B3/B4 — verify here.)
+
+  </action>
+  <verify>
+    <automated>
+      cd /Users/a123456/Downloads/ottie-workspace/ottie && \
+      grep -c "firstAgentToastFired" packages/app/src/stores/onboarding-state-store.ts | grep -qE '^[1-9]' && \
+      grep -c "firstPermissionToastFired" packages/app/src/stores/onboarding-state-store.ts | grep -qE '^[1-9]' && \
+      grep -c "firstVoiceToastFired" packages/app/src/stores/onboarding-state-store.ts | grep -qE '^[1-9]' && \
+      grep -c 'fireDelightToast' packages/app/src/screens/sessions-screen.tsx | grep -qE '^[1-9]' && \
+      grep -c '"firstAgent"' packages/app/src/screens/sessions-screen.tsx | grep -qE '^[1-9]' && \
+      grep -c 'fireDelightToast' packages/app/src/contexts/session-context.tsx | grep -qE '^[1-9]' && \
+      grep -c '"firstPermission"' packages/app/src/contexts/session-context.tsx | grep -qE '^[1-9]' && \
+      grep -c 'fireDelightToast' packages/app/src/voice-control/voice-router.ts | grep -qE '^[1-9]' && \
+      grep -c '"firstVoice"' packages/app/src/voice-control/voice-router.ts | grep -qE '^[1-9]' && \
+      grep -q "delight.firstAgent.toast" packages/app/src/i18n/locales/en.json && \
+      grep -q "delight.firstAgent.toast" packages/app/src/i18n/locales/zh.json && \
+      npm run typecheck && \
+      npm run lint -- packages/app/src/stores/onboarding-state-store.ts packages/app/src/screens/sessions-screen.tsx packages/app/src/contexts/session-context.tsx packages/app/src/voice-control/voice-router.ts
+    </automated>
+  </verify>
+  <acceptance_criteria>
+    - Three new flags + setters exist in `useOnboardingStateStore` (firstAgentToastFired / firstPermissionToastFired / firstVoiceToastFired)
+    - `grep -c 'fireDelightToast(\{[[:space:]]*$\|fireDelightToast({' packages/app/src/screens/sessions-screen.tsx packages/app/src/contexts/session-context.tsx packages/app/src/voice-control/voice-router.ts | awk -F: '{ s += $2 } END { exit !(s >= 3) }'` succeeds (3 call sites total — one per file)
+    - `grep -c '"firstAgent"' packages/app/src/screens/sessions-screen.tsx` returns ≥1
+    - `grep -c '"firstPermission"' packages/app/src/contexts/session-context.tsx` returns ≥1
+    - `grep -c '"firstVoice"' packages/app/src/voice-control/voice-router.ts` returns ≥1
+    - en.json + zh.json both contain `delight.firstAgent.toast` / `delight.firstPermission.toast` / `delight.firstVoice.toast` (added in Task 4, asserted again here)
+    - `npm run typecheck` exits 0
+    - Lint passes for the 4 modified source files
+  </acceptance_criteria>
+  <done>Three delight toasts fire at their actual call sites — firstAgent on sessions-screen 0→1 transition, firstPermission on first approve/deny, firstVoice on first successful voice dispatch — each gated by per-event Zustand flag plus the helper's own delightFired* lock</done>
+</task>
+
 <task type="auto">
   <name>Task 5: NAT-04 use-smoothed-text universal application audit (collapse to single consumer; gate consumer count via grep)</name>
   <files>
@@ -942,6 +1312,8 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
 
     Step 5 — Wire `splash-overlay.tsx` to import from the central module the same way. Visual MUST NOT change.
 
+    **Cross-plan coordination (closes checker W4):** `splash-overlay.tsx` is also modified by Plan 02c Task 3 (which mounts `<TotalUnreadPopup>` after splash dismissal). Plan 02e now declares `depends_on: [02a, 02c]` so this plan runs in a later wave than 02c and can land its `@/assets/otter` import refactor on top of 02c's TotalUnreadPopup mount without conflict. The two edits are additive (different sites in the same file). Read the file AFTER 02c lands and confirm `<TotalUnreadPopup>` is already mounted before applying the otter-asset import change here. Do NOT remove or alter the TotalUnreadPopup mount.
+
     Step 6 — Wire the first-time-empty branch in `packages/app/src/screens/sessions-screen.tsx` per PATTERNS.md line 839. The Chats tab empty state branches on `useOnboardingStateStore().emptyOttiePlayedFirstChats`:
 
     - First-time (flag === false): render `<otterAssets.emptyStateIllustration />` + `t("chat.empty.firstTime.heading")` + `t("chat.empty.firstTime.body")` + the existing CTA. After the user adds their first chat (i.e. `agents.length` transitions to ≥1), call `useOnboardingStateStore.getState().setEmptyOttiePlayedFirstChats(true)` so subsequent empty states (if user later deletes everything) skip the Otter.
@@ -953,13 +1325,13 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
 
     For new strings introduced ONLY by this task (the otter README references no new copy beyond what 02b/02c provide), no en/zh additions are needed. Skip if already present.
 
-    Step 8 — Run `npm run format -- packages/app/src/assets/otter/index.ts packages/app/src/components/welcome-screen.tsx packages/app/src/components/splash-overlay.tsx packages/app/src/screens/sessions-screen.tsx packages/app/src/i18n/locales/en.json packages/app/src/i18n/locales/zh.json`.
+    Step 8 — Run `npm run format -- packages/app/src/assets/otter/index.ts packages/app/src/components/welcome-screen.tsx packages/app/src/components/splash-overlay.tsx packages/app/src/screens/sessions-screen.tsx packages/app/src/screens/workspace/workspace-screen.tsx packages/app/src/i18n/locales/en.json packages/app/src/i18n/locales/zh.json`.
 
-    Step 9 — Add a grep-test that there are exactly 5 sanctioned consumers of `@/assets/otter` AND no others. Inline this test inside `packages/app/src/assets/otter/README.md` as the canonical command:
+    Step 9 — Add a grep-test that there are exactly 5 sanctioned consumers of `@/assets/otter` AND no others (5 includes workspace-screen.tsx — closes checker B4). Inline this test inside `packages/app/src/assets/otter/README.md` as the canonical command:
 
     ```bash
-    # Pitfall 9 / D-14 / D-17 brand-creep gate
-    SANCTIONED="welcome-screen.tsx splash-overlay.tsx sessions-screen.tsx delight-toast.ts"
+    # Pitfall 9 / D-14 / D-17 brand-creep gate (B4 — count = 5)
+    SANCTIONED="welcome-screen.tsx splash-overlay.tsx sessions-screen.tsx workspace-screen.tsx delight-toast.ts"
     grep -rln "from \"@/assets/otter\"" packages/app/src/ | while read f; do
       base=$(basename "$f")
       echo "$SANCTIONED" | grep -wq "$base" || echo "VIOLATION: $f imports otter assets but is not sanctioned"
@@ -980,28 +1352,34 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
       grep -q "@/assets/otter" packages/app/src/components/welcome-screen.tsx && \
       grep -q "@/assets/otter" packages/app/src/components/splash-overlay.tsx && \
       grep -q "emptyOttiePlayedFirstChats\|@/assets/otter" packages/app/src/screens/sessions-screen.tsx && \
+      grep -q "emptyOttiePlayedFirstWorkspace\|@/assets/otter" packages/app/src/screens/workspace/workspace-screen.tsx && \
+      grep -q "workspace.empty.firstTime.heading" packages/app/src/i18n/locales/en.json && \
+      grep -q "workspace.empty.firstTime.heading" packages/app/src/i18n/locales/zh.json && \
       VIOLATIONS=$(grep -rln 'from "@/assets/otter"' packages/app/src/ | while read f; do \
         base=$(basename "$f"); \
         case "$base" in \
-          welcome-screen.tsx|splash-overlay.tsx|sessions-screen.tsx|delight-toast.ts) ;; \
+          welcome-screen.tsx|splash-overlay.tsx|sessions-screen.tsx|workspace-screen.tsx|delight-toast.ts) ;; \
           *) echo "$f"; ;; \
         esac; \
       done) && \
       [ -z "$VIOLATIONS" ] && \
       npm run typecheck && \
-      npm run lint -- packages/app/src/assets/otter/index.ts packages/app/src/components/welcome-screen.tsx packages/app/src/components/splash-overlay.tsx packages/app/src/screens/sessions-screen.tsx
+      npm run lint -- packages/app/src/assets/otter/index.ts packages/app/src/components/welcome-screen.tsx packages/app/src/components/splash-overlay.tsx packages/app/src/screens/sessions-screen.tsx packages/app/src/screens/workspace/workspace-screen.tsx
     </automated>
   </verify>
   <acceptance_criteria>
     - `grep -c "export const otterAssets" packages/app/src/assets/otter/index.ts` returns 1
     - `grep -c "THM-04 / D-17" packages/app/src/assets/otter/index.ts` returns ≥1
     - `test -f packages/app/src/assets/otter/README.md` exits 0
-    - `grep -c '@/assets/otter' packages/app/src/components/welcome-screen.tsx packages/app/src/components/splash-overlay.tsx packages/app/src/screens/sessions-screen.tsx | grep -v ':0$' | wc -l` returns ≥3 (each file has the import)
-    - The grep brand-creep gate command emits no VIOLATION lines (no consumer outside the 4 sanctioned files; `delight-toast.ts` becomes the 5th once delight wiring lands)
+    - `grep -c '@/assets/otter' packages/app/src/components/welcome-screen.tsx packages/app/src/components/splash-overlay.tsx packages/app/src/screens/sessions-screen.tsx packages/app/src/screens/workspace/workspace-screen.tsx | grep -v ':0$' | wc -l` returns ≥4 (4 file-imports; delight-toast.ts is the 5th via inline emoji sticker — total sanctioned = 5)
+    - `grep -c "emptyOttiePlayedFirstWorkspace" packages/app/src/screens/workspace/workspace-screen.tsx` returns ≥1 (B4 — first-time-empty Otter branch wired)
+    - `grep -c "workspace.empty.firstTime.heading" packages/app/src/i18n/locales/en.json` returns 1
+    - `grep -c "workspace.empty.firstTime.heading" packages/app/src/i18n/locales/zh.json` returns 1 (zh parity)
+    - The grep brand-creep gate command emits no VIOLATION lines (5 sanctioned consumers — closes B4)
     - `npm run typecheck` exits 0
     - `npm run lint -- packages/app/src/assets/otter/index.ts packages/app/src/components/welcome-screen.tsx packages/app/src/components/splash-overlay.tsx packages/app/src/screens/sessions-screen.tsx` exits 0
   </acceptance_criteria>
-  <done>Otter assets centralized at @/assets/otter; consumers limited to the 5 sanctioned surfaces (4 file-imports + 1 inline-emoji via delight-toast); brand-creep is automatically detectable via grep</done>
+  <done>Otter assets centralized at @/assets/otter; 5 sanctioned consumers (welcome / splash / sessions-screen / workspace-screen / delight-toast); brand-creep gate updated to count 5; B4 closed</done>
 </task>
 
 <task type="auto">
@@ -1080,7 +1458,7 @@ Phase 2 promotion (D-20 / NAT-03 acceptance wording):
     - `packages/app/src/components/workspace-hover-card.tsx` (lines 183-184):
       Cross-platform file (hover card needs to render on native too) — gate via `isWeb ? handler : undefined`.
 
-    - `packages/app/src/components/ui/tooltip.tsx` (lines 383-384, 407-408): Already touched by Task 2 (GlassSurface migration). If those lines were not already gated by Task 2, gate them here. Otherwise skip.
+    - `packages/app/src/components/ui/tooltip.tsx` (lines 383-384, 407-408): **OWNED BY TASK 2 (closes W5 from checker)** — tooltip.tsx is in Task 2's files list for the BlurView→GlassSurface migration; Task 2 MUST gate these onPointerEnter/onPointerLeave assignments via `isWeb ? handler : undefined` as part of that migration so they no longer count as violations by the time this task runs. This task does NOT modify tooltip.tsx — verify here only via the lint (must report 0).
 
     Step 4 — Flip the lint script behavior. Edit `tools/lint/pointer-events-web-only.ts` lines 245-265 — change the main() so:
     - Update header comment from "Phase 1: warn-only counter-test ... Phase 5: tightened — exit 1 on ANY violation" to "Phase 2: tightened (D-20 / NAT-03) — exit 1 on ANY violation"
