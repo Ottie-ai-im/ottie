@@ -38,3 +38,46 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+  carve-flag-matrix:
+    # D-04 (plan 01-04): every PR runs the carve test suite under all 4
+    # OTTIE_USE_NEW_ROUTER × OTTIE_USE_PERMISSION_HANDLER flag combinations so
+    # the Strangler-Fig refactor cannot break either path silently. Removed in
+    # Phase 5 cleanup once both flags are deleted.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        OTTIE_USE_NEW_ROUTER: ["0", "1"]
+        OTTIE_USE_PERMISSION_HANDLER: ["0", "1"]
+    env:
+      OTTIE_USE_NEW_ROUTER: ${{ matrix.OTTIE_USE_NEW_ROUTER }}
+      OTTIE_USE_PERMISSION_HANDLER: ${{ matrix.OTTIE_USE_PERMISSION_HANDLER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build relay (dependency for server tests)
+        run: npm run build --workspace=@ottie/relay
+
+      - name: Build server (dependency for session/* test imports)
+        run: npm run build --workspace=@ottie/server
+
+      - name: Run carve test suite under flag combo
+        run: |
+          npx vitest run \
+            packages/server/src/server/session/router.test.ts \
+            packages/server/src/server/session/parse.test.ts \
+            packages/server/src/server/session/permission-handler.test.ts \
+            packages/server/src/server/session/inflight-counter.test.ts \
+            packages/server/src/shared/messages.frozen-v1.8.test.ts \
+            packages/server/src/shared/messages.frozen-v1.9.test.ts \
+            packages/server/src/shared/messages.frozen-v1.10.test.ts \
+            --bail=1

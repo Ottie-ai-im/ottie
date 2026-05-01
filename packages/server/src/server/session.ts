@@ -42,6 +42,9 @@ import {
   type WorkspaceDescriptorPayload,
   type WorkspaceStateBucket,
 } from "./messages.js";
+import { InflightCounter } from "./session/inflight-counter.js";
+import { PermissionHandler } from "./session/permission-handler.js";
+import { MessageRouter } from "./session/router.js";
 import type { TerminalManager, TerminalsChangedEvent } from "../terminal/terminal-manager.js";
 import { captureTerminalLines, type TerminalSession } from "../terminal/terminal.js";
 import { TerminalOutputCoalescer } from "../terminal/terminal-output-coalescer.js";
@@ -838,8 +841,9 @@ export class Session {
   private readonly activeTerminalStreams = new Map<number, ActiveTerminalStream>();
   private readonly terminalIdToSlot = new Map<string, number>();
   private nextTerminalSlot = 0;
-  private inflightRequests = 0;
-  private peakInflightRequests = 0;
+  private readonly inflightCounter = new InflightCounter();
+  private readonly router = new MessageRouter();
+  private readonly permissionHandler: PermissionHandler;
   private readonly availableEditorTargetsCache = new TTLCache<
     string,
     EditorTargetDescriptorPayload[]
@@ -963,11 +967,21 @@ export class Session {
     });
 
     this.initializePerSessionManagers({ tts, stt, dictation });
-
-    // Initialize agent MCP client asynchronously
+    this.permissionHandler = new PermissionHandler({
+      agentManager: this.agentManager,
+      emit: (m) => this.emit(m),
+      logger: this.sessionLogger,
+      startFollowUpTurn: (id, prompt) => this.startAgentStream(id, prompt),
+    });
+    if (process.env.OTTIE_USE_PERMISSION_HANDLER !== "0") {
+      this.router.register("agent_permission_response", (m) =>
+        m.type === "agent_permission_response"
+          ? this.permissionHandler.handleResponse(m.agentId, m.requestId, m.response)
+          : undefined,
+      );
+    }
     void this.initializeAgentMcp();
     this.subscribeToAgentEvents();
-
     this.sessionLogger.trace("Session created");
   }
 
@@ -1016,8 +1030,8 @@ export class Session {
     return {
       terminalDirectorySubscriptionCount: this.subscribedTerminalDirectories.size,
       terminalSubscriptionCount: this.activeTerminalStreams.size,
-      inflightRequests: this.inflightRequests,
-      peakInflightRequests: this.peakInflightRequests,
+      inflightRequests: this.inflightCounter.value,
+      peakInflightRequests: this.inflightCounter.peak,
     };
   }
 
@@ -1635,21 +1649,16 @@ export class Session {
    * Main entry point for processing session messages
    */
   public async handleMessage(msg: SessionInboundMessage): Promise<void> {
-    this.inflightRequests++;
-    if (this.inflightRequests > this.peakInflightRequests) {
-      this.peakInflightRequests = this.inflightRequests;
-    }
+    this.inflightCounter.increment();
     try {
-      this.sessionLogger.trace(
-        { messageType: msg.type, payloadBytes: JSON.stringify(msg).length },
-        "inbound message",
-      );
+      const payloadBytes = JSON.stringify(msg).length;
+      this.sessionLogger.trace({ messageType: msg.type, payloadBytes }, "inbound message");
       try {
-        await this.dispatchInboundMessage(msg);
+        const useRouter = process.env.OTTIE_USE_NEW_ROUTER !== "0" && this.router.has(msg.type);
+        await (useRouter ? this.router.dispatch(msg) : this.dispatchLegacyInboundMessage(msg));
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         this.sessionLogger.error({ err }, "Error handling message");
-
         const requestId = (msg as { requestId?: unknown }).requestId;
         if (typeof requestId === "string") {
           try {
@@ -1666,7 +1675,6 @@ export class Session {
             this.sessionLogger.error({ err: emitError }, "Failed to emit rpc_error");
           }
         }
-
         this.emit({
           type: "activity_log",
           payload: {
@@ -1678,11 +1686,12 @@ export class Session {
         });
       }
     } finally {
-      this.inflightRequests--;
+      this.inflightCounter.decrement();
     }
   }
 
-  private async dispatchInboundMessage(msg: SessionInboundMessage): Promise<void> {
+  // Carve C-1 (plan 01-04): legacy fallthrough; removed in Phase 5 cleanup.
+  private async dispatchLegacyInboundMessage(msg: SessionInboundMessage): Promise<void> {
     const promise =
       this.dispatchVoiceAndControlMessage(msg) ??
       this.dispatchAgentLifecycleMessage(msg) ??
@@ -2057,7 +2066,7 @@ export class Session {
   }
 
   public resetPeakInflight(): void {
-    this.peakInflightRequests = this.inflightRequests;
+    this.inflightCounter.resetPeak();
   }
 
   public handleBinaryFrame(frame: TerminalStreamFrame): void {
@@ -4129,43 +4138,27 @@ export class Session {
     }
   }
 
-  /**
-   * Handle agent permission response from user
-   */
+  // Carve C-3 (plan 01-04): legacy body in session/permission-handler.ts;
+  // OTTIE_USE_PERMISSION_HANDLER=0 falls back to the verbatim body for rollback.
   private async handleAgentPermissionResponse(
     agentId: string,
     requestId: string,
     response: AgentPermissionResponse,
   ): Promise<void> {
-    this.sessionLogger.debug(
-      { agentId, requestId },
-      `Handling permission response for agent ${agentId}, request ${requestId}`,
-    );
-
+    if (process.env.OTTIE_USE_PERMISSION_HANDLER !== "0") {
+      await this.permissionHandler.handleResponse(agentId, requestId, response);
+      return;
+    }
+    // Legacy fallback (rollback-only path): activity_log + throw preserve client contract.
     try {
       const result = await this.agentManager.respondToPermission(agentId, requestId, response);
-      this.sessionLogger.debug({ agentId }, `Permission response forwarded to agent ${agentId}`);
-
-      if (result?.followUpPrompt) {
-        this.sessionLogger.debug(
-          { agentId },
-          "Permission response requires follow-up turn, starting agent stream",
-        );
-        this.startAgentStream(agentId, result.followUpPrompt);
-      }
+      if (result?.followUpPrompt) this.startAgentStream(agentId, result.followUpPrompt);
     } catch (error) {
-      this.sessionLogger.error(
-        { err: error, agentId, requestId },
-        "Failed to respond to permission",
-      );
+      const content = `Failed to respond to permission: ${(error as Error).message}`;
+      this.sessionLogger.error({ err: error, agentId, requestId }, content);
       this.emit({
         type: "activity_log",
-        payload: {
-          id: uuidv4(),
-          timestamp: new Date(),
-          type: "error",
-          content: `Failed to respond to permission: ${(error as Error).message}`,
-        },
+        payload: { id: uuidv4(), timestamp: new Date(), type: "error", content },
       });
       throw error;
     }
