@@ -1,11 +1,12 @@
 ---
 phase: 02
 slug: onboarding-navigation-settings-theme-native-feel-polish
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-01
 revised: 2026-05-01
+reviewed_at: 2026-05-01
 ---
 
 # Phase 02 — UI Design Contract
