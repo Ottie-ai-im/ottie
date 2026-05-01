@@ -87,6 +87,14 @@ export interface PanelState {
   showMobileAgent: () => void;
   showMobileAgentList: () => void;
   toggleMobileAgentList: () => void;
+  /**
+   * NAV-A2 — when the form factor flips to compact (e.g. user resizes from
+   * desktop to phone-width on web), drop both overlay variants of the mobile
+   * sidebar so the user lands on the canonical "agent" view. Idempotent —
+   * called from `app/_layout.tsx` whenever `useIsCompactFormFactor()` becomes
+   * true.
+   */
+  collapseOverlayOnCompact: () => void;
   openDesktopAgentList: () => void;
   closeDesktopAgentList: () => void;
   toggleDesktopAgentList: () => void;
@@ -326,6 +334,17 @@ export const usePanelStore = create<PanelState>()(
         set((state) => ({
           mobileView: state.mobileView === "agent-list" ? "agent" : "agent-list",
         })),
+
+      collapseOverlayOnCompact: () =>
+        set((state) => {
+          if (state.mobileView === "agent") {
+            // Idempotent — already collapsed.
+            return state;
+          }
+          // NAV-A2 / closes checker B2 — both overlay variants drop to the
+          // canonical "agent" view when the form factor flips to compact.
+          return { mobileView: "agent" as const };
+        }),
 
       openDesktopAgentList: () =>
         set((state) => {

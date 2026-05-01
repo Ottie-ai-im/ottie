@@ -454,6 +454,18 @@ function AppContainer({
   }, [settings.theme, updateSettings]);
 
   const isCompactLayout = useIsCompactFormFactor();
+
+  // NAV-A2 / closes checker B2 — when the form factor flips to compact (e.g.
+  // user resizes a desktop window to phone-width on web), drop the sidebar
+  // overlays. Otherwise the overlay state would remain pinned and obscure
+  // the chats content. The store's `collapseOverlayOnCompact` is idempotent
+  // so re-runs at the same compact state are no-ops.
+  useEffect(() => {
+    if (isCompactLayout) {
+      usePanelStore.getState().collapseOverlayOnCompact();
+    }
+  }, [isCompactLayout]);
+
   const chromeLayoutEnabled = chromeLayoutEnabledOverride ?? daemons.length > 0;
   const pathname = usePathname();
   const activeServerId = useMemo(

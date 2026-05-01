@@ -15,9 +15,14 @@ import { actionRegistry } from "@/actions/registry";
 // find the canonical handler. Plan 02a Task 2 — the registry is the single
 // source of truth across voice / keyboard / cmdk / menu surfaces.
 import { registerBuiltInActions } from "@/actions/built-in-actions";
+// Plan 02c — register the 8 chat-row context-menu + 4 add-menu ActionIds on
+// module load. Same idempotent pattern as `built-in-actions`. Voice + cmdk
+// + long-press menus all dispatch through actionRegistry.
+import { registerChatRowActions } from "@/actions/chat-row-actions";
 
 // Eager-register on module load; idempotent if already called.
 registerBuiltInActions();
+registerChatRowActions();
 
 /**
  * Voice command registry.

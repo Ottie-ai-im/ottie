@@ -22,11 +22,14 @@ import enLocale from "@/i18n/locales/en.json" with { type: "json" };
 import zhLocale from "@/i18n/locales/zh.json" with { type: "json" };
 import { actionRegistry } from "@/actions/registry";
 import { registerBuiltInActions } from "@/actions/built-in-actions";
+import { registerChatRowActions } from "@/actions/chat-row-actions";
 
-// Side-effect: register the 6 NAT-01 reference actions before assertions run.
-// Importing `built-in-actions` directly (not voice-commands.ts) keeps the
-// parity test independent of the voice runtime stack.
+// Side-effect: register the 6 NAT-01 reference actions + the 13 chat-row
+// + add-menu actions (Plan 02c) before assertions run. Importing the
+// registration modules directly (not voice-commands.ts) keeps the parity
+// test independent of the voice runtime stack.
 registerBuiltInActions();
+registerChatRowActions();
 
 const NAT_01_REFERENCE_IDS = [
   "agent.create",
