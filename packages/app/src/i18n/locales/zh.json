@@ -29,7 +29,10 @@
     "pasteLink": "粘贴配对链接",
     "openOnDesktop": "在电脑上打开 Ottie",
     "needHelp": "需要帮助？",
-    "settingsButton": "设置"
+    "settingsButton": "设置",
+    "getStarted": "开始使用",
+    "skipForPowerUsers": "跳过（高阶用户）",
+    "dontShowAgain": "不再显示"
   },
   "sidebar": {
     "sessions": "聊天",

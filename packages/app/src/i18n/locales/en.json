@@ -29,7 +29,10 @@
     "pasteLink": "Paste pairing link",
     "openOnDesktop": "Open Ottie on your computer",
     "needHelp": "Need help?",
-    "settingsButton": "Settings"
+    "settingsButton": "Settings",
+    "getStarted": "Get started",
+    "skipForPowerUsers": "Skip for power users",
+    "dontShowAgain": "Don't show this again"
   },
   "sidebar": {
     "sessions": "Chats",

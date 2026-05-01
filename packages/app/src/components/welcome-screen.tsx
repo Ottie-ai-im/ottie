@@ -3,7 +3,15 @@ import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { QrCode, Link2, ClipboardPaste, ExternalLink, Settings } from "lucide-react-native";
+import {
+  QrCode,
+  Link2,
+  ClipboardPaste,
+  ExternalLink,
+  Settings,
+  SkipForward,
+  Check,
+} from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { HostProfile } from "@/types/host-connection";
 import { getHostRuntimeStore, isHostRuntimeConnected, useHosts } from "@/runtime/host-runtime";
@@ -12,13 +20,14 @@ import { PairLinkModal } from "./pair-link-modal";
 import { Button } from "@/components/ui/button";
 import { resolveAppVersion } from "@/utils/app-version";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
-import { buildHostRootRoute } from "@/utils/host-routes";
+import { buildHostRootRoute, buildHostSessionsRoute } from "@/utils/host-routes";
 import { OttieLogo } from "@/components/icons/ottie-logo";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { isWeb, isNative } from "@/constants/platform";
+import { useOnboardingStateStore } from "@/stores/onboarding-state-store";
 
 interface WelcomeAction {
-  key: "scan-qr" | "direct-connection" | "paste-pairing-link";
+  key: "scan-qr" | "direct-connection" | "paste-pairing-link" | "skip";
   label: string;
   testID: string;
   primary: boolean;
@@ -114,6 +123,31 @@ const styles = StyleSheet.create((theme) => ({
     alignSelf: "center",
     marginTop: theme.spacing[6],
   },
+  dontShowAgainRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingVertical: theme.spacing[2],
+    alignSelf: "center",
+    marginBottom: theme.spacing[2],
+  },
+  dontShowAgainCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dontShowAgainCheckboxChecked: {
+    backgroundColor: theme.colors.foreground,
+    borderColor: theme.colors.foreground,
+  },
+  dontShowAgainLabel: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
 }));
 
 function useAnyHostOnline(serverIds: string[]): string | null {
@@ -168,6 +202,8 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
   const appVersionText = formatVersionWithPrefix(appVersion);
   const [isDirectOpen, setIsDirectOpen] = useState(false);
   const [isPasteLinkOpen, setIsPasteLinkOpen] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+  const setWelcomeShown = useOnboardingStateStore((s) => s.setWelcomeShown);
   const hosts = useHosts();
   const anyOnlineServerId = useAnyHostOnline(hosts.map((h) => h.serverId));
 
@@ -191,13 +227,58 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
     router.push("/settings");
   }, [router]);
 
-  const handleOpenDirect = useCallback(() => setIsDirectOpen(true), []);
+  // When the user has ticked "Don't show again", mark welcomeShown=true the
+  // moment they invoke any primary CTA — that way the next cold open lands
+  // straight on Chats / sessions per D-21, even if they back out of the
+  // pairing flow.
+  const markWelcomeIfDontShowAgain = useCallback(() => {
+    if (dontShowAgain) {
+      setWelcomeShown(true);
+    }
+  }, [dontShowAgain, setWelcomeShown]);
+
+  const handleOpenDirect = useCallback(() => {
+    markWelcomeIfDontShowAgain();
+    setIsDirectOpen(true);
+  }, [markWelcomeIfDontShowAgain]);
   const handleCloseDirect = useCallback(() => setIsDirectOpen(false), []);
-  const handleOpenPasteLink = useCallback(() => setIsPasteLinkOpen(true), []);
+  const handleOpenPasteLink = useCallback(() => {
+    markWelcomeIfDontShowAgain();
+    setIsPasteLinkOpen(true);
+  }, [markWelcomeIfDontShowAgain]);
   const handleClosePasteLink = useCallback(() => setIsPasteLinkOpen(false), []);
   const handleScanQr = useCallback(() => {
+    markWelcomeIfDontShowAgain();
     router.push("/pair-scan?source=onboarding");
-  }, [router]);
+  }, [markWelcomeIfDontShowAgain, router]);
+
+  // "Skip for power users" — set welcomeShown unconditionally and route to
+  // Chats (sessions tab) of any online host, falling back to root which the
+  // index route then redirects to /welcome only if welcomeShown=false.
+  const handleSkip = useCallback(() => {
+    setWelcomeShown(true);
+    if (anyOnlineServerId) {
+      router.replace(buildHostSessionsRoute(anyOnlineServerId));
+      return;
+    }
+    router.replace("/");
+  }, [anyOnlineServerId, router, setWelcomeShown]);
+
+  const handleToggleDontShowAgain = useCallback(() => {
+    setDontShowAgain((prev) => !prev);
+  }, []);
+
+  const dontShowAgainAccessibilityState = useMemo(
+    () => ({ checked: dontShowAgain }),
+    [dontShowAgain],
+  );
+  const dontShowAgainCheckboxStyle = useMemo(
+    () =>
+      dontShowAgain
+        ? [styles.dontShowAgainCheckbox, styles.dontShowAgainCheckboxChecked]
+        : styles.dontShowAgainCheckbox,
+    [dontShowAgain],
+  );
 
   const handleHostSaved = useCallback(
     ({ profile, serverId }: { profile: HostProfile; serverId: string }) => {
@@ -206,6 +287,15 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
     },
     [onHostAdded, finishOnboarding],
   );
+
+  const skipAction: WelcomeAction = {
+    key: "skip",
+    label: t("welcome.skipForPowerUsers"),
+    testID: "welcome-skip",
+    primary: false,
+    icon: SkipForward,
+    onPress: handleSkip,
+  };
 
   const actions: WelcomeAction[] = isWeb
     ? [
@@ -225,6 +315,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
           icon: ClipboardPaste,
           onPress: handleOpenPasteLink,
         },
+        skipAction,
       ]
     : [
         {
@@ -251,6 +342,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
           icon: ClipboardPaste,
           onPress: handleOpenPasteLink,
         },
+        skipAction,
       ];
 
   const isConnectingToSavedHosts = hosts.length > 0 && !anyOnlineServerId;
@@ -286,6 +378,22 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
               </>
             )}
           </View>
+
+          <Pressable
+            testID="welcome-dont-show-again"
+            accessibilityRole="checkbox"
+            accessibilityState={dontShowAgainAccessibilityState}
+            accessibilityLabel={t("welcome.dontShowAgain")}
+            onPress={handleToggleDontShowAgain}
+            style={styles.dontShowAgainRow}
+          >
+            <View style={dontShowAgainCheckboxStyle}>
+              {dontShowAgain ? (
+                <Check size={12} color={theme.colors.surface0} strokeWidth={3} />
+              ) : null}
+            </View>
+            <Text style={styles.dontShowAgainLabel}>{t("welcome.dontShowAgain")}</Text>
+          </Pressable>
 
           <View style={styles.actions}>
             {actions.map((action) => (
