@@ -45,7 +45,7 @@ Plans:
 
 - [x] 01-01-PLAN.md — Schema-evolution discipline: RESERVED_FIELDS export, frozen-fixture v1.8/v1.9/v1.10 parse tests, warn-level @deprecated annotation lint (ARCH-02)
 - [x] 01-02-PLAN.md — Theme token skeleton + targeted migration (theme.ts/glass-surface/daemon-connection-dot/curves) + warn-level hardcoded-color lint with counter-baseline (THM-01)
-- [ ] 01-03-PLAN.md — Bug fixes bundle (atomic-per-bug): chevron + isHovered-alone lint (NAV-A3), resize-handle pointer-events + lint (NAT-03), OpenCode listPersistedAgents (SES-02), chromeEnabled split (SET-02)
+- [x] 01-03-PLAN.md — Bug fixes bundle (atomic-per-bug): chevron + isHovered-alone lint (NAV-A3), resize-handle pointer-events + lint (NAT-03), OpenCode listPersistedAgents (SES-02), chromeEnabled split (SET-02)
 - [ ] 01-04-PLAN.md — Carve C-1/C-2/C-3: MessageRouter, Zod parse boundary, PermissionHandler with Strangler-Fig env flags (ARCH-01)
 - [ ] 01-05-PLAN.md — Local-token auth three modes (loopback-trust / Tauri token-file / env var) + Settings panel (en+zh) + SECURITY.md update + log redaction (ARCH-03)
 
