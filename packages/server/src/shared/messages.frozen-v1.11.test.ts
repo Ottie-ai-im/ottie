@@ -16,11 +16,16 @@ import {
 // daemon panel (D-13). These fixtures pin the v1.11-shipped wire shapes
 // against today's Zod schemas; CI runs them on every PR. If a future change
 // in messages.ts narrows any of these schemas (e.g. drops `.optional()` from
-// `mode` or `tokenPresent`), one of the parses below will fail and the change
-// MUST be revised per the CLAUDE.md backward-compatibility rule.
+// `mode` or `tokenPresent`, or restructures `payload`), one of the parses
+// below will fail and the change MUST be revised per the CLAUDE.md backward-
+// compatibility rule.
 //
-// Hand-rolled (not captured from a real v1.11 daemon) — the schema source IS
-// the contract. The "all fields present" + "optional fields omitted" pair on
+// The response shape uses the nested `payload: { requestId, ... }` convention
+// matching the rest of the daemon's correlated-response messages — this
+// allows the existing `sendCorrelatedSessionRequest` / DaemonClient
+// correlation infrastructure to route them without per-kind extraction.
+//
+// The "all fields present" + "optional fields omitted" pair on
 // `local_token_status_response` exercises the `.optional()` discipline both
 // directions.
 //
@@ -36,15 +41,19 @@ const V1_11_LOCAL_TOKEN_STATUS_REQUEST_FIXTURE = {
 // FROZEN — do not edit. Snapshot of v1.11-shipped local_token_status_response (all fields present).
 const V1_11_LOCAL_TOKEN_STATUS_RESPONSE_FULL_FIXTURE = {
   type: "local_token_status_response",
-  requestId: "req-v111-status-1",
-  mode: "token-file",
-  tokenPresent: true,
+  payload: {
+    requestId: "req-v111-status-1",
+    mode: "token-file",
+    tokenPresent: true,
+  },
 } as const;
 
-// FROZEN — do not edit. Snapshot of v1.11-shipped local_token_status_response (optional fields omitted — old daemon could send response with only required fields).
+// FROZEN — do not edit. Snapshot of v1.11-shipped local_token_status_response (optional fields omitted — older daemon could send a minimal response with only requestId).
 const V1_11_LOCAL_TOKEN_STATUS_RESPONSE_MINIMAL_FIXTURE = {
   type: "local_token_status_response",
-  requestId: "req-v111-status-2",
+  payload: {
+    requestId: "req-v111-status-2",
+  },
 } as const;
 
 // FROZEN — do not edit. Snapshot of v1.11-shipped local_token_regenerate_request wire shape.
@@ -56,16 +65,20 @@ const V1_11_LOCAL_TOKEN_REGENERATE_REQUEST_FIXTURE = {
 // FROZEN — do not edit. Snapshot of v1.11-shipped local_token_regenerate_response (success path).
 const V1_11_LOCAL_TOKEN_REGENERATE_RESPONSE_SUCCESS_FIXTURE = {
   type: "local_token_regenerate_response",
-  requestId: "req-v111-regen-1",
-  success: true,
+  payload: {
+    requestId: "req-v111-regen-1",
+    success: true,
+  },
 } as const;
 
 // FROZEN — do not edit. Snapshot of v1.11-shipped local_token_regenerate_response (error path).
 const V1_11_LOCAL_TOKEN_REGENERATE_RESPONSE_ERROR_FIXTURE = {
   type: "local_token_regenerate_response",
-  requestId: "req-v111-regen-2",
-  success: false,
-  error: "EACCES: permission denied",
+  payload: {
+    requestId: "req-v111-regen-2",
+    success: false,
+    error: "EACCES: permission denied",
+  },
 } as const;
 
 describe("v1.11 wire compatibility — local-token RPC kinds (ARCH-03)", () => {
@@ -80,8 +93,9 @@ describe("v1.11 wire compatibility — local-token RPC kinds (ARCH-03)", () => {
       V1_11_LOCAL_TOKEN_STATUS_RESPONSE_FULL_FIXTURE,
     );
     expect(parsed.type).toBe("local_token_status_response");
-    expect(parsed.mode).toBe("token-file");
-    expect(parsed.tokenPresent).toBe(true);
+    expect(parsed.payload.requestId).toBe("req-v111-status-1");
+    expect(parsed.payload.mode).toBe("token-file");
+    expect(parsed.payload.tokenPresent).toBe(true);
   });
 
   it("v1.11 daemon -> client local_token_status_response (optional fields omitted) parses cleanly", () => {
@@ -92,8 +106,9 @@ describe("v1.11 wire compatibility — local-token RPC kinds (ARCH-03)", () => {
       V1_11_LOCAL_TOKEN_STATUS_RESPONSE_MINIMAL_FIXTURE,
     );
     expect(parsed.type).toBe("local_token_status_response");
-    expect(parsed.mode).toBeUndefined();
-    expect(parsed.tokenPresent).toBeUndefined();
+    expect(parsed.payload.requestId).toBe("req-v111-status-2");
+    expect(parsed.payload.mode).toBeUndefined();
+    expect(parsed.payload.tokenPresent).toBeUndefined();
   });
 
   it("v1.11 client -> daemon local_token_regenerate_request fixture parses cleanly", () => {
@@ -109,8 +124,9 @@ describe("v1.11 wire compatibility — local-token RPC kinds (ARCH-03)", () => {
       V1_11_LOCAL_TOKEN_REGENERATE_RESPONSE_SUCCESS_FIXTURE,
     );
     expect(parsed.type).toBe("local_token_regenerate_response");
-    expect(parsed.success).toBe(true);
-    expect(parsed.error).toBeUndefined();
+    expect(parsed.payload.requestId).toBe("req-v111-regen-1");
+    expect(parsed.payload.success).toBe(true);
+    expect(parsed.payload.error).toBeUndefined();
   });
 
   it("v1.11 daemon -> client local_token_regenerate_response (error) parses cleanly", () => {
@@ -118,8 +134,9 @@ describe("v1.11 wire compatibility — local-token RPC kinds (ARCH-03)", () => {
       V1_11_LOCAL_TOKEN_REGENERATE_RESPONSE_ERROR_FIXTURE,
     );
     expect(parsed.type).toBe("local_token_regenerate_response");
-    expect(parsed.success).toBe(false);
-    expect(parsed.error).toBe("EACCES: permission denied");
+    expect(parsed.payload.requestId).toBe("req-v111-regen-2");
+    expect(parsed.payload.success).toBe(false);
+    expect(parsed.payload.error).toBe("EACCES: permission denied");
   });
 
   it("v1.11 inbound RPCs route through SessionInboundMessageSchema (registered on the discriminator)", () => {

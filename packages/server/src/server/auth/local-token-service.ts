@@ -70,9 +70,11 @@ export function registerLocalTokenHandlers(
     const status = await service.getStatus();
     emit({
       type: "local_token_status_response",
-      requestId: msg.requestId,
-      mode: status.mode,
-      tokenPresent: status.tokenPresent,
+      payload: {
+        requestId: msg.requestId,
+        mode: status.mode,
+        tokenPresent: status.tokenPresent,
+      },
     });
   });
 
@@ -83,9 +85,11 @@ export function registerLocalTokenHandlers(
     const result = await service.regenerate();
     emit({
       type: "local_token_regenerate_response",
-      requestId: msg.requestId,
-      success: result.success,
-      error: "error" in result ? result.error : undefined,
+      payload: {
+        requestId: msg.requestId,
+        success: result.success,
+        error: "error" in result ? result.error : undefined,
+      },
     });
   });
 }

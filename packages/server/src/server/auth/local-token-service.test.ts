@@ -144,9 +144,9 @@ describe("registerLocalTokenHandlers", () => {
     const msg = emitted[0];
     expect(msg.type).toBe("local_token_status_response");
     if (msg.type === "local_token_status_response") {
-      expect(msg.requestId).toBe("req-1");
-      expect(msg.mode).toBe("explicit");
-      expect(msg.tokenPresent).toBe(true);
+      expect(msg.payload.requestId).toBe("req-1");
+      expect(msg.payload.mode).toBe("explicit");
+      expect(msg.payload.tokenPresent).toBe(true);
     }
   });
 
@@ -167,9 +167,9 @@ describe("registerLocalTokenHandlers", () => {
     const msg = emitted[0];
     expect(msg.type).toBe("local_token_regenerate_response");
     if (msg.type === "local_token_regenerate_response") {
-      expect(msg.requestId).toBe("req-2");
-      expect(msg.success).toBe(true);
-      expect(msg.error).toBeUndefined();
+      expect(msg.payload.requestId).toBe("req-2");
+      expect(msg.payload.success).toBe(true);
+      expect(msg.payload.error).toBeUndefined();
     }
   });
 
@@ -198,10 +198,10 @@ describe("registerLocalTokenHandlers", () => {
     const msg = emitted[0];
     expect(msg.type).toBe("local_token_regenerate_response");
     if (msg.type === "local_token_regenerate_response") {
-      expect(msg.requestId).toBe("req-3");
-      expect(msg.success).toBe(false);
-      expect(typeof msg.error).toBe("string");
-      expect((msg.error ?? "").length).toBeGreaterThan(0);
+      expect(msg.payload.requestId).toBe("req-3");
+      expect(msg.payload.success).toBe(false);
+      expect(typeof msg.payload.error).toBe("string");
+      expect((msg.payload.error ?? "").length).toBeGreaterThan(0);
     }
   });
 

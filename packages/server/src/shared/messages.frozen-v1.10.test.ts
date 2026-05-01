@@ -149,9 +149,11 @@ describe("v1.10 wire compatibility", () => {
     // v1.10 fixture parses (which all pass above) — schema additions never break old fixtures.
     const v11_only_message = {
       type: "local_token_status_response",
-      requestId: "req-1",
-      mode: "loopback-trust",
-      tokenPresent: false,
+      payload: {
+        requestId: "req-1",
+        mode: "loopback-trust",
+        tokenPresent: false,
+      },
     } as const;
     // Today's daemon parses v1.11 outbound messages just fine via the discriminator.
     // We use safeParse to guard against future schema-narrowing that would crash

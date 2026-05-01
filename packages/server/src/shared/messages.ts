@@ -1729,9 +1729,11 @@ export const LocalTokenStatusRequestSchema = z.object({
 
 export const LocalTokenStatusResponseSchema = z.object({
   type: z.literal("local_token_status_response"),
-  requestId: z.string(),
-  mode: z.enum(["loopback-trust", "token-file", "explicit"]).optional(),
-  tokenPresent: z.boolean().optional(),
+  payload: z.object({
+    requestId: z.string(),
+    mode: z.enum(["loopback-trust", "token-file", "explicit"]).optional(),
+    tokenPresent: z.boolean().optional(),
+  }),
 });
 
 export const LocalTokenRegenerateRequestSchema = z.object({
@@ -1741,9 +1743,11 @@ export const LocalTokenRegenerateRequestSchema = z.object({
 
 export const LocalTokenRegenerateResponseSchema = z.object({
   type: z.literal("local_token_regenerate_response"),
-  requestId: z.string(),
-  success: z.boolean().optional(),
-  error: z.string().optional(),
+  payload: z.object({
+    requestId: z.string(),
+    success: z.boolean().optional(),
+    error: z.string().optional(),
+  }),
 });
 
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
