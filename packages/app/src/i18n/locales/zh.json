@@ -117,7 +117,6 @@
   "settings": {
     "title": "设置",
     "general": "通用",
-    "appearance": "外观",
     "devices": "设备",
     "about": "关于",
     "language": "语言",
@@ -138,8 +137,49 @@
     "integrations": "集成",
     "permissions": "权限",
     "usage": "用量",
-    "labs": "实验室",
     "diagnostics": "诊断",
+    "section": {
+      "account": "账户",
+      "agents": "Agents",
+      "voice": "语音",
+      "appearance": "外观",
+      "advanced": "高级"
+    },
+    "appearance": {
+      "title": "外观",
+      "theme": "主题",
+      "language": "语言",
+      "general": "通用",
+      "shortcuts": "快捷键"
+    },
+    "labs": {
+      "title": "Labs",
+      "experimental": "实验性",
+      "beta": "公测",
+      "stable": "稳定",
+      "resetAll": "重置所有 Labs 为默认值",
+      "resetModalTitle": "重置所有 Labs？",
+      "resetModalBody": "所有实验项开关将被清除，Stable 项保留出厂默认。",
+      "resetConfirm": "重置"
+    },
+    "account": {
+      "profile": "个人资料",
+      "identity": "身份"
+    },
+    "agents": {
+      "integrations": "集成",
+      "permissions": "权限"
+    },
+    "voice": {
+      "stt": "语音识别",
+      "tts": "语音合成"
+    },
+    "advanced": {
+      "localDaemon": "本地 daemon",
+      "diagnostics": "诊断",
+      "usage": "用量",
+      "about": "关于"
+    },
     "loadingSettings": "加载设置中…",
     "addHost": "添加主机",
     "back": "返回",
@@ -288,7 +328,13 @@
     "chatAddNewChat": "新建",
     "chatAddScanToPair": "扫一扫配对",
     "chatAddJoinHost": "加入 host",
-    "chatAddCreateWorkspace": "创建 workspace"
+    "chatAddCreateWorkspace": "创建 workspace",
+    "settingsOpenAccount": "打开账户设置",
+    "settingsOpenAgents": "打开 Agents 设置",
+    "settingsOpenVoice": "打开语音设置",
+    "settingsOpenAppearance": "打开外观设置",
+    "settingsOpenAdvanced": "打开高级设置",
+    "settingsOpenLabs": "打开 Labs 设置"
   },
   "chat": {
     "menu": {

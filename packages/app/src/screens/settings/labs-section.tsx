@@ -116,7 +116,7 @@ export function LabsSection() {
     : t("settings.labsVoice.hotkeyUnset", { defaultValue: "Not set" });
 
   return (
-    <SettingsSection title={t("settings.labs", { defaultValue: "Labs" })}>
+    <SettingsSection title={t("settings.labs.title", { defaultValue: "Labs" })}>
       <View style={settingsStyles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderIcon}>

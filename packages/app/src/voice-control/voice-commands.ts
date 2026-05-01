@@ -19,10 +19,15 @@ import { registerBuiltInActions } from "@/actions/built-in-actions";
 // module load. Same idempotent pattern as `built-in-actions`. Voice + cmdk
 // + long-press menus all dispatch through actionRegistry.
 import { registerChatRowActions } from "@/actions/chat-row-actions";
+// Plan 02d — register the 6 settings deep-link ActionIds (5 D-09 buckets +
+// the Labs sub-page) so cmd-K palette can satisfy SET-03 (≤2 taps to any
+// settings surface).
+import { registerSettingsActions } from "@/actions/settings-actions";
 
 // Eager-register on module load; idempotent if already called.
 registerBuiltInActions();
 registerChatRowActions();
+registerSettingsActions();
 
 /**
  * Voice command registry.

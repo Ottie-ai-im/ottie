@@ -30,7 +30,14 @@ export type ActionId =
   | "chat.add.newChat"
   | "chat.add.scanToPair"
   | "chat.add.joinHost"
-  | "chat.add.createWorkspace";
+  | "chat.add.createWorkspace"
+  // Settings deep-link buckets (D-09 / SET-03 — registered by Plan 02d)
+  | "settings.open.account"
+  | "settings.open.agents"
+  | "settings.open.voice"
+  | "settings.open.appearance"
+  | "settings.open.advanced"
+  | "settings.open.labs";
 
 /**
  * Stable list of every ActionId. Order does not affect dispatch — it only
@@ -57,4 +64,10 @@ export const ALL_ACTION_IDS: readonly ActionId[] = [
   "chat.add.scanToPair",
   "chat.add.joinHost",
   "chat.add.createWorkspace",
+  "settings.open.account",
+  "settings.open.agents",
+  "settings.open.voice",
+  "settings.open.appearance",
+  "settings.open.advanced",
+  "settings.open.labs",
 ] as const;

@@ -112,7 +112,7 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "integrations", labelKey: "settings.integrations", icon: Puzzle, desktopOnly: true },
   { id: "permissions", labelKey: "settings.permissions", icon: Shield, desktopOnly: true },
   { id: "usage", labelKey: "settings.usage", icon: Gauge },
-  { id: "labs", labelKey: "settings.labs", icon: FlaskConical },
+  { id: "labs", labelKey: "settings.labs.title", icon: FlaskConical },
   { id: "localDaemon", labelKey: "settings.localDaemon.title", icon: Lock },
   { id: "diagnostics", labelKey: "settings.diagnostics", icon: Stethoscope },
   { id: "about", labelKey: "settings.about", icon: Info },
