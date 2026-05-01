@@ -30,6 +30,8 @@
     "format:check:files": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
+    "lint:schema": "tsx tools/lint/deprecated-annotation.ts",
+    "test:lint:schema": "tsx --test tools/lint/deprecated-annotation.test.ts",
     "knip": "knip",
     "start": "pnpm --filter @ottie/server start",
     "android": "pnpm --filter @ottie/app android",
@@ -81,6 +83,7 @@
     "oxlint": "1.61.0",
     "patch-package": "^8.0.1",
     "playwright": "^1.56.1",
+    "tsx": "^4.6.0",
     "typescript": "^5.9.3",
     "ws": "^8.20.0"
   },
