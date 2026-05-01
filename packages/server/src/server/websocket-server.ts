@@ -935,6 +935,7 @@ export class VoiceAssistantWebSocketServer {
       agentProviderRuntimeSettings: this.agentProviderRuntimeSettings,
       providerOverrides: this.providerOverrides,
       isDev: this.isDev,
+      localTokenMode: this.localTokenMode,
     });
 
     connection = {
