@@ -18,7 +18,7 @@ The five-phase ordering is dictated by three hard dependency chains: (1) the `se
 - Integer phases (1, 2, 3, 4, 5): Planned milestone work
 - Decimal phases (e.g. 2.1) reserved for urgent insertions only
 
-- [ ] **Phase 1: Architectural Foundations & Gating Bug Fixes** - Carve `session.ts` seams (C-1/C-2/C-3), schema discipline, local-token auth, theme token skeleton, fix four shipped regressions.
+- [x] **Phase 1: Architectural Foundations & Gating Bug Fixes** - Carve `session.ts` seams (C-1/C-2/C-3), schema discipline, local-token auth, theme token skeleton, fix four shipped regressions. _(complete 2026-05-01)_
 - [ ] **Phase 2: Action Surface & Session Foundations** - Land `ActionRegistry`, `cmdk` command-center split, keyboard shortcuts, last-used per-workspace defaults, recent-sessions sidebar.
 - [ ] **Phase 3: Optimistic Flows & Permission UX** - Carve `AgentSessionHandler` (C-7) and `VoiceSessionHandler` (C-6); ship optimistic agent creation, rich permission UX, timeline partial-state, daemon connection state.
 - [ ] **Phase 4: Onboarding, Navigation, Settings, Theme & Native-Feel Polish** - Sweep UX coherence: onboarding, sidebar/nav model, intent-organized settings, glass surfaces, voice/keyboard/long-press parity, haptics, smoothed text.
@@ -114,13 +114,13 @@ Plans:
 **Execution Order:**
 Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
-| Phase                                                           | Plans Complete | Status      | Completed |
-| --------------------------------------------------------------- | -------------- | ----------- | --------- |
-| 1. Architectural Foundations & Gating Bug Fixes                 | 0/TBD          | Not started | -         |
-| 2. Action Surface & Session Foundations                         | 0/TBD          | Not started | -         |
-| 3. Optimistic Flows & Permission UX                             | 0/TBD          | Not started | -         |
-| 4. Onboarding, Navigation, Settings, Theme & Native-Feel Polish | 0/TBD          | Not started | -         |
-| 5. Carve Completion, Audit & Documentation                      | 0/TBD          | Not started | -         |
+| Phase                                                           | Plans Complete | Status      | Completed  |
+| --------------------------------------------------------------- | -------------- | ----------- | ---------- |
+| 1. Architectural Foundations & Gating Bug Fixes                 | 5/5            | Complete    | 2026-05-01 |
+| 2. Action Surface & Session Foundations                         | 0/TBD          | Not started | -          |
+| 3. Optimistic Flows & Permission UX                             | 0/TBD          | Not started | -          |
+| 4. Onboarding, Navigation, Settings, Theme & Native-Feel Polish | 0/TBD          | Not started | -          |
+| 5. Carve Completion, Audit & Documentation                      | 0/TBD          | Not started | -          |
 
 ## Risk Callouts (per phase, sourced from PITFALLS.md)
 
