@@ -275,7 +275,64 @@
     "sessionJumpRecent": "跳转到最近",
     "permissionDecide": "处理权限",
     "settingsOpen": "打开设置",
-    "themeCycle": "切换主题"
+    "themeCycle": "切换主题",
+    "chatMenuPin": "置顶",
+    "chatMenuUnpin": "取消置顶",
+    "chatMenuMarkUnread": "标记未读",
+    "chatMenuMarkRead": "标记已读",
+    "chatMenuMute": "静音",
+    "chatMenuUnmute": "取消静音",
+    "chatMenuDelete": "删除对话",
+    "chatMenuRename": "重命名",
+    "chatMenuArchive": "归档对话",
+    "chatAddNewChat": "新建",
+    "chatAddScanToPair": "扫一扫配对",
+    "chatAddJoinHost": "加入 host",
+    "chatAddCreateWorkspace": "创建 workspace"
+  },
+  "chat": {
+    "menu": {
+      "pin": "置顶",
+      "unpin": "取消置顶",
+      "markUnread": "标记未读",
+      "markRead": "标记已读",
+      "mute": "静音",
+      "unmute": "取消静音",
+      "delete": "删除",
+      "rename": "重命名",
+      "archive": "归档"
+    },
+    "add": {
+      "newChat": "新建",
+      "scanToPair": "扫一扫配对",
+      "joinHost": "加入 host",
+      "createWorkspace": "创建 workspace"
+    },
+    "swipe": {
+      "markRead": "已读",
+      "mute": "静音",
+      "delete": "删除"
+    },
+    "unread": {
+      "totalPopup": "{{count}} 条未读"
+    },
+    "empty": {
+      "firstTime": {
+        "heading": "一键开启首位 agent",
+        "body": "点击右上角 + 新建一个 chat — 支持 Claude、Codex、OpenCode。"
+      },
+      "heading": "暂无 chat",
+      "body": "点击 + 开始新对话。"
+    },
+    "deleted": {
+      "toast": "已删除",
+      "undo": "撤销"
+    },
+    "delete": {
+      "modalTitle": "删除该对话？",
+      "modalBody": "对话与待处理工具调用将被移除，无法恢复。",
+      "confirm": "删除"
+    }
   },
   "devices": {
     "title": "设备",

@@ -275,7 +275,64 @@
     "sessionJumpRecent": "Jump to recent",
     "permissionDecide": "Decide permission",
     "settingsOpen": "Open settings",
-    "themeCycle": "Cycle theme"
+    "themeCycle": "Cycle theme",
+    "chatMenuPin": "Pin to top",
+    "chatMenuUnpin": "Unpin",
+    "chatMenuMarkUnread": "Mark as unread",
+    "chatMenuMarkRead": "Mark as read",
+    "chatMenuMute": "Mute",
+    "chatMenuUnmute": "Unmute",
+    "chatMenuDelete": "Delete chat",
+    "chatMenuRename": "Rename chat",
+    "chatMenuArchive": "Archive chat",
+    "chatAddNewChat": "New chat",
+    "chatAddScanToPair": "Scan to pair",
+    "chatAddJoinHost": "Join host",
+    "chatAddCreateWorkspace": "Create workspace"
+  },
+  "chat": {
+    "menu": {
+      "pin": "Pin to top",
+      "unpin": "Unpin",
+      "markUnread": "Mark as unread",
+      "markRead": "Mark as read",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "delete": "Delete",
+      "rename": "Rename",
+      "archive": "Archive"
+    },
+    "add": {
+      "newChat": "New chat",
+      "scanToPair": "Scan to pair",
+      "joinHost": "Join host",
+      "createWorkspace": "Create workspace"
+    },
+    "swipe": {
+      "markRead": "Read",
+      "mute": "Mute",
+      "delete": "Delete"
+    },
+    "unread": {
+      "totalPopup": "{{count}} unread messages"
+    },
+    "empty": {
+      "firstTime": {
+        "heading": "Your first agent is one tap away",
+        "body": "Tap + above to start a new chat with Claude, Codex, or OpenCode."
+      },
+      "heading": "No chats yet",
+      "body": "Tap + to start a new conversation."
+    },
+    "deleted": {
+      "toast": "Chat deleted",
+      "undo": "Undo"
+    },
+    "delete": {
+      "modalTitle": "Delete this chat?",
+      "modalBody": "Messages and pending tool calls will be removed. This can't be undone.",
+      "confirm": "Delete"
+    }
   },
   "devices": {
     "title": "Devices",
