@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import type { BarcodeScanningResult, BarcodeSettings } from "expo-camera";
-import { useHostMutations } from "@/runtime/host-runtime";
+import type { HostProfile } from "@/types/host-connection";
+import { useHostMutations, useHosts } from "@/runtime/host-runtime";
 import { decodeOfferFragmentPayload, normalizeHostPort } from "@/utils/daemon-endpoints";
 import { connectToDaemon } from "@/utils/test-daemon-connection";
 import { ConnectionOfferSchema } from "@server/shared/connection-offer";
 import { buildHostRootRoute, buildSettingsHostRoute } from "@/utils/host-routes";
 import { isWeb } from "@/constants/platform";
+import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { BackHeader } from "@/components/headers/back-header";
+import { PairLinkModal } from "@/components/pair-link-modal";
+import { PairScanRecoveryCallout } from "@/components/pair-scan-recovery-callout";
 
 const styles = StyleSheet.create((theme) => ({
   container: {
@@ -132,6 +136,16 @@ export default function PairScanScreen() {
   const [isPairing, setIsPairing] = useState(false);
   const lastScannedRef = useRef<string | null>(null);
 
+  // Inline-recovery state (D-21 / ONB-03). `pairError` non-null renders the
+  // <PairScanRecoveryCallout>; `manualEntryDraft` is hoisted above the
+  // callout so the typed manual-entry input survives an
+  // error → recovery → retry cycle. `isManualEntryOpen` toggles the
+  // <PairLinkModal> on demand from the recovery action.
+  const [pairError, setPairError] = useState<string | null>(null);
+  const [manualEntryDraft, setManualEntryDraft] = useState("");
+  const [isManualEntryOpen, setIsManualEntryOpen] = useState(false);
+  const hosts = useHosts();
+
   const navigateToPairedHost = useCallback(
     (serverId: string) => {
       if (source === "onboarding") {
@@ -166,6 +180,9 @@ export default function PairScanScreen() {
       if (lastScannedRef.current === offerUrl) return;
       lastScannedRef.current = offerUrl;
 
+      // Reset any prior error so a fresh attempt starts from a clean state.
+      setPairError(null);
+
       try {
         setIsPairing(true);
         const idx = offerUrl.indexOf("#offer=");
@@ -190,12 +207,71 @@ export default function PairScanScreen() {
       } catch (error) {
         lastScannedRef.current = null;
         const message = error instanceof Error ? error.message : "Unable to pair host";
-        Alert.alert("Error", message);
+        // Per ONB-03 + D-21: surface failures inline (no blocking dialog).
+        // The <PairScanRecoveryCallout> renders below the scanner with three
+        // self-serve actions and preserves any typed manual-entry input.
+        setPairError(message);
       } finally {
         setIsPairing(false);
       }
     },
     [isPairing, navigateToPairedHost, upsertDaemonFromOfferUrl],
+  );
+
+  // Recovery handlers — referenced from <PairScanRecoveryCallout>.
+  // "Regenerate code": clear scanner state so a freshly-generated QR (the
+  // user regenerates it on their desktop) can be re-scanned. We don't
+  // generate codes on this side — the daemon does.
+  const handleRegenerate = useCallback(() => {
+    lastScannedRef.current = null;
+    setPairError(null);
+  }, []);
+
+  // "Enter key manually": open <PairLinkModal> pre-filled with the hoisted
+  // draft so anything the user typed previously survives the round trip.
+  const handleManualEntry = useCallback(() => {
+    setIsManualEntryOpen(true);
+  }, []);
+
+  const handleCloseManualEntry = useCallback(() => {
+    setIsManualEntryOpen(false);
+  }, []);
+
+  // "Use local daemon": Tauri-only escape hatch (the recovery callout itself
+  // disables this on iOS/Android via getIsElectron()). Routes to the first
+  // host that has a same-machine (non-relay) connection candidate, falling
+  // back to any registered host, falling back to the index route — which
+  // then re-evaluates and routes wherever it normally would on cold open.
+  const handleUseLocal = useCallback(() => {
+    if (!shouldUseDesktopDaemon()) return;
+    setPairError(null);
+    const localHost =
+      hosts.find((host) =>
+        host.connections.some(
+          (connection) => connection.type === "directSocket" || connection.type === "directPipe",
+        ),
+      ) ?? hosts[0];
+    if (localHost) {
+      router.replace(buildHostRootRoute(localHost.serverId));
+      return;
+    }
+    router.replace("/" as Href);
+  }, [hosts, router]);
+
+  const handleDismissRecovery = useCallback(() => {
+    setPairError(null);
+  }, []);
+
+  const handleManualEntrySaved = useCallback(
+    (result: { profile: HostProfile; serverId: string }) => {
+      // Successful manual entry — clear residual error/draft state, then
+      // route through the same destination the QR scan would have used.
+      setPairError(null);
+      setManualEntryDraft("");
+      setIsManualEntryOpen(false);
+      navigateToPairedHost(result.serverId);
+    },
+    [navigateToPairedHost],
   );
 
   const handleRouterBack = useCallback(() => router.back(), [router]);
@@ -267,7 +343,24 @@ export default function PairScanScreen() {
             </View>
           </View>
         )}
+
+        {pairError != null ? (
+          <PairScanRecoveryCallout
+            onRegenerate={handleRegenerate}
+            onManualEntry={handleManualEntry}
+            onUseLocal={handleUseLocal}
+            onDismiss={handleDismissRecovery}
+          />
+        ) : null}
       </View>
+
+      <PairLinkModal
+        visible={isManualEntryOpen}
+        onClose={handleCloseManualEntry}
+        onSaved={handleManualEntrySaved}
+        initialValue={manualEntryDraft}
+        onChangeOfferUrl={setManualEntryDraft}
+      />
     </View>
   );
 }
