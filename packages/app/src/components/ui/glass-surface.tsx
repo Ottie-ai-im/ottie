@@ -38,29 +38,22 @@ export function GlassSurface({
 
   const radiusValue = useMemo(() => {
     if (radius === "none") return undefined;
-    if (radius === "pill") return theme.borderRadius.glassPill;
-    if (radius === "sheet") return theme.borderRadius.glassSheet;
-    if (radius === "button") return theme.borderRadius.button;
-    return theme.borderRadius.glassCard;
-  }, [radius, theme.borderRadius]);
+    if (radius === "pill") return theme.components.glassPill.radius;
+    if (radius === "sheet") return theme.components.glassSheet.radius;
+    if (radius === "button") return theme.components.button.radius;
+    return theme.components.glassCard.radius;
+  }, [radius, theme.components]);
 
   const baseStyle = useMemo<ViewStyle>(
     () => ({
-      backgroundColor: strong ? theme.colors.surfaceGlassStrong : theme.colors.surfaceGlass,
+      backgroundColor: strong ? theme.surface.glass.tintStrong : theme.surface.glass.tint,
       borderRadius: radiusValue,
       borderCurve: "continuous",
       borderWidth: bordered ? 1 : 0,
-      borderColor: bordered ? theme.colors.borderGlass : "transparent",
+      borderColor: bordered ? theme.surface.glass.border : "transparent",
       overflow: "hidden",
     }),
-    [
-      strong,
-      theme.colors.surfaceGlass,
-      theme.colors.surfaceGlassStrong,
-      theme.colors.borderGlass,
-      bordered,
-      radiusValue,
-    ],
+    [strong, theme.surface.glass, bordered, radiusValue],
   );
 
   const webStyle = useMemo<ViewStyle | null>(() => {

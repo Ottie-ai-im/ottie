@@ -5,6 +5,13 @@
 // component that consumes these.
 //
 // Math is ported from https://paidax01.github.io/math-curve-loaders/ (MIT).
+//
+// Per-preset timing values (durationMs, rotationDurationMs, pulseDurationMs)
+// live in `@/styles/tokens/motion` (Plan 01-02 / D-09); only the parametric
+// `point` functions and brand-shape configuration (particleCount, trailSpan,
+// strokeWidth, rotate) live here.
+
+import { motion } from "@/styles/tokens/motion";
 
 export interface Point {
   x: number;
@@ -176,9 +183,7 @@ export const CURVE_PRESETS: Record<CurveName, CurvePreset> = {
     rotate: false,
     particleCount: 70,
     trailSpan: 0.4,
-    durationMs: 5600,
-    rotationDurationMs: 34000,
-    pulseDurationMs: 5000,
+    ...motion.mathCurves.lemniscateBloom,
     strokeWidth: 4.8,
     point: lemniscatePoint,
   },
@@ -187,9 +192,7 @@ export const CURVE_PRESETS: Record<CurveName, CurvePreset> = {
     rotate: false,
     particleCount: 86,
     trailSpan: 0.28,
-    durationMs: 7800,
-    rotationDurationMs: 44000,
-    pulseDurationMs: 6800,
+    ...motion.mathCurves.spiralSearch,
     strokeWidth: 4.3,
     point: spiralSearchPoint,
   },
@@ -198,9 +201,7 @@ export const CURVE_PRESETS: Record<CurveName, CurvePreset> = {
     rotate: true,
     particleCount: 76,
     trailSpan: 0.31,
-    durationMs: 5300,
-    rotationDurationMs: 28000,
-    pulseDurationMs: 4400,
+    ...motion.mathCurves.roseThree,
     strokeWidth: 4.6,
     point: roseThreePoint,
   },
@@ -209,9 +210,7 @@ export const CURVE_PRESETS: Record<CurveName, CurvePreset> = {
     rotate: true,
     particleCount: 68,
     trailSpan: 0.39,
-    durationMs: 4700,
-    rotationDurationMs: 30000,
-    pulseDurationMs: 4200,
+    ...motion.mathCurves.thinkingNine,
     strokeWidth: 5.5,
     point: thinkingNinePoint,
   },
@@ -220,9 +219,7 @@ export const CURVE_PRESETS: Record<CurveName, CurvePreset> = {
     rotate: false,
     particleCount: 74,
     trailSpan: 0.36,
-    durationMs: 6200,
-    rotationDurationMs: 36000,
-    pulseDurationMs: 5200,
+    ...motion.mathCurves.cardioidHeart,
     strokeWidth: 4.9,
     point: cardioidHeartPoint,
   },
@@ -231,9 +228,7 @@ export const CURVE_PRESETS: Record<CurveName, CurvePreset> = {
     rotate: false,
     particleCount: 88,
     trailSpan: 0.32,
-    durationMs: 9000,
-    rotationDurationMs: 50000,
-    pulseDurationMs: 7000,
+    ...motion.mathCurves.butterflyPhase,
     strokeWidth: 4.4,
     point: butterflyPoint,
   },
@@ -242,9 +237,7 @@ export const CURVE_PRESETS: Record<CurveName, CurvePreset> = {
     rotate: false,
     particleCount: 68,
     trailSpan: 0.34,
-    durationMs: 6000,
-    rotationDurationMs: 36000,
-    pulseDurationMs: 5400,
+    ...motion.mathCurves.lissajousDrift,
     strokeWidth: 4.7,
     point: lissajousDriftPoint,
   },
