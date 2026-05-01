@@ -56,15 +56,35 @@ export interface PairLinkModalProps {
     hostname: string | null;
     isNewHost: boolean;
   }) => void;
+  /**
+   * When provided, pre-fills the offer-URL input with this value the first
+   * time the modal becomes visible. Used by the pair-scan recovery flow to
+   * preserve typed manual-entry input across error → recovery → retry
+   * cycles (D-21). Subsequent edits live in the modal's internal ref.
+   */
+  initialValue?: string;
+  /**
+   * Optional callback fired whenever the user edits the offer URL inside
+   * the modal. Lets a parent that supplied `initialValue` keep its own
+   * hoisted draft in sync so the typed input survives modal close + re-open.
+   */
+  onChangeOfferUrl?: (next: string) => void;
 }
 
-export function PairLinkModal({ visible, onClose, onCancel, onSaved }: PairLinkModalProps) {
+export function PairLinkModal({
+  visible,
+  onClose,
+  onCancel,
+  onSaved,
+  initialValue,
+  onChangeOfferUrl,
+}: PairLinkModalProps) {
   const { theme } = useUnistyles();
   const daemons = useHosts();
   const { upsertConnectionFromOfferUrl: upsertDaemonFromOfferUrl } = useHostMutations();
   const isMobile = useIsCompactFormFactor();
 
-  const offerUrlRef = useRef("");
+  const offerUrlRef = useRef(initialValue ?? "");
   const inputRef = useRef<TextInput>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -158,9 +178,13 @@ export function PairLinkModal({ visible, onClose, onCancel, onSaved }: PairLinkM
     }
   }, [daemons, handleClose, isMobile, isSaving, onSaved, upsertDaemonFromOfferUrl]);
 
-  const handleChangeOfferUrl = useCallback((next: string) => {
-    offerUrlRef.current = next;
-  }, []);
+  const handleChangeOfferUrl = useCallback(
+    (next: string) => {
+      offerUrlRef.current = next;
+      onChangeOfferUrl?.(next);
+    },
+    [onChangeOfferUrl],
+  );
 
   const handleSavePress = useCallback(() => {
     void handleSave();
@@ -182,6 +206,7 @@ export function PairLinkModal({ visible, onClose, onCancel, onSaved }: PairLinkM
           testID="pair-link-input"
           nativeID="pair-link-input"
           accessibilityLabel="pair-link-input"
+          defaultValue={initialValue}
           onChangeText={handleChangeOfferUrl}
           placeholder="https://app.claws.company/#offer=..."
           placeholderTextColor={theme.colors.foregroundMuted}

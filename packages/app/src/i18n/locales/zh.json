@@ -29,7 +29,10 @@
     "pasteLink": "粘贴配对链接",
     "openOnDesktop": "在电脑上打开 Ottie",
     "needHelp": "需要帮助？",
-    "settingsButton": "设置"
+    "settingsButton": "设置",
+    "getStarted": "开始使用",
+    "skipForPowerUsers": "跳过（高阶用户）",
+    "dontShowAgain": "不再显示"
   },
   "sidebar": {
     "sessions": "聊天",
@@ -101,7 +104,15 @@
     "copyLogs": "复制日志",
     "openGithubIssue": "在 GitHub 提 issue",
     "docs": "文档",
-    "localTokenRequired": "此守护进程需要本地令牌。如果您在同一台机器上，请在 $OTTIE_HOME/local-token 中查找。详细信息请参阅 $OTTIE_HOME/daemon.log。"
+    "localTokenRequired": "此守护进程需要本地令牌。如果您在同一台机器上，请在 $OTTIE_HOME/local-token 中查找。详细信息请参阅 $OTTIE_HOME/daemon.log。",
+    "pairScanFailed": {
+      "heading": "配对失败",
+      "body": "配对码不匹配。可以重新生成、手动输入，或切换到本机 daemon。输入内容已保留。",
+      "regenerate": "重新生成",
+      "manualEntry": "手动输入",
+      "useLocal": "切换本机 daemon",
+      "useLocalDesktopOnly": "仅桌面端可用"
+    }
   },
   "settings": {
     "title": "设置",

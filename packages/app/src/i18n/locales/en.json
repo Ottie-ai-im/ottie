@@ -29,7 +29,10 @@
     "pasteLink": "Paste pairing link",
     "openOnDesktop": "Open Ottie on your computer",
     "needHelp": "Need help?",
-    "settingsButton": "Settings"
+    "settingsButton": "Settings",
+    "getStarted": "Get started",
+    "skipForPowerUsers": "Skip for power users",
+    "dontShowAgain": "Don't show this again"
   },
   "sidebar": {
     "sessions": "Chats",
@@ -101,7 +104,15 @@
     "copyLogs": "Copy logs",
     "openGithubIssue": "Open GitHub issue",
     "docs": "Docs",
-    "localTokenRequired": "This daemon requires a local token. If you're on the same machine, find it at $OTTIE_HOME/local-token. See $OTTIE_HOME/daemon.log for details."
+    "localTokenRequired": "This daemon requires a local token. If you're on the same machine, find it at $OTTIE_HOME/local-token. See $OTTIE_HOME/daemon.log for details.",
+    "pairScanFailed": {
+      "heading": "Couldn't pair",
+      "body": "The pairing code didn't match. Try regenerating the code, entering it manually, or switching to a local daemon. Your input is preserved.",
+      "regenerate": "Regenerate code",
+      "manualEntry": "Enter key manually",
+      "useLocal": "Use local daemon",
+      "useLocalDesktopOnly": "Available on desktop only"
+    }
   },
   "settings": {
     "title": "Settings",
