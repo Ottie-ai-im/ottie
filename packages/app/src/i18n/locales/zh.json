@@ -258,6 +258,14 @@
     "community": "社群",
     "settings": "设置"
   },
+  "actions": {
+    "agentCreate": "新建",
+    "workspaceSwitch": "切换工作区",
+    "sessionJumpRecent": "跳转到最近",
+    "permissionDecide": "处理权限",
+    "settingsOpen": "打开设置",
+    "themeCycle": "切换主题"
+  },
   "devices": {
     "title": "设备",
     "subtitle": "已配对的 daemon 主机",

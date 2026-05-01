@@ -1,3 +1,6 @@
+import { actionRegistry } from "@/actions/registry";
+import type { ActionId } from "@/actions/registry";
+
 export type KeyboardActionScope = "global" | "message-input" | "sidebar" | "workspace";
 
 export type KeyboardActionId =
@@ -105,6 +108,12 @@ export function createKeyboardActionDispatcher() {
 
       for (const handler of candidates) {
         if (handler.handle(action)) {
+          // Mirror through ActionRegistry so cmdk / voice / menu listeners
+          // stay in sync. This is fire-and-forget — keyboard owns its own
+          // priority loop above; the registry mirror only fires for ids
+          // that are also registered as ActionRegistry actions, so unknown
+          // keyboard ids no-op silently.
+          maybeMirrorToActionRegistry(action.id);
           return true;
         }
       }
@@ -112,6 +121,22 @@ export function createKeyboardActionDispatcher() {
       return false;
     },
   };
+}
+
+/**
+ * Best-effort cross-modality mirror. Every keyboard action that has an
+ * ActionRegistry counterpart dispatches there too, so the cmdk palette,
+ * voice transcript log, and any future audit trail observe the same event
+ * stream as the keyboard handler. Unknown ids return false (no-op).
+ */
+function maybeMirrorToActionRegistry(keyboardId: string): void {
+  // The keyboard ActionId namespace overlaps with ActionRegistry's
+  // (e.g. "theme.cycle", "settings.open", "agent.create"). When the
+  // strings match, mirror; otherwise drop silently.
+  const candidate = keyboardId as ActionId;
+  // Fire-and-forget — registry dispatch resolves asynchronously and we
+  // don't await on the keyboard hot path.
+  void actionRegistry.dispatch(candidate, {});
 }
 
 export const keyboardActionDispatcher = createKeyboardActionDispatcher();

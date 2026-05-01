@@ -258,6 +258,14 @@
     "community": "Community",
     "settings": "Settings"
   },
+  "actions": {
+    "agentCreate": "New chat",
+    "workspaceSwitch": "Switch workspace",
+    "sessionJumpRecent": "Jump to recent",
+    "permissionDecide": "Decide permission",
+    "settingsOpen": "Open settings",
+    "themeCycle": "Cycle theme"
+  },
   "devices": {
     "title": "Devices",
     "subtitle": "Paired daemon hosts",

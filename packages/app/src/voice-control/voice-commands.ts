@@ -9,6 +9,15 @@ import {
   buildSettingsRoute,
 } from "@/utils/host-routes";
 import { getVoiceCommandBridge } from "@/voice-control/voice-command-bridge";
+import { actionRegistry } from "@/actions/registry";
+// Side-effect import: registers the 6 NAT-01 reference actions on module
+// load so any voice command that wants to delegate to ActionRegistry can
+// find the canonical handler. Plan 02a Task 2 — the registry is the single
+// source of truth across voice / keyboard / cmdk / menu surfaces.
+import { registerBuiltInActions } from "@/actions/built-in-actions";
+
+// Eager-register on module load; idempotent if already called.
+registerBuiltInActions();
 
 /**
  * Voice command registry.
@@ -194,8 +203,18 @@ const switchToWorkspace = defineCommand("switch_to_workspace", {
     })
     .strict(),
   examples: ["go to that project", "open the matched workspace", "switch over"],
-  handler: ({ serverId, workspaceId }) => {
-    router.push(buildHostWorkspaceRoute(serverId, workspaceId));
+  handler: async ({ serverId, workspaceId }) => {
+    // Route through ActionRegistry so voice / keyboard / cmdk / menu all
+    // share a single workspace-switch implementation. Falls back to direct
+    // navigation if registry dispatch fails (older daemons / missing
+    // registration).
+    const dispatched = await actionRegistry.dispatch("workspace.switch", {
+      serverId,
+      workspaceId,
+    });
+    if (!dispatched) {
+      router.push(buildHostWorkspaceRoute(serverId, workspaceId));
+    }
     return { ok: true, message: "Switched workspace" };
   },
 });
@@ -272,8 +291,13 @@ const openSettings = defineCommand("open_settings", {
   description: "Navigate to the settings screen.",
   schema: z.object({}).strict(),
   examples: ["open settings", "show preferences", "go to settings"],
-  handler: () => {
-    router.push(buildSettingsRoute());
+  handler: async () => {
+    // Route through ActionRegistry so the same intent fires from voice,
+    // cmdk palette, and the desktop kbd shortcut.
+    const dispatched = await actionRegistry.dispatch("settings.open", {});
+    if (!dispatched) {
+      router.push(buildSettingsRoute());
+    }
     return { ok: true, message: "Opened settings" };
   },
 });

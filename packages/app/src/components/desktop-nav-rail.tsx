@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, usePathname } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import { useHotkeys } from "react-hotkeys-hook";
 import { MessagesSquare, Settings, Server, Users } from "lucide-react-native";
 
 import { useHosts } from "@/runtime/host-runtime";
@@ -13,6 +14,8 @@ import {
   buildHostDevicesRoute,
   buildHostSessionsRoute,
 } from "@/utils/host-routes";
+import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
+import { isWeb } from "@/constants/platform";
 
 const RAIL_WIDTH = 68;
 
@@ -49,6 +52,20 @@ function deriveActiveTab(pathname: string): RailTabId {
 export function DesktopNavRail() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+
+  // Cmd+K (mac) / Ctrl+K (everywhere else) opens the command center palette.
+  // Plan 02a NAV-A4 / NAT-01 — universal action surface. Native shells never
+  // reach this code (no DOM keyboard event), but `useHotkeys` no-ops cleanly
+  // there.
+  useHotkeys(
+    "meta+k, ctrl+k",
+    (event) => {
+      if (!isWeb) return;
+      event.preventDefault();
+      useKeyboardShortcutsStore.getState().setCommandCenterOpen(true);
+    },
+    { preventDefault: true, enableOnFormTags: true },
+  );
   // The rail sits at the very left edge of the Tauri window, so it has to
   // dodge the macOS traffic lights. `useWindowControlsPadding("sidebar")`
   // returns the same top offset the existing sidebar uses, keeping the rail's

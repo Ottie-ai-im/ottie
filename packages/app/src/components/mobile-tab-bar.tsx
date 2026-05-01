@@ -6,6 +6,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { MessagesSquare, Server, Settings, Users } from "lucide-react-native";
 import { isNative } from "@/constants/platform";
+import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 
 export type MobileTab = "chats" | "devices" | "community" | "settings";
 
@@ -80,6 +81,13 @@ function TabButton({
   const { t } = useTranslation();
   const label = t(tab.labelKey);
   const handlePress = useCallback(() => onSelect(tab.id), [onSelect, tab.id]);
+  // Long-press on the active tab opens the command-center bottom sheet
+  // (Plan 02a UI-SPEC line 313 — native command-center trigger). Long-press
+  // on an inactive tab is a no-op so the gesture stays unambiguous.
+  const handleLongPress = useCallback(() => {
+    if (!active) return;
+    useKeyboardShortcutsStore.getState().setCommandCenterOpen(true);
+  }, [active]);
   const buttonStyle = useCallback(
     ({ pressed }: PressableStateCallbackType) => [
       styles.button,
@@ -97,6 +105,8 @@ function TabButton({
   return (
     <Pressable
       onPress={handlePress}
+      onLongPress={handleLongPress}
+      delayLongPress={350}
       accessibilityRole="tab"
       accessibilityState={accessibilityState}
       accessibilityLabel={label}
