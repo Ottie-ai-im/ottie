@@ -89,6 +89,10 @@ import {
   type SettingsSectionSlug,
 } from "@/utils/host-routes";
 import { getLastNavigationWorkspaceRouteSelection } from "@/stores/navigation-active-workspace-store";
+// Plan 02d — D-09 flat-list root for the mobile Settings tab. Desktop keeps
+// the existing sidebar split; compact (phone) collapses to the WeChat-style
+// 5-group scrolling list.
+import { SettingsFlatList } from "@/components/settings/flat-list";
 
 // ---------------------------------------------------------------------------
 // View model
@@ -112,7 +116,7 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "integrations", labelKey: "settings.integrations", icon: Puzzle, desktopOnly: true },
   { id: "permissions", labelKey: "settings.permissions", icon: Shield, desktopOnly: true },
   { id: "usage", labelKey: "settings.usage", icon: Gauge },
-  { id: "labs", labelKey: "settings.labs", icon: FlaskConical },
+  { id: "labs", labelKey: "settings.labs.title", icon: FlaskConical },
   { id: "localDaemon", labelKey: "settings.localDaemon.title", icon: Lock },
   { id: "diagnostics", labelKey: "settings.diagnostics", icon: Stethoscope },
   { id: "about", labelKey: "settings.about", icon: Info },
@@ -823,6 +827,13 @@ interface SettingsSidebarProps {
   onAddHost: () => void;
   onBackToWorkspace: () => void;
   layout: "desktop" | "mobile";
+  /**
+   * Plan 02d / D-09 — when the mobile root renders a `<SettingsFlatList>`
+   * for the 5 D-09 buckets, the section list inside the sidebar would
+   * duplicate those entries. Set `hideSections` to `true` so only the host
+   * items remain reachable from the tab root.
+   */
+  hideSections?: boolean;
 }
 
 function SettingsSidebar({
@@ -832,6 +843,7 @@ function SettingsSidebar({
   onAddHost,
   onBackToWorkspace: _onBackToWorkspace,
   layout,
+  hideSections = false,
 }: SettingsSidebarProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -868,22 +880,24 @@ function SettingsSidebar({
           {padding.top > 0 ? <View style={paddingTopStyle} /> : null}
         </>
       ) : null}
-      <View style={groupStyle}>
-        {items.map((item, index) => (
-          <View key={item.id}>
-            {!isDesktop && index > 0 ? <View style={sidebarStyles.mobileItemDivider} /> : null}
-            <SidebarSectionButton
-              itemId={item.id}
-              label={t(item.labelKey)}
-              icon={item.icon}
-              isSelected={selectedSectionId === item.id}
-              onSelect={onSelectSection}
-              layout={layout}
-            />
-          </View>
-        ))}
-      </View>
-      {isDesktop ? <SidebarSeparator /> : null}
+      {hideSections ? null : (
+        <View style={groupStyle}>
+          {items.map((item, index) => (
+            <View key={item.id}>
+              {!isDesktop && index > 0 ? <View style={sidebarStyles.mobileItemDivider} /> : null}
+              <SidebarSectionButton
+                itemId={item.id}
+                label={t(item.labelKey)}
+                icon={item.icon}
+                isSelected={selectedSectionId === item.id}
+                onSelect={onSelectSection}
+                layout={layout}
+              />
+            </View>
+          ))}
+        </View>
+      )}
+      {isDesktop && !hideSections ? <SidebarSeparator /> : null}
       <View style={groupStyle}>
         {sortedHosts.map((host, index) => (
           <View key={host.serverId}>
@@ -1213,22 +1227,33 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
     </>
   );
 
-  // Mobile root: full-screen sidebar-as-list. No back button — settings is a
+  // Mobile root: full-screen flat-list. No back button — settings is a
   // bottom-tab destination, not a pushed screen, so there's nowhere to go
   // "back" to. Just render the title in the screen header.
+  //
+  // Plan 02d / D-09: the legacy `<SettingsSidebar>` (single column with one
+  // entry per slug) is replaced by `<SettingsFlatList>` (5-bucket scrolling
+  // groups). Sub-pages still resolve through the existing `[section].tsx`
+  // route convention via `SLUG_TO_BUCKET` so legacy paths keep working
+  // (D-11 / SET-01). Hosts list still sits below the buckets so the
+  // "Add host" + per-host entries stay reachable from the root tab.
   if (isCompactLayout && view.kind === "root") {
     return (
       <View style={styles.iosGroupedContainer}>
         <MobileSettingsRootHeader title={t("settings.title")} />
         <ScrollView style={styles.scrollView} contentContainerStyle={insetBottomStyle}>
-          <SettingsSidebar
-            view={view}
-            onSelectSection={handleSelectSection}
-            onSelectHost={handleSelectHost}
-            onAddHost={handleAddHost}
-            onBackToWorkspace={handleBackToWorkspace}
-            layout="mobile"
-          />
+          <SettingsFlatList />
+          <View style={styles.mobileRootHostsBlock}>
+            <SettingsSidebar
+              view={view}
+              onSelectSection={handleSelectSection}
+              onSelectHost={handleSelectHost}
+              onAddHost={handleAddHost}
+              onBackToWorkspace={handleBackToWorkspace}
+              layout="mobile"
+              hideSections
+            />
+          </View>
         </ScrollView>
         {addHostModals}
       </View>
@@ -1321,6 +1346,11 @@ const styles = StyleSheet.create((theme) => ({
   iosGroupedContainer: {
     flex: 1,
     backgroundColor: theme.colors.surface1,
+  },
+  // Plan 02d — gap between the 5-bucket flat-list and the host roster on the
+  // mobile root tab. Matches the bucket gap inside SettingsFlatList.
+  mobileRootHostsBlock: {
+    marginTop: theme.spacing[6],
   },
   scrollView: {
     flex: 1,

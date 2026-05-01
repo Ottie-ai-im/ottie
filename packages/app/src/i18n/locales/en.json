@@ -117,7 +117,6 @@
   "settings": {
     "title": "Settings",
     "general": "General",
-    "appearance": "Appearance",
     "devices": "Devices",
     "about": "About",
     "language": "Language",
@@ -138,8 +137,49 @@
     "integrations": "Integrations",
     "permissions": "Permissions",
     "usage": "Usage",
-    "labs": "Labs",
     "diagnostics": "Diagnostics",
+    "section": {
+      "account": "Account",
+      "agents": "Agents",
+      "voice": "Voice",
+      "appearance": "Appearance",
+      "advanced": "Advanced"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "theme": "Theme",
+      "language": "Language",
+      "general": "General",
+      "shortcuts": "Keyboard shortcuts"
+    },
+    "labs": {
+      "title": "Labs",
+      "experimental": "Experimental",
+      "beta": "Beta",
+      "stable": "Stable",
+      "resetAll": "Reset all labs to default",
+      "resetModalTitle": "Reset all Labs to default?",
+      "resetModalBody": "Your individual experiment toggles will be cleared. Stable items keep their shipped defaults.",
+      "resetConfirm": "Reset"
+    },
+    "account": {
+      "profile": "Profile",
+      "identity": "Identity"
+    },
+    "agents": {
+      "integrations": "Integrations",
+      "permissions": "Permissions"
+    },
+    "voice": {
+      "stt": "Speech-to-text",
+      "tts": "Text-to-speech"
+    },
+    "advanced": {
+      "localDaemon": "Local daemon",
+      "diagnostics": "Diagnostics",
+      "usage": "Usage",
+      "about": "About"
+    },
     "loadingSettings": "Loading settings…",
     "addHost": "Add host",
     "back": "Back",
@@ -288,7 +328,13 @@
     "chatAddNewChat": "New chat",
     "chatAddScanToPair": "Scan to pair",
     "chatAddJoinHost": "Join host",
-    "chatAddCreateWorkspace": "Create workspace"
+    "chatAddCreateWorkspace": "Create workspace",
+    "settingsOpenAccount": "Open Account settings",
+    "settingsOpenAgents": "Open Agents settings",
+    "settingsOpenVoice": "Open Voice settings",
+    "settingsOpenAppearance": "Open Appearance settings",
+    "settingsOpenAdvanced": "Open Advanced settings",
+    "settingsOpenLabs": "Open Labs settings"
   },
   "chat": {
     "menu": {

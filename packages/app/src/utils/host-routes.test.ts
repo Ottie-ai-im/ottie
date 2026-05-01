@@ -4,14 +4,20 @@ import {
   buildHostRootRoute,
   buildHostWorkspaceOpenRoute,
   buildHostWorkspaceRoute,
+  buildSettingsBucketRoute,
   decodeFilePathFromPathSegment,
   decodeWorkspaceIdFromPathSegment,
   encodeFilePathForPathSegment,
   encodeWorkspaceIdForPathSegment,
+  isSettingsBucket,
   parseHostAgentRouteFromPathname,
   parseHostWorkspaceOpenIntentFromPathname,
   parseHostWorkspaceRouteFromPathname,
   parseWorkspaceOpenIntent,
+  resolveBucketForSlug,
+  SETTINGS_BUCKETS,
+  SETTINGS_SECTION_SLUGS,
+  SLUG_TO_BUCKET,
 } from "./host-routes";
 
 describe("parseHostAgentRouteFromPathname", () => {
@@ -131,5 +137,44 @@ describe("workspace route parsing", () => {
     const encoded = encodeWorkspaceIdForPathSegment(id);
     expect(encoded).toBe("b64_dGVhbS9zZXR1cDppZCMx");
     expect(decodeWorkspaceIdFromPathSegment(encoded)).toBe("team/setup:id#1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 02d — Settings IA: 5-bucket SLUG_TO_BUCKET map + buildSettingsBucketRoute
+// ---------------------------------------------------------------------------
+
+describe("Plan 02d — settings buckets", () => {
+  it("SETTINGS_BUCKETS contains exactly the 5 D-09 buckets in canonical order", () => {
+    expect(SETTINGS_BUCKETS).toEqual(["account", "agents", "voice", "appearance", "advanced"]);
+  });
+
+  it("isSettingsBucket narrows arbitrary strings to the bucket union", () => {
+    expect(isSettingsBucket("account")).toBe(true);
+    expect(isSettingsBucket("appearance")).toBe(true);
+    expect(isSettingsBucket("nope")).toBe(false);
+    expect(isSettingsBucket("")).toBe(false);
+  });
+
+  it("SLUG_TO_BUCKET maps every SettingsSectionSlug to one of the 5 buckets (D-11, NAV-A5)", () => {
+    for (const slug of SETTINGS_SECTION_SLUGS) {
+      const bucket = SLUG_TO_BUCKET[slug];
+      expect(bucket, `slug ${slug} unmapped`).toBeDefined();
+      expect(SETTINGS_BUCKETS).toContain(bucket);
+    }
+  });
+
+  it("resolveBucketForSlug is a thin lookup helper over SLUG_TO_BUCKET", () => {
+    for (const slug of SETTINGS_SECTION_SLUGS) {
+      expect(resolveBucketForSlug(slug)).toBe(SLUG_TO_BUCKET[slug]);
+    }
+  });
+
+  it("buildSettingsBucketRoute returns the typed /settings/bucket/{bucket} path", () => {
+    expect(buildSettingsBucketRoute("account")).toBe("/settings/bucket/account");
+    expect(buildSettingsBucketRoute("agents")).toBe("/settings/bucket/agents");
+    expect(buildSettingsBucketRoute("voice")).toBe("/settings/bucket/voice");
+    expect(buildSettingsBucketRoute("appearance")).toBe("/settings/bucket/appearance");
+    expect(buildSettingsBucketRoute("advanced")).toBe("/settings/bucket/advanced");
   });
 });

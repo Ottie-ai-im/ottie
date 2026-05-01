@@ -422,6 +422,62 @@ export function buildSettingsHostRoute(serverId: string) {
   return `/settings/hosts/${encodeSegment(normalized)}` as const;
 }
 
+// ---------------------------------------------------------------------------
+// Plan 02d — Settings IA reorg
+// ---------------------------------------------------------------------------
+//
+// D-09 collapses the existing settings sidebar into 5 canonical buckets so the
+// mobile root reads as a WeChat-style flat scrolling list. The 9 legacy slugs
+// in `SETTINGS_SECTION_SLUGS` keep working — `SLUG_TO_BUCKET` is the additive
+// map the new bucket sub-pages use to resolve "which slugs render here?", so
+// no router refactor is required (D-11 / SET-01 — nothing removed).
+//
+// NAV-A5 reachability audit (CONTEXT Q3): every existing settings entry point
+// stays reachable. The mapping below is the canonical answer:
+//
+//   account     → (no legacy slug — new bucket; profile / identity / sign-out)
+//   agents      → integrations, permissions
+//   voice       → (no legacy slug — voice settings live inside Labs today)
+//   appearance  → general (theme + language live here), shortcuts (keyboard)
+//   advanced    → labs, localDaemon, diagnostics, about, usage
+//
+// Adding a new slug? Append it to `SETTINGS_SECTION_SLUGS` first, then add a
+// `SLUG_TO_BUCKET` entry in the same PR. The `host-routes.test.ts` parity test
+// fails the build if a slug is left unmapped.
+
+export const SETTINGS_BUCKETS = ["account", "agents", "voice", "appearance", "advanced"] as const;
+
+export type SettingsBucket = (typeof SETTINGS_BUCKETS)[number];
+
+export function isSettingsBucket(value: string): value is SettingsBucket {
+  return (SETTINGS_BUCKETS as readonly string[]).includes(value);
+}
+
+/**
+ * Maps every existing `SettingsSectionSlug` to one of the 5 D-09 buckets so
+ * old paths keep working. The new bucket sub-pages look up which slugs they
+ * own via this table — the existing `[section].tsx` route stays unchanged.
+ */
+export const SLUG_TO_BUCKET: Record<SettingsSectionSlug, SettingsBucket> = {
+  general: "appearance",
+  shortcuts: "appearance",
+  integrations: "agents",
+  permissions: "agents",
+  usage: "advanced",
+  labs: "advanced",
+  localDaemon: "advanced",
+  diagnostics: "advanced",
+  about: "advanced",
+} as const;
+
+export function resolveBucketForSlug(slug: SettingsSectionSlug): SettingsBucket {
+  return SLUG_TO_BUCKET[slug];
+}
+
+export function buildSettingsBucketRoute(bucket: SettingsBucket) {
+  return `/settings/bucket/${bucket}` as const;
+}
+
 export function mapPathnameToServer(pathname: string, nextServerId: string) {
   const normalized = trimNonEmpty(nextServerId);
   if (!normalized) {
