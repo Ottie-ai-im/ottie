@@ -43,7 +43,7 @@ The five-phase ordering is dictated by three hard dependency chains: (1) the `se
 
 Plans:
 
-- [ ] 01-01-PLAN.md — Schema-evolution discipline: RESERVED_FIELDS export, frozen-fixture v1.8/v1.9/v1.10 parse tests, warn-level @deprecated annotation lint (ARCH-02)
+- [x] 01-01-PLAN.md — Schema-evolution discipline: RESERVED_FIELDS export, frozen-fixture v1.8/v1.9/v1.10 parse tests, warn-level @deprecated annotation lint (ARCH-02)
 - [ ] 01-02-PLAN.md — Theme token skeleton + targeted migration (theme.ts/glass-surface/daemon-connection-dot/curves) + warn-level hardcoded-color lint with counter-baseline (THM-01)
 - [ ] 01-03-PLAN.md — Bug fixes bundle (atomic-per-bug): chevron + isHovered-alone lint (NAV-A3), resize-handle pointer-events + lint (NAT-03), OpenCode listPersistedAgents (SES-02), chromeEnabled split (SET-02)
 - [ ] 01-04-PLAN.md — Carve C-1/C-2/C-3: MessageRouter, Zod parse boundary, PermissionHandler with Strangler-Fig env flags (ARCH-01)
