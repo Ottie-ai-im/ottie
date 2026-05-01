@@ -10,7 +10,11 @@ import {
   type GestureResponderEvent,
   type PressableStateCallbackType,
 } from "react-native";
-import * as Haptics from "expo-haptics";
+// Replaced direct expo-haptics import with the canonical `useHaptic` hook
+// (Plan 02a) so settings-toggle, low-power-mode, and 200ms debounce all
+// route through one place. The 3 inline call sites below now go through
+// `haptic.fire("medium")`.
+import { useHaptic } from "@/hooks/use-haptic";
 import { useTranslation } from "react-i18next";
 import { useQueries } from "@tanstack/react-query";
 import { useProjectLastActivityAt, useProjectUnreadCount } from "@/hooks/use-project-last-activity";
@@ -976,6 +980,12 @@ function useLongPressDragInteraction(input: {
   drag: () => void;
   menuController: ReturnType<typeof useContextMenu> | null;
 }) {
+  // useHaptic is the canonical haptic surface (Plan 02a). AppSettings
+  // doesn't expose `haptics.enabled` yet — Plan 02e wires the toggle and
+  // the expo-battery low-power-mode source. For now `enabled: true` keeps
+  // existing behavior intact while routing through the debounce + isNative
+  // gates inside the hook.
+  const haptic = useHaptic({ enabled: true, isLowPowerMode: false });
   const didLongPressRef = useRef(false);
   const dragArmedRef = useRef(false);
   const dragActivatedRef = useRef(false);
@@ -1050,7 +1060,7 @@ function useLongPressDragInteraction(input: {
       dragArmedRef.current = true;
       dragActivatedRef.current = true;
       didLongPressRef.current = true;
-      void Haptics.selectionAsync().catch(() => {});
+      haptic.fire("medium");
       input.drag();
     }, DRAG_ARM_DELAY_MS);
 
@@ -1073,10 +1083,10 @@ function useLongPressDragInteraction(input: {
       if (distance > CONTEXT_MENU_STATIONARY_SLOP_PX) {
         return;
       }
-      void Haptics.selectionAsync().catch(() => {});
+      haptic.fire("medium");
       openContextMenuAtStartPoint();
     }, CONTEXT_MENU_DELAY_MS);
-  }, [clearTimers, input, openContextMenuAtStartPoint]);
+  }, [clearTimers, input, openContextMenuAtStartPoint, haptic]);
 
   const handleDragIntent = useCallback(
     (_details: { dx: number; dy: number; distance: number }) => {
@@ -1086,9 +1096,9 @@ function useLongPressDragInteraction(input: {
       didStartDragRef.current = true;
       didLongPressRef.current = true;
       clearTimers();
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      haptic.fire("medium");
     },
-    [clearTimers],
+    [clearTimers, haptic],
   );
 
   const handleScrollIntent = useCallback(

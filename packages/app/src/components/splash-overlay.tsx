@@ -6,6 +6,8 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { AppleHelloEffect } from "@/components/apple-hello-effect";
 import { OttieLogo } from "@/components/icons/ottie-logo";
+import { TotalUnreadPopup } from "@/components/total-unread-popup";
+import { useChatRowStateStore } from "@/stores/chat-row-state-store";
 
 const SPLASH_DURATION_MS = 2200;
 const FADE_OUT_MS = 420;
@@ -57,7 +59,24 @@ export function SplashOverlay() {
     [theme.colors.surface0],
   );
 
-  if (!visible) return null;
+  // Aggregate unread across every chat row (CONTEXT Q1 — chat-row state is
+  // client-only; the daemon is never asked for a server-side total). The
+  // selector is computed from the store snapshot so a single rebuild fires
+  // when any row's unread changes.
+  const totalUnread = useChatRowStateStore((s) => {
+    let sum = 0;
+    for (const row of Object.values(s.rows)) {
+      sum += row.unread;
+    }
+    return sum;
+  });
+
+  if (!visible) {
+    // After the splash dismisses, surface the WeChat-style total-unread popup
+    // for ~1.5s when there's at least 1 unread message. The popup itself
+    // owns its `hasShown` module flag so it fires once per app launch.
+    return totalUnread > 0 ? <TotalUnreadPopup totalUnread={totalUnread} /> : null;
+  }
 
   return (
     <Animated.View
