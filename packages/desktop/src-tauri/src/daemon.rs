@@ -7,9 +7,63 @@
 use std::io;
 use std::time::Duration;
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use rand::RngCore;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+
+/// ARCH-03 (D-15): write `$OTTIE_HOME/local-token` (mode 0600 on POSIX, default
+/// user-profile permissions on Windows) BEFORE spawning the daemon subprocess.
+///
+/// Idempotent: if the file already exists, leaves it alone (regenerating from
+/// here would invalidate paired clients — the user must explicitly regenerate
+/// via Settings → Advanced → Local daemon, which goes through the daemon's
+/// `LocalTokenService.regenerate()` path).
+///
+/// The write completes synchronously before this function returns, so `spawn()`
+/// can call `ensure_local_token()?` ahead of `.spawn()` and the daemon is
+/// guaranteed to see the file on boot. Race is impossible by ordering.
+fn ensure_local_token() -> Result<(), String> {
+    let home = std::env::var("OTTIE_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            let mut p = dirs::home_dir().unwrap_or_default();
+            p.push(".ottie");
+            p
+        });
+    std::fs::create_dir_all(&home).map_err(|e| format!("create OTTIE_HOME: {e}"))?;
+    let token_path = home.join("local-token");
+    if token_path.exists() {
+        return Ok(());
+    }
+    let mut buf = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut buf);
+    let token = URL_SAFE_NO_PAD.encode(buf);
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&token_path)
+            .map_err(|e| format!("open token: {e}"))?;
+        f.write_all(token.as_bytes())
+            .map_err(|e| format!("write token: {e}"))?;
+    }
+    #[cfg(not(unix))]
+    {
+        // Windows ACL strategy is a follow-up (Phase 5). For now relies on
+        // default user-profile permissions, which limit reads to the same
+        // OS user — acceptable for the v1.11 milestone per CONTEXT.md
+        // <code_context> Windows ACL note.
+        std::fs::write(&token_path, &token).map_err(|e| format!("write token: {e}"))?;
+    }
+    Ok(())
+}
 
 pub struct DaemonHandle {
     child: CommandChild,
@@ -30,6 +84,11 @@ impl DaemonHandle {
 }
 
 pub fn spawn<R: Runtime>(app: &AppHandle<R>) -> Result<DaemonHandle, String> {
+    // ARCH-03 (D-15): write the local-daemon auth token before spawning the
+    // daemon. The synchronous write completes before .spawn() returns, so the
+    // daemon is guaranteed to see the file on boot. Race-free by ordering.
+    ensure_local_token()?;
+
     // Origins the renderer can connect from. In dev the renderer is served
     // by Expo at http://localhost:8081; in packaged builds Tauri's webview
     // uses tauri://localhost on macOS / Linux and http://tauri.localhost on

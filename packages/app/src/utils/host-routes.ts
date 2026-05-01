@@ -395,6 +395,7 @@ export const SETTINGS_SECTION_SLUGS = [
   "permissions",
   "usage",
   "labs",
+  "localDaemon",
   "diagnostics",
   "about",
 ] as const;

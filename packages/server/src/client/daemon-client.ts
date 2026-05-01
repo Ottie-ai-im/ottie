@@ -1266,7 +1266,7 @@ export class DaemonClient {
           return null;
         }
         if (!params.selectPayload) {
-          return payload as TResult;
+          return payload as unknown as TResult;
         }
         return params.selectPayload(payload);
       },
@@ -3063,6 +3063,49 @@ export class DaemonClient {
         config,
       },
       responseType: "set_daemon_config_response",
+      timeout: 10000,
+    });
+  }
+
+  /**
+   * ARCH-03 / Plan 01-05 (v1.11): query the daemon's local-token mode + presence.
+   * The token VALUE is never returned — only the resolved mode and a boolean
+   * indicating whether a token is configured. Used by the Settings → Advanced
+   * → Local daemon panel.
+   */
+  async getLocalTokenStatus(options?: {
+    requestId?: string;
+  }): Promise<{
+    requestId: string;
+    mode?: "loopback-trust" | "token-file" | "explicit";
+    tokenPresent?: boolean;
+  }> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "local_token_status_request",
+      },
+      responseType: "local_token_status_response",
+      timeout: 10000,
+    });
+  }
+
+  /**
+   * ARCH-03 / Plan 01-05 (v1.11): regenerate the local-daemon token. The
+   * daemon writes a fresh 32-byte base64url token to $OTTIE_HOME/local-token
+   * (mode 0o600 on POSIX). Other paired clients will need to re-pair after a
+   * regenerate — the user-facing UI must surface a confirmation prompt before
+   * calling this.
+   */
+  async regenerateLocalToken(options?: {
+    requestId?: string;
+  }): Promise<{ requestId: string; success?: boolean; error?: string }> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "local_token_regenerate_request",
+      },
+      responseType: "local_token_regenerate_response",
       timeout: 10000,
     });
   }

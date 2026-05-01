@@ -1708,6 +1708,48 @@ export const CaptureTerminalRequestSchema = z.object({
   requestId: z.string(),
 });
 
+// ============================================================================
+// Local-token RPC (ARCH-03 / Plan 01-05) — v1.11
+//
+// Settings → Advanced → Local daemon panel queries token status and (on user
+// confirmation) regenerates the token via these four message kinds. The token
+// VALUE never crosses the WS — only status. Regeneration writes the file
+// server-side via LocalTokenService.regenerate().
+//
+// Schema discipline (CLAUDE.md hard rule + ARCH-02): every NEW field beyond
+// `type` and `requestId` is `.optional()` so old clients (pre-v1.11) parsing
+// these messages keep working. Frozen-fixture parity in
+// `messages.frozen-v1.11.test.ts` pins the wire shapes.
+// ============================================================================
+
+export const LocalTokenStatusRequestSchema = z.object({
+  type: z.literal("local_token_status_request"),
+  requestId: z.string(),
+});
+
+export const LocalTokenStatusResponseSchema = z.object({
+  type: z.literal("local_token_status_response"),
+  payload: z.object({
+    requestId: z.string(),
+    mode: z.enum(["loopback-trust", "token-file", "explicit"]).optional(),
+    tokenPresent: z.boolean().optional(),
+  }),
+});
+
+export const LocalTokenRegenerateRequestSchema = z.object({
+  type: z.literal("local_token_regenerate_request"),
+  requestId: z.string(),
+});
+
+export const LocalTokenRegenerateResponseSchema = z.object({
+  type: z.literal("local_token_regenerate_response"),
+  payload: z.object({
+    requestId: z.string(),
+    success: z.boolean().optional(),
+    error: z.string().optional(),
+  }),
+});
+
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   VoiceAudioChunkMessageSchema,
   AbortRequestMessageSchema,
@@ -1818,6 +1860,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectRequestSchema,
   LoopLogsRequestSchema,
   LoopStopRequestSchema,
+  // ARCH-03 / Plan 01-05 (v1.11): local-daemon auth RPCs.
+  LocalTokenStatusRequestSchema,
+  LocalTokenRegenerateRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3423,6 +3468,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectResponseSchema,
   LoopLogsResponseSchema,
   LoopStopResponseSchema,
+  // ARCH-03 / Plan 01-05 (v1.11): local-daemon auth RPCs.
+  LocalTokenStatusResponseSchema,
+  LocalTokenRegenerateResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

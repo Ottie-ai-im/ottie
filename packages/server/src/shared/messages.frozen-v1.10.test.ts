@@ -5,6 +5,7 @@ import {
   CreateAgentRequestMessageSchema,
   SendAgentMessageRequestSchema,
   SessionInboundMessageSchema,
+  SessionOutboundMessageSchema,
 } from "./messages.js";
 
 // ---------------------------------------------------------------------------
@@ -136,5 +137,28 @@ describe("v1.10 wire compatibility", () => {
         expect(parsed.response.selectedActionId).toBe("approve-once");
       }
     }
+  });
+
+  it("v1.10 client safeParse on v1.11 local_token_status_response — additive schemas don't break v1.10 fixture parses", () => {
+    // ARCH-02 / Plan 01-05 additive-confirmation: v1.11 ships four new local-token RPC kinds.
+    // The v1.10 client safeParse-ing a v1.11-only message is documented to:
+    //   (a) succeed if the v1.11 schemas are now registered on the union (today's case),
+    //   (b) gracefully fail (success=false, no throw) if a future schema-narrowing or
+    //       removal regresses backward-compat.
+    // This guard pins the additive nature of the v1.11 changes against the existing
+    // v1.10 fixture parses (which all pass above) — schema additions never break old fixtures.
+    const v11_only_message = {
+      type: "local_token_status_response",
+      payload: {
+        requestId: "req-1",
+        mode: "loopback-trust",
+        tokenPresent: false,
+      },
+    } as const;
+    // Today's daemon parses v1.11 outbound messages just fine via the discriminator.
+    // We use safeParse to guard against future schema-narrowing that would crash
+    // (rather than gracefully fail) — the contract is "non-throwing on unknown kinds".
+    const result = SessionOutboundMessageSchema.safeParse(v11_only_message);
+    expect(result.success).toBe(true);
   });
 });

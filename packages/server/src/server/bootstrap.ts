@@ -87,6 +87,7 @@ function formatListenTarget(listenTarget: ListenTarget | null): string | null {
 }
 
 import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
+import { resolveLocalTokenMode, type LocalTokenMode } from "./auth/local-token.js";
 import { createGitHubService } from "../services/github-service.js";
 import { createOttieWorktree } from "./ottie-worktree-service.js";
 import { createWorktreeCoreDeps } from "./worktree-core.js";
@@ -775,6 +776,14 @@ export async function createOttieDaemon(
 
   logger.info({ elapsed: elapsed() }, "Bootstrap complete, ready to start listening");
 
+  // ARCH-03: resolve the local-daemon auth mode ONCE at bootstrap. Mode A is
+  // the default (preserves today's `npm run dev` behavior); Mode B activates
+  // when the Tauri shell wrote `$OTTIE_HOME/local-token` before spawning the
+  // daemon (D-15 — race-free by ordering); Mode C activates when the user
+  // exports `OTTIE_LOCAL_TOKEN` for non-loopback binds (containers, VPSes).
+  const localTokenMode: LocalTokenMode = await resolveLocalTokenMode();
+  logger.info({ mode: localTokenMode.kind, elapsed: elapsed() }, "Local-daemon auth mode resolved");
+
   const start = async () => {
     // Start main HTTP server
     await new Promise<void>((resolve, reject) => {
@@ -855,6 +864,7 @@ export async function createOttieDaemon(
             workspaceGitService,
             github,
             chatSubscriptionManager,
+            localTokenMode,
           );
 
           if (typeof process.send === "function" && process.env.OTTIE_SUPERVISED === "1") {

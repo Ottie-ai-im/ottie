@@ -45,6 +45,8 @@ import {
 import { InflightCounter } from "./session/inflight-counter.js";
 import { PermissionHandler } from "./session/permission-handler.js";
 import { MessageRouter } from "./session/router.js";
+import { LocalTokenService, registerLocalTokenHandlers } from "./auth/local-token-service.js";
+import type { LocalTokenMode } from "./auth/local-token.js";
 import type { TerminalManager, TerminalsChangedEvent } from "../terminal/terminal-manager.js";
 import { captureTerminalLines, type TerminalSession } from "../terminal/terminal.js";
 import { TerminalOutputCoalescer } from "../terminal/terminal-output-coalescer.js";
@@ -666,6 +668,12 @@ export interface SessionOptions {
   agentProviderRuntimeSettings?: AgentProviderRuntimeSettingsMap;
   providerOverrides?: Record<string, ProviderOverride>;
   isDev?: boolean;
+  /**
+   * ARCH-03 (Plan 01-05): the resolved local-token mode at daemon bootstrap.
+   * Optional for backward compat with existing test instantiations; defaults
+   * to {kind:"loopback-trust"} (Mode A, today's behavior).
+   */
+  localTokenMode?: LocalTokenMode;
 }
 
 export type SessionLifecycleIntent =
@@ -844,6 +852,7 @@ export class Session {
   private readonly inflightCounter = new InflightCounter();
   private readonly router = new MessageRouter();
   private readonly permissionHandler: PermissionHandler;
+  private readonly localTokenService: LocalTokenService;
   private readonly availableEditorTargetsCache = new TTLCache<
     string,
     EditorTargetDescriptorPayload[]
@@ -916,6 +925,7 @@ export class Session {
       agentProviderRuntimeSettings,
       providerOverrides,
       isDev,
+      localTokenMode,
     } = options;
     this.clientId = clientId;
     this.appVersion = appVersion ?? null;
@@ -980,6 +990,8 @@ export class Session {
           : undefined,
       );
     }
+    this.localTokenService = new LocalTokenService(localTokenMode ?? { kind: "loopback-trust" });
+    registerLocalTokenHandlers(this.router, this.localTokenService, (msg) => this.emit(msg));
     void this.initializeAgentMcp();
     this.subscribeToAgentEvents();
     this.sessionLogger.trace("Session created");
