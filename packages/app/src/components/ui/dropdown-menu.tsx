@@ -333,7 +333,6 @@ export function DropdownMenuContent({
 }>): ReactElement | null {
   const { open, setOpen, triggerRef, flushPendingSelect } =
     useDropdownMenuContext("DropdownMenuContent");
-  const { theme } = useUnistyles();
   const [modalVisible, setModalVisible] = useState(false);
   const webScrollbarStyle = useWebScrollbarStyle();
   const [closing, setClosing] = useState(false);
@@ -490,7 +489,7 @@ export function DropdownMenuContent({
             exiting={contentExiting.withCallback((finished) => {
               "worklet";
               if (finished) {
-                runOnJS(setModalVisibleInternal)(false);
+                runOnJS(setModalVisible)(false);
               }
             })}
             collapsable={false}
