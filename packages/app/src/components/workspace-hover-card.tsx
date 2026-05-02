@@ -16,8 +16,10 @@ import { GitHubIcon } from "@/components/icons/github-icon";
 import { DiffStat } from "@/components/diff-stat";
 import { Pressable } from "react-native";
 import { Portal } from "@gorhom/portal";
+import { GlassSurface } from "@/components/ui/glass-surface";
 import { useBottomSheetModalInternal } from "@gorhom/bottom-sheet";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
+import { isWeb } from "@/constants/platform";
 import type { PrHint } from "@/hooks/use-checkout-pr-status-query";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { PrBadge } from "@/components/sidebar-workspace-list";
@@ -180,8 +182,8 @@ function WorkspaceHoverCardDesktop({
     <View
       ref={triggerRef}
       collapsable={false}
-      onPointerEnter={handleTriggerEnter}
-      onPointerLeave={handleTriggerLeave}
+      onPointerEnter={isWeb ? handleTriggerEnter : undefined}
+      onPointerLeave={isWeb ? handleTriggerLeave : undefined}
     >
       {children}
       {open && hasContent ? (
@@ -195,6 +197,8 @@ function WorkspaceHoverCardDesktop({
     </View>
   );
 }
+
+const AnimatedGlassSurface = Animated.createAnimatedComponent(GlassSurface);
 
 function WorkspaceHoverCardContent({
   workspace,
@@ -267,7 +271,7 @@ function WorkspaceHoverCardContent({
   return (
     <Portal hostName={bottomSheetInternal?.hostName}>
       <View pointerEvents="box-none" style={styles.portalOverlay}>
-        <Animated.View
+        <AnimatedGlassSurface
           ref={contentRef}
           entering={FadeIn.duration(80)}
           exiting={FadeOut.duration(80)}
@@ -277,6 +281,7 @@ function WorkspaceHoverCardContent({
           accessibilityLabel="Workspace scripts"
           testID="workspace-hover-card"
           style={cardStyle}
+          radius="card"
         >
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle} numberOfLines={1} testID="hover-card-workspace-name">
@@ -300,7 +305,7 @@ function WorkspaceHoverCardContent({
               <ChecksSummaryPressable checks={prHint.checks} url={prHint.url} theme={theme} />
             </>
           ) : null}
-        </Animated.View>
+        </AnimatedGlassSurface>
       </View>
     </Portal>
   );
@@ -404,17 +409,9 @@ const styles = StyleSheet.create((theme) => ({
     zIndex: 1000,
   },
   card: {
-    backgroundColor: theme.colors.surfaceGlassStrong,
-    borderWidth: 1,
-    borderColor: theme.colors.borderGlass,
-    borderRadius: theme.borderRadius.glassCard,
-    borderCurve: "continuous" as const,
     paddingTop: theme.spacing[2],
-    ...theme.shadow.glass,
     zIndex: 1000,
-    backdropFilter: "blur(28px) saturate(180%)",
-    WebkitBackdropFilter: "blur(28px) saturate(180%)",
-  } as object,
+  },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",

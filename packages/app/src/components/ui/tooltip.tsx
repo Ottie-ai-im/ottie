@@ -26,10 +26,13 @@ import {
 } from "react-native";
 import { Portal } from "@gorhom/portal";
 import { useBottomSheetModalInternal } from "@gorhom/bottom-sheet";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, createAnimatedComponent } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
+import { GlassSurface } from "./glass-surface";
+
+const AnimatedGlassSurface = createAnimatedComponent(GlassSurface);
 
 type Side = "top" | "bottom" | "left" | "right";
 type Align = "start" | "center" | "end";
@@ -382,8 +385,6 @@ export function TooltipTrigger({
           // RN Web's hover handling can vary across environments; pointer events are the most reliable.
           onPointerEnter: handleHoverIn,
           onPointerLeave: handleHoverOut,
-          onMouseEnter: handleHoverIn,
-          onMouseLeave: handleHoverOut,
         } as object)
       : null),
   };
@@ -406,8 +407,6 @@ export function TooltipTrigger({
       onPress: composeEventHandlers(childProps.onPress as never, handlePress),
       onPointerEnter: composeEventHandlers(childProps.onPointerEnter as never, handleHoverIn),
       onPointerLeave: composeEventHandlers(childProps.onPointerLeave as never, handleHoverOut),
-      onMouseEnter: composeEventHandlers(childProps.onMouseEnter as never, handleHoverIn),
-      onMouseLeave: composeEventHandlers(childProps.onMouseLeave as never, handleHoverOut),
     } as Record<string, unknown>;
 
     const existingRefProp = childProps[triggerRefProp] as Ref<View | null> | undefined;
@@ -518,7 +517,7 @@ export function TooltipContent({
     return (
       <Portal hostName={bottomSheetInternal?.hostName}>
         <View pointerEvents="none" style={styles.portalOverlay}>
-          <Animated.View
+          <AnimatedGlassSurface
             pointerEvents="none"
             entering={FadeIn.duration(80)}
             exiting={FadeOut.duration(80)}
@@ -526,9 +525,11 @@ export function TooltipContent({
             testID={testID}
             onLayout={handleLayout}
             style={contentStyle}
+            radius="card"
+            intensity={30}
           >
             {children}
-          </Animated.View>
+          </AnimatedGlassSurface>
         </View>
       </Portal>
     );
@@ -543,7 +544,7 @@ export function TooltipContent({
       onRequestClose={handleDismiss}
     >
       <Pressable style={styles.overlay} onPress={handleDismiss}>
-        <Animated.View
+        <AnimatedGlassSurface
           pointerEvents="none"
           entering={FadeIn.duration(80)}
           exiting={FadeOut.duration(80)}
@@ -551,9 +552,11 @@ export function TooltipContent({
           testID={testID}
           onLayout={handleLayout}
           style={contentStyle}
+          radius="card"
+          intensity={30}
         >
           {children}
-        </Animated.View>
+        </AnimatedGlassSurface>
       </Pressable>
     </Modal>
   );
@@ -572,18 +575,6 @@ const styles = StyleSheet.create((theme) => ({
   content: {
     paddingVertical: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.glassCard,
-    borderCurve: "continuous",
-    backgroundColor: theme.colors.surfaceGlassStrong,
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.borderGlass,
-    ...theme.shadow.glass,
     zIndex: 1000,
-    ...(isWeb
-      ? ({
-          backdropFilter: "blur(28px) saturate(180%)",
-          WebkitBackdropFilter: "blur(28px) saturate(180%)",
-        } as unknown as object)
-      : {}),
   },
 }));

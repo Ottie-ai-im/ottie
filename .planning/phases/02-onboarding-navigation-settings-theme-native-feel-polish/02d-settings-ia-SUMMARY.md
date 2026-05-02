@@ -93,17 +93,17 @@ completed: 2026-05-01
 
 Every legacy slug stays reachable from the new 5-bucket root. The mapping below is the authoritative answer encoded in `SLUG_TO_BUCKET` (`packages/app/src/utils/host-routes.ts`):
 
-| Legacy slug    | New bucket   | Reachable via                                                       |
-| -------------- | ------------ | ------------------------------------------------------------------- |
-| `general`      | `appearance` | Theme / language / send behaviour live here today                   |
-| `shortcuts`    | `appearance` | Keyboard shortcuts (desktop) — same bucket as theme settings        |
-| `integrations` | `agents`     | Provider integrations (desktop)                                     |
-| `permissions`  | `agents`     | Filesystem / Accessibility permissions (desktop)                    |
-| `usage`        | `advanced`   | Daemon usage stats                                                  |
-| `labs`         | `advanced`   | Beta features (Voice Control today)                                 |
-| `localDaemon`  | `advanced`   | Local daemon token / lifecycle                                      |
-| `diagnostics`  | `advanced`   | Audio playback test                                                 |
-| `about`        | `advanced`   | Version + release channel                                           |
+| Legacy slug    | New bucket   | Reachable via                                                |
+| -------------- | ------------ | ------------------------------------------------------------ |
+| `general`      | `appearance` | Theme / language / send behaviour live here today            |
+| `shortcuts`    | `appearance` | Keyboard shortcuts (desktop) — same bucket as theme settings |
+| `integrations` | `agents`     | Provider integrations (desktop)                              |
+| `permissions`  | `agents`     | Filesystem / Accessibility permissions (desktop)             |
+| `usage`        | `advanced`   | Daemon usage stats                                           |
+| `labs`         | `advanced`   | Beta features (Voice Control today)                          |
+| `localDaemon`  | `advanced`   | Local daemon token / lifecycle                               |
+| `diagnostics`  | `advanced`   | Audio playback test                                          |
+| `about`        | `advanced`   | Version + release channel                                    |
 
 New buckets that don't yet have a legacy slug:
 
@@ -114,18 +114,18 @@ New buckets that don't yet have a legacy slug:
 
 The `[section].tsx` route handler (untouched) keeps rendering the existing per-section components, so `router.push("/settings/general")` still lands on the General sub-page exactly as before — `SLUG_TO_BUCKET` is purely additive metadata that the new bucket sub-pages will consume in a later plan.
 
-## settings.open.* ActionIds (SET-03)
+## settings.open.\* ActionIds (SET-03)
 
 6 new ActionIds registered alongside Plan 02a's existing `settings.open` (NAT-01). All ≥2 modalities, all with en+zh locale entries:
 
-| ActionId                     | Modalities      | Handler                                                  | EN locale (`actions.*`) | ZH locale       |
-| ---------------------------- | --------------- | -------------------------------------------------------- | ----------------------- | --------------- |
-| `settings.open.account`      | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("account"))`       | "Open Account settings" | "打开账户设置"    |
-| `settings.open.agents`       | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("agents"))`        | "Open Agents settings"  | "打开 Agents 设置"|
-| `settings.open.voice`        | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("voice"))`         | "Open Voice settings"   | "打开语音设置"     |
-| `settings.open.appearance`   | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("appearance"))`    | "Open Appearance settings" | "打开外观设置" |
-| `settings.open.advanced`     | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("advanced"))`      | "Open Advanced settings"| "打开高级设置"     |
-| `settings.open.labs`         | `cmdk`, `voice` | `router.push(buildSettingsSectionRoute("labs"))`         | "Open Labs settings"    | "打开 Labs 设置"  |
+| ActionId                   | Modalities      | Handler                                               | EN locale (`actions.*`)    | ZH locale          |
+| -------------------------- | --------------- | ----------------------------------------------------- | -------------------------- | ------------------ |
+| `settings.open.account`    | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("account"))`    | "Open Account settings"    | "打开账户设置"     |
+| `settings.open.agents`     | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("agents"))`     | "Open Agents settings"     | "打开 Agents 设置" |
+| `settings.open.voice`      | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("voice"))`      | "Open Voice settings"      | "打开语音设置"     |
+| `settings.open.appearance` | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("appearance"))` | "Open Appearance settings" | "打开外观设置"     |
+| `settings.open.advanced`   | `cmdk`, `voice` | `router.push(buildSettingsBucketRoute("advanced"))`   | "Open Advanced settings"   | "打开高级设置"     |
+| `settings.open.labs`       | `cmdk`, `voice` | `router.push(buildSettingsSectionRoute("labs"))`      | "Open Labs settings"       | "打开 Labs 设置"   |
 
 `registry.parity.test.ts` was extended to call `registerSettingsActions()` so the parity gate enforces these ids on every CI run.
 
@@ -133,7 +133,7 @@ The `[section].tsx` route handler (untouched) keeps rendering the existing per-s
 
 Each task was committed atomically with `--no-verify` per worktree protocol:
 
-1. **Task 1: SETTINGS_BUCKETS + 6 settings.open.* deep-link actions** — `6ea0e25d` (feat)
+1. **Task 1: SETTINGS_BUCKETS + 6 settings.open.\* deep-link actions** — `6ea0e25d` (feat)
 2. **Task 2: SettingsFlatList + 5 primitives + mobile root** — `0b84e436` (feat)
 3. **Task 3: Registry-driven Labs section with reset-all** — `d253f24a` (refactor)
 
@@ -142,6 +142,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 ## Files Created/Modified
 
 **Created (6):**
+
 - `packages/app/src/components/settings/flat-list.tsx` — `<SettingsFlatList>` 5-bucket scrolling root
 - `packages/app/src/components/settings/group.tsx` — `<SettingsGroup>` header + inset card per UI-SPEC line 94
 - `packages/app/src/components/settings/row.tsx` — `<SettingsRow>` Pressable that pushes `/settings/{slug}` (legacy) or bucket landing
@@ -150,6 +151,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 - `packages/app/src/actions/settings-actions.ts` — Registers 6 settings.open.{bucket} ActionIds (idempotent + side-effect on import)
 
 **Modified (9):**
+
 - `packages/app/src/utils/host-routes.ts` — Adds `SETTINGS_BUCKETS`, `SLUG_TO_BUCKET`, `buildSettingsBucketRoute`, `isSettingsBucket`, `resolveBucketForSlug`
 - `packages/app/src/utils/host-routes.test.ts` — 5 new Plan 02d describe-block tests (all pass)
 - `packages/app/src/actions/ids.ts` — 6 new ActionId union entries + `ALL_ACTION_IDS` extension
@@ -163,7 +165,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 ## Decisions Made
 
 - **`settings.open` (no bucket suffix) reuses the Plan 02a registration.** Plan 02d only adds the 6 bucket-specific deep-links. Re-registering the bare id would either duplicate logic or cause last-writer-wins semantics that the planner didn't intend.
-- **Convert `settings.appearance` and `settings.labs` from strings to nested objects** in both locales so `t("settings.labs.title")` resolves naturally. The 2 affected callers (settings-screen.tsx sidebar item + labs-section.tsx section title) were updated in the same commit. Other settings.* leaf strings (`general`, `shortcuts`, `usage`, etc.) stay as strings since they're widely referenced — adding the new namespaces (`settings.section`, `settings.account`, `settings.agents`, `settings.voice`, `settings.advanced`) cleanly avoids name collisions.
+- **Convert `settings.appearance` and `settings.labs` from strings to nested objects** in both locales so `t("settings.labs.title")` resolves naturally. The 2 affected callers (settings-screen.tsx sidebar item + labs-section.tsx section title) were updated in the same commit. Other settings.\* leaf strings (`general`, `shortcuts`, `usage`, etc.) stay as strings since they're widely referenced — adding the new namespaces (`settings.section`, `settings.account`, `settings.agents`, `settings.voice`, `settings.advanced`) cleanly avoids name collisions.
 - **Mobile root keeps the host roster** by rendering `<SettingsSidebar layout="mobile" hideSections />` below the new `<SettingsFlatList>`. Adding a `hideSections` boolean was the smallest possible sidebar change that preserves Add Host + per-host entries (SET-01: nothing removed).
 - **Reset-all preserves sub-config.** D-10 says "Reset all labs to default" — that's the opt-in master toggle, not the per-experiment configuration. Hotkey bindings, intent provider IDs, etc. survive a reset; only `betaFeatures.{entry}.enabled` flips back to `entry.defaultEnabled`.
 - **`LABS_REGISTRY` is author-set in code** rather than daemon-driven. CONTEXT D-10 calls this out explicitly: stability labels are not a runtime decision. Adding a new experiment requires a code change in this file — that's the intent.
@@ -173,6 +175,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 ### Auto-fixed Issues
 
 **1. [Rule 2 — Missing Critical] Preserve mobile host roster after replacing the sidebar with SettingsFlatList**
+
 - **Found during:** Task 2
 - **Issue:** The plan said to "render `<SettingsFlatList>` at the root view" on compact mobile, but the legacy `<SettingsSidebar>` was the only surface that exposed the host roster (the per-host entries + Add Host button) on the Settings tab root. Removing it would have broken SET-01 ("nothing removed") because users with multiple paired hosts could no longer reach the host detail page from the Settings tab.
 - **Fix:** Added a small `hideSections?: boolean` prop to `SettingsSidebar`. The mobile root now renders `<SettingsFlatList>` followed by `<SettingsSidebar layout="mobile" hideSections />` inside the same `ScrollView`, so buckets sit at the top and hosts stay reachable below. Desktop is unchanged.
@@ -181,6 +184,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 - **Committed in:** `0b84e436` (Task 2 commit)
 
 **2. [Rule 1 — Bug] Pre-flatten `<LabsBadge>` variant styles to satisfy `react-perf/jsx-no-new-array-as-prop`**
+
 - **Found during:** Task 2 (lint pass after first draft)
 - **Issue:** The first cut of `<LabsBadge>` composed `style={[styles.base, styles.variant]}` at render time, which the project's lint config rejects (`react-perf/jsx-no-new-array-as-prop`).
 - **Fix:** Refactored the styles object so each variant pre-composes the `base` chip box with its colour treatment via spread (`{ ...base, backgroundColor: ..., borderColor: ... }`). The component now passes a single style object reference. Same fix applied to `labelFilled`/`labelOutline`.
@@ -189,6 +193,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 - **Committed in:** `0b84e436` (Task 2 commit)
 
 **3. [Rule 1 — Bug] Memoize `<LabsRow>` `onValueChange` + `<SettingsFlatList>` `contentContainerStyle`**
+
 - **Found during:** Task 2 (lint pass)
 - **Issue:** Inline arrow functions and array literals in JSX props trigger `react-perf/jsx-no-new-function-as-prop` and `jsx-no-new-array-as-prop`.
 - **Fix:** `useCallback` for the `SegmentedControl.onValueChange` adapter; `useMemo` for the composed `contentContainerStyle` array. Same `useCallback` pattern applied in `labs-section.tsx` for the `LabsRow.onToggle` handler.
@@ -197,6 +202,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 - **Committed in:** `0b84e436` (Task 2) + `d253f24a` (Task 3)
 
 **4. [Rule 1 — Bug] Replace nested ternaries in `<LabsBadge>` with lookup tables**
+
 - **Found during:** Task 2 (lint pass — `eslint(no-nested-ternary)`)
 - **Issue:** First draft used a 3-way nested ternary to pick the variant style + label key.
 - **Fix:** Module-level `CONTAINER_STYLE_BY_STABILITY` + `LABEL_KEY_BY_STABILITY` records replace the nested ternary. Component body is now linear.
@@ -207,6 +213,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 ### Plan-target deviations (documented, no fix applied)
 
 **5. [Plan target adjustment] `labs-section.tsx` is 994 lines, not ≤300 as targeted**
+
 - **Reason:** The plan's ≤300-line target assumed ~5-8 hand-rolled experiment cards that would collapse into a `LABS_REGISTRY.map(...)` rendering pass. The reality (read during Task 3) is one experiment (Voice Control) with rich nested sub-controls — push-to-talk hotkey picker, intent provider selector, intent-model selector, quick-test buttons, diagnostics, hotkey-capture modal — totalling ~600 lines of helper components. Hitting ≤300 lines would require extracting helper modules, which is mechanical but risky for a single-purpose plan and out of scope for the registry refactor itself.
 - **What ships instead:** `LABS_REGISTRY` array exists, `<LabsRow>` replaces the bespoke header card, the rich sub-controls render as `<LabsRow>` children, and the bottom "Reset all labs to default" button is in place. All other Task 3 acceptance criteria pass.
 - **Follow-up:** Plan 02e (polish sweep) is the natural place to extract `voice-controls/*.tsx` helpers if the line count becomes a concern. Tracked as deferred.
@@ -214,6 +221,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 ### Pre-existing issues encountered (not auto-fixed)
 
 **6. `host-routes.test.ts > decodes non-canonical base64url workspace IDs used by older links` failure**
+
 - **Status:** Logged to `deferred-items.md`. Not in scope for Plan 02d.
 - **Why:** The test expects `"/Users//dev/ottie"` but the encoded fixture `L1VzZXJzL21vYm91ZHJhL2Rldi9wYXNlby` actually decodes to `"/Users/moboudra/dev/paseo"`. The expected value was scrubbed without regenerating the encoded fixture in a prior commit (`65d09706 chore: standardize on pnpm for development`).
 - **Confirmed pre-existing:** The failure reproduces against the worktree base (`4e15f452`) before any of my changes.
@@ -230,6 +238,7 @@ The plan-level metadata commit (this SUMMARY + deferred-items.md) follows the pe
 ## Self-Check: PASSED
 
 All 6 created files exist on disk:
+
 - `packages/app/src/components/settings/flat-list.tsx`
 - `packages/app/src/components/settings/group.tsx`
 - `packages/app/src/components/settings/row.tsx`
@@ -240,6 +249,7 @@ All 6 created files exist on disk:
 All 9 modified files have the expected edits.
 
 All 3 task commits present in `git log --oneline --all`:
+
 - `6ea0e25d feat(02-02d): SETTINGS_BUCKETS map + 6 settings.open.* deep-link actions`
 - `0b84e436 feat(02-02d): SettingsFlatList + 5 primitives, mobile root collapses to 5 buckets`
 - `d253f24a refactor(02-02d): registry-driven Labs section with reset-all button`
@@ -261,11 +271,12 @@ None — no external service configuration. The 5 settings.open.{bucket} buckets
 ## Threat Flags
 
 | Flag | File | Description |
-|------|------|-------------|
+| ---- | ---- | ----------- |
 
 (No new threat surface beyond the plan's `<threat_model>` register. T-02d-01..T-02d-05 are all `mitigate`/`accept` and the implementation matches their dispositions: labs opt-in is set only via `<SegmentedControl>` user interaction, sub-page routes accept only validated slugs, dispatch handlers use a fixed `router.push(buildSettingsBucketRoute(...))` with `NoArgs` schema.)
 
 ---
-*Phase: 02-onboarding-navigation-settings-theme-native-feel-polish*
-*Plan: 02d*
-*Completed: 2026-05-01*
+
+_Phase: 02-onboarding-navigation-settings-theme-native-feel-polish_
+_Plan: 02d_
+_Completed: 2026-05-01_

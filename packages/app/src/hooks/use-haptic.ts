@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import * as Haptics from "expo-haptics";
 import { isNative } from "@/constants/platform";
+import { useLowPowerMode } from "./use-low-power-mode";
 
 /**
  * useHaptic — single source of truth for native haptic feedback.
@@ -21,7 +22,7 @@ export type HapticEvent = "light" | "medium" | "heavy";
 
 export interface UseHapticInput {
   enabled: boolean;
-  isLowPowerMode: boolean;
+  isLowPowerMode?: boolean;
 }
 
 export interface UseHapticResult {
@@ -31,6 +32,9 @@ export interface UseHapticResult {
 const DEBOUNCE_MS = 200;
 
 export function useHaptic(input: UseHapticInput): UseHapticResult {
+  const liveLowPower = useLowPowerMode();
+  const isLowPower = input.isLowPowerMode ?? liveLowPower;
+
   // Per-event last-fired tracking. Light / medium / heavy each get their own
   // debounce window so a "light tap" + "heavy success" within 50ms both
   // still fire.
@@ -43,7 +47,7 @@ export function useHaptic(input: UseHapticInput): UseHapticResult {
       if (!isNative) return;
 
       // User opted out OR battery is low — no-op.
-      if (!input.enabled || input.isLowPowerMode) return;
+      if (!input.enabled || isLowPower) return;
 
       const now = Date.now();
       const last = lastFiredRef.current.get(event) ?? 0;
@@ -68,7 +72,7 @@ export function useHaptic(input: UseHapticInput): UseHapticResult {
           return;
       }
     },
-    [input.enabled, input.isLowPowerMode],
+    [input.enabled, isLowPower],
   );
 
   return { fire };

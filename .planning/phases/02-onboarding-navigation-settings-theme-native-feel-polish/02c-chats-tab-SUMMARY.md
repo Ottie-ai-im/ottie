@@ -110,6 +110,7 @@ Each task was committed atomically:
 ## Files Created/Modified
 
 ### Created (12)
+
 - `packages/app/src/stores/chat-row-state-store.ts` — Zustand+AsyncStorage store; pin/mute/unread/archived flags per agent
 - `packages/app/src/stores/chat-row-state-store.test.ts` — pin/mute/unread/archived behavior
 - `packages/app/src/components/unread-badge.tsx` — token-driven pill (destructive / muted variant)
@@ -121,9 +122,10 @@ Each task was committed atomically:
 - `packages/app/src/components/chat-row-hover-actions.web.tsx` — isHovered || isCompact 3-icon overlay
 - `packages/app/src/components/top-right-add-menu.tsx` — 4-item header trigger
 - `packages/app/src/components/total-unread-popup.tsx` — module-flag one-shot 1500ms popup
-- `packages/app/src/actions/chat-row-actions.ts` — 13 chat.menu.* + chat.add.* + alias registrations
+- `packages/app/src/actions/chat-row-actions.ts` — 13 chat.menu._ + chat.add._ + alias registrations
 
 ### Modified (10)
+
 - `packages/app/src/screens/sessions-screen.tsx` — AgentList → FlatList<ChatRow>; sort pinned-first; first-time empty Otter
 - `packages/app/src/components/splash-overlay.tsx` — mounts `<TotalUnreadPopup>` after splash dismiss when totalUnread>0
 - `packages/app/src/components/sidebar-workspace-list.tsx` — `useHaptic` replaces 3 inline `expo-haptics` calls
@@ -146,6 +148,7 @@ Each task was committed atomically:
 ### Auto-fixed Issues
 
 **1. [Rule 5 — Test infra gap] Pre-existing react-native resolution failure in `sidebar-workspace-list.test.tsx`**
+
 - **Found during:** Task 3 (sidebar-workspace-list haptic refactor)
 - **Issue:** vitest cannot resolve `react-native` from `expo-constants` — reproduces against HEAD before this plan landed
 - **Fix:** Documented in plan-local `deferred-items.md` per FIX ATTEMPT LIMIT / SCOPE BOUNDARY rules; not an introduced regression
@@ -153,6 +156,7 @@ Each task was committed atomically:
 - **Committed in:** part of `15b7a2e6` (deferred-items.md addition)
 
 **2. [Rule 1 — Locale namespace] Nested-locale form vs flat keys**
+
 - **Found during:** Task 1 (chat-row-actions registration)
 - **Issue:** Existing locales already use nested namespaces (`actions.*`, `chat.*`); plan's example used flat keys
 - **Fix:** Used nested form to match existing convention; preserves i18next-consumer compatibility
@@ -160,6 +164,7 @@ Each task was committed atomically:
 - **Committed in:** `d82906da`
 
 **3. [Continuation — token cutoff] First agent invocation hit usage limit mid-Task-4**
+
 - **Found during:** Task 4 (NAV-A2 auto-collapse)
 - **Issue:** First agent completed all Task 4 file edits but ran out of tokens before committing or writing SUMMARY
 - **Fix:** Orchestrator manually committed Task 4 + SUMMARY with `--no-verify` from inside the agent's worktree, preserving the worktree-isolation contract
@@ -182,11 +187,12 @@ None — no external service configuration required.
 ## Next Phase Readiness
 
 - Chats tab + chat-row primitives complete; Plan 02d (Settings IA) and Plan 02e (polish sweep) can now extend
-- ActionRegistry chat-row entries are in place — Plan 02d can register settings.open.* deep-links alongside them
-- panel-store auto-collapse + _layout.tsx wiring closes checker B2 / NAV-A2 — Plan 02e's polish sweep can rely on the canonical compact-layout flow
+- ActionRegistry chat-row entries are in place — Plan 02d can register settings.open.\* deep-links alongside them
+- panel-store auto-collapse + \_layout.tsx wiring closes checker B2 / NAV-A2 — Plan 02e's polish sweep can rely on the canonical compact-layout flow
 - Sidebar's haptic seam now flows through useHaptic — Plan 02e can apply low-power-mode + debounce policies in one place
 
 ---
-*Phase: 02-onboarding-navigation-settings-theme-native-feel-polish*
-*Plan: 02c-chats-tab*
-*Completed: 2026-05-01*
+
+_Phase: 02-onboarding-navigation-settings-theme-native-feel-polish_
+_Plan: 02c-chats-tab_
+_Completed: 2026-05-01_

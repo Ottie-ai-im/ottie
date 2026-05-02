@@ -1,4 +1,5 @@
 import { VOICE_COMMANDS, type VoiceCommand } from "@/voice-control/voice-commands";
+import { fireDelightToast } from "@/utils/delight-toast";
 
 /**
  * Voice intent router (phase-2 lightweight).
@@ -141,5 +142,6 @@ export function matchIntent(transcript: string): IntentMatch | null {
   }
 
   if (!best || best.confidence < MIN_CONFIDENCE) return null;
+  fireDelightToast("first-voice");
   return best;
 }

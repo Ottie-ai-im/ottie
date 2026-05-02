@@ -466,5 +466,57 @@
     "confirmRemoveProjectMessage": "从侧栏移除「{{name}}」？\n\n磁盘上的文件不会变化。",
     "confirmRemoveProjectButton": "移除",
     "failedRemoveSome": "部分工作区移除失败"
+  },
+  "toasts": {
+    "mark-read": {
+      "title": "已标记已读",
+      "message": ""
+    },
+    "mute": {
+      "title": "已静音",
+      "message": "通知已禁用"
+    },
+    "unmute": {
+      "title": "取消静音",
+      "message": "通知已启用"
+    },
+    "delete": {
+      "title": "已删除",
+      "message": ""
+    },
+    "send-ack": {
+      "title": "已发送",
+      "message": ""
+    },
+    "agent-run-start": {
+      "title": "Agent 已启动",
+      "message": ""
+    },
+    "agent-run-stop": {
+      "title": "Agent 已停止",
+      "message": ""
+    },
+    "permission-approve": {
+      "title": "已允许",
+      "message": ""
+    },
+    "permission-deny": {
+      "title": "已拒绝",
+      "message": ""
+    },
+    "delight": {
+      "first-agent": {
+        "title": "Agent 就绪",
+        "message": "Claude 正在此工作区为你提供帮助。"
+      },
+      "first-permission": {
+        "title": "能力已解锁",
+        "message": "Agent 现在可以代表你执行终端命令。"
+      },
+      "first-voice": {
+        "title": "正在聆听",
+        "message": "你现在可以通过语音控制 Ottie。"
+      }
+    }
   }
 }

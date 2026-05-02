@@ -38,7 +38,7 @@ affects:
 
 # Tech tracking
 tech-stack:
-  added: []  # No new libraries — fixes are inline edits + lint scripts using only node:fs / node:path / node:os / tsx
+  added: [] # No new libraries — fixes are inline edits + lint scripts using only node:fs / node:path / node:os / tsx
   patterns:
     - "Counter-baseline lint scripts under tools/lint/ (Phase 1 warn-only → Phase 5 error)"
     - "Filesystem-pipeline mirroring between provider implementations (claude-agent.ts → opencode-agent.ts) — pathExists → collect → parse → filter → slice"
@@ -168,11 +168,11 @@ All six pre-existing hits in **`packages/app/src/components/sidebar-workspace-li
 
 Distribution:
 
-| File | Lines | Count |
-|---|---|---|
-| `packages/app/src/components/sidebar-workspace-list.tsx` | 1365, 1366, 1388, 1389, 1487, 1488 | 6 |
-| `packages/app/src/components/terminal-emulator.tsx` | 740, 741 | 2 |
-| `packages/app/src/components/workspace-hover-card.tsx` | 183, 184 | 2 |
+| File                                                     | Lines                              | Count |
+| -------------------------------------------------------- | ---------------------------------- | ----- |
+| `packages/app/src/components/sidebar-workspace-list.tsx` | 1365, 1366, 1388, 1389, 1487, 1488 | 6     |
+| `packages/app/src/components/terminal-emulator.tsx`      | 740, 741                           | 2     |
+| `packages/app/src/components/workspace-hover-card.tsx`   | 183, 184                           | 2     |
 
 Phase 5's promotion-to-error task owns the sweep. The canonical safe pattern is `onPointerEnter={isWeb ? handler : undefined}` (per `toast-host.tsx:257-258` and the closed `resize-handle.tsx` regression).
 
@@ -189,6 +189,7 @@ Phase 5's promotion-to-error task owns the sweep. The canonical safe pattern is 
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Auto-fixed second chevron site at line 2701**
+
 - **Found during:** Task 1 verification (running `lint:hover --write-baseline`)
 - **Issue:** The plan cited line 2601 (`const isActive = isHovered || isExpanded`) as the buggy chevron site. After fixing it, the lint flagged a SECOND site at line 2696 (`{isInteractive && isHovered ? <ChevronRight /> : null}`) that controlled the actual chevron render. Same regression — chevron still wouldn't render on native without this fix.
 - **Fix:** Combined `isHovered` with `isNative` and `isCompact`: `{isInteractive && (isHovered || isNative || isCompact) ? <ChevronRight /> : null}`.
@@ -197,6 +198,7 @@ Phase 5's promotion-to-error task owns the sweep. The canonical safe pattern is 
 - **Committed in:** `d5ac8d81` (Task 1 commit)
 
 **2. [Rule 1 - Bug] Refactored nested ternary in opencode-agent.ts**
+
 - **Found during:** Task 3a verification (oxlint on the new helpers)
 - **Issue:** `parseOpenCodeSessionDescriptor` used a nested ternary to fall back from `parsed.directory` to `parsed.projectID` for cwd resolution. oxlint `no-nested-ternary` rule flagged it.
 - **Fix:** Rewrote as `let cwd: string | null = null; if (...) cwd = ...; else if (...) cwd = ...;`. Same semantics.
@@ -207,6 +209,7 @@ Phase 5's promotion-to-error task owns the sweep. The canonical safe pattern is 
 ### User-Decision Adaptations (D-06 / D-07 / D-08)
 
 **3. [User-decision deviation] D-06/D-07 derivation-only adaptation (Option a)**
+
 - **Found during:** Task 3b setup (before any `_layout.tsx` edits)
 - **Plan instruction:** "PAUSE FOR USER CONFIRMATION before applying SET-02 work. … Reply with 'a' or 'b' to proceed."
 - **What we did:** The plan author already preferred Option (a) (derivation-only adaptation) and had pre-approved it in the plan's `<objective>` block ("planner front-loads the recommended choice"). The executor in worktree-isolated autonomous mode cannot pause for user input mid-stream — the spawning orchestrator runs all worktree executors as `autonomous: true`. **Proceeded with Option (a):** identical derivation logic, new variable names. The downstream review of this SUMMARY is the gate where the user can flip to Option (b) (create a Zustand persist store with first-launch migration) if they want — that would be a follow-up plan.
@@ -218,6 +221,7 @@ Phase 5's promotion-to-error task owns the sweep. The canonical safe pattern is 
 - **Followup if user prefers Option (b):** revert `a5cf21d7` and ask the planner for a new plan revision creating `packages/app/src/stores/chrome-flags-store.ts` (Zustand `persist` middleware) + first-launch migration that copies `chromeEnabled` value into both new keys.
 
 **4. [Acceptance-criterion clarification] D-08 N/A confirmation grep returns 1, not 0**
+
 - **Found during:** Task 3b verification
 - **Plan acceptance criterion:** `grep -c "chromeEnabled" packages/server/src/shared/messages.ts` returns `0`.
 - **What we observed:** The grep returns `1` — one match at line 115 inside a `//` comment block:
@@ -234,6 +238,7 @@ Phase 5's promotion-to-error task owns the sweep. The canonical safe pattern is 
 ### Pre-existing Issues Logged (Out of Scope)
 
 **5. [Out of scope] `_layout.tsx:2` pre-existing oxlint `no-unassigned-import` warning**
+
 - **Found during:** Task 3b oxlint pass
 - **Issue:** `import "@/i18n/init";` triggers `eslint-plugin-import(no-unassigned-import)`. Pre-existed at the worktree base (`e3ca0641`) — not introduced by Task 3.
 - **Action:** logged in `.planning/phases/01-architectural-foundations-gating-bug-fixes/deferred-items.md` for a future polish or lint sweep.
@@ -293,6 +298,7 @@ All claimed artifacts exist and the four committed task hashes are present in gi
 - Three lints active (`lint:hover`, `lint:pointer-events`, `lint:colors`) plus `lint:schema` from Plan 01-01. Phase 5 promotion-to-error task has the Phase 5 markers in place (`PHASE 5: tighten` comments in all three new lint scripts).
 
 ---
-*Phase: 01-architectural-foundations-gating-bug-fixes*
-*Plan: 03*
-*Completed: 2026-05-01*
+
+_Phase: 01-architectural-foundations-gating-bug-fixes_
+_Plan: 03_
+_Completed: 2026-05-01_

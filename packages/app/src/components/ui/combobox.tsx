@@ -39,13 +39,14 @@ import {
 } from "./combobox-options";
 import type { ComboboxOptionModel } from "./combobox-options";
 import { isNative, isWeb } from "@/constants/platform";
-import { BlurView } from "expo-blur";
+import { GlassSurface } from "./glass-surface";
 import {
   IsolatedBottomSheetModal,
   useIsolatedBottomSheetVisibility,
 } from "./isolated-bottom-sheet-modal";
 
 const IS_WEB = isWeb;
+const AnimatedGlassSurface = Animated.createAnimatedComponent(GlassSurface);
 
 export type ComboboxOption = ComboboxOptionModel;
 
@@ -113,34 +114,7 @@ function toNumericStyleValue(value: unknown): number | null {
 }
 
 function ComboboxSheetBackground({ style }: BottomSheetBackgroundProps) {
-  const { theme } = useUnistyles();
-
-  const combinedStyle = useMemo(
-    () => [
-      style,
-      {
-        backgroundColor: theme.colors.surfaceGlassStrong,
-        borderTopLeftRadius: theme.borderRadius.glassSheet,
-        borderTopRightRadius: theme.borderRadius.glassSheet,
-        borderCurve: "continuous" as const,
-        overflow: "hidden" as const,
-      },
-    ],
-    [style, theme.colors.surfaceGlassStrong, theme.borderRadius],
-  );
-
-  if (isNative) {
-    return (
-      <BlurView
-        tint={theme.colorScheme === "dark" ? "systemThickMaterialDark" : "systemThickMaterialLight"}
-        intensity={70}
-        experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
-        style={combinedStyle}
-        pointerEvents="none"
-      />
-    );
-  }
-  return <Animated.View pointerEvents="none" style={combinedStyle} />;
+  return <GlassSurface radius="sheet" strong style={style} />;
 }
 
 export interface SearchInputProps {
@@ -1142,7 +1116,7 @@ function DesktopComboboxBody(props: DesktopBodyProps): ReactElement {
     >
       <View ref={props.refs.setOffsetParent} collapsable={false} style={styles.desktopOverlay}>
         <Pressable style={styles.desktopBackdrop} onPress={props.handleClose} />
-        <Animated.View
+        <AnimatedGlassSurface
           testID="combobox-desktop-container"
           entering={props.shouldUseDesktopFade ? FadeIn.duration(100) : undefined}
           exiting={props.shouldUseDesktopFade ? FadeOut.duration(100) : undefined}
@@ -1150,6 +1124,8 @@ function DesktopComboboxBody(props: DesktopBodyProps): ReactElement {
           ref={props.refs.setFloating}
           collapsable={false}
           onLayout={props.handleDesktopContentLayout}
+          radius="card"
+          strong
         >
           {props.hasChildren ? (
             <DesktopComboboxChildrenBody stickyHeader={props.stickyHeader}>
@@ -1177,7 +1153,7 @@ function DesktopComboboxBody(props: DesktopBodyProps): ReactElement {
               renderOption={props.renderOption}
             />
           )}
-        </Animated.View>
+        </AnimatedGlassSurface>
       </View>
     </Modal>
   );
@@ -1639,20 +1615,8 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
   },
   desktopContainer: {
-    backgroundColor: theme.colors.surfaceGlassStrong,
-    borderRadius: theme.borderRadius.glassCard,
-    borderCurve: "continuous" as const,
-    borderWidth: 1,
-    borderColor: theme.colors.borderGlass,
-    ...theme.shadow.glass,
     maxHeight: 400,
     overflow: "hidden",
-    ...(isWeb
-      ? ({
-          backdropFilter: "blur(28px) saturate(180%)",
-          WebkitBackdropFilter: "blur(28px) saturate(180%)",
-        } as unknown as object)
-      : {}),
   },
   desktopScroll: {
     flexShrink: 1,

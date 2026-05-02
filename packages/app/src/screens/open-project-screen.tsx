@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { View, Text, Pressable } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { OttieLogo } from "@/components/icons/ottie-logo";
+import { otterAssets } from "@/assets/otter";
 import { Button } from "@/components/ui/button";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { NewTaskModal } from "@/components/new-task-modal";
@@ -59,7 +59,7 @@ export function OpenProjectScreen({ serverId }: { serverId: string }) {
         <TitlebarDragRegion />
         <View style={styles.centerStack}>
           <View style={styles.logo}>
-            <OttieLogo size={56} />
+            <otterAssets.emptyState size={56} />
           </View>
           {hasHydrated && !hasProjects ? (
             <View style={styles.headingGroup}>

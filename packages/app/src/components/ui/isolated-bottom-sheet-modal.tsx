@@ -2,11 +2,13 @@ import {
   BottomSheetModal as GorhomBottomSheetModal,
   BottomSheetModalProvider,
   type BottomSheetModalProps,
+  type BottomSheetBackgroundProps,
 } from "@gorhom/bottom-sheet";
 import { Portal } from "@gorhom/portal";
 import React, { createContext, useContext } from "react";
 import { forwardRef, useCallback, useEffect, useRef } from "react";
 import type { ElementRef } from "react";
+import { GlassSurface } from "./glass-surface";
 
 type GorhomBottomSheetModalMethods = ElementRef<typeof GorhomBottomSheetModal>;
 
@@ -18,6 +20,10 @@ type IsolatedBottomSheetModalProps = Omit<
 export type IsolatedBottomSheetModalRef = GorhomBottomSheetModalMethods;
 
 const IsolatedBottomSheetScopeContext = createContext(false);
+
+function DefaultIsolatedSheetBackground({ style }: BottomSheetBackgroundProps) {
+  return <GlassSurface radius="sheet" strong style={style} />;
+}
 
 export const IsolatedBottomSheetModal = forwardRef<
   IsolatedBottomSheetModalRef,
@@ -39,6 +45,7 @@ export const IsolatedBottomSheetModal = forwardRef<
     );
   const modal = (
     <GorhomBottomSheetModal
+      backgroundComponent={DefaultIsolatedSheetBackground}
       {...bottomSheetProps}
       ref={ref}
       enableDismissOnClose={false}

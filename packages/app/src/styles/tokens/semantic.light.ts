@@ -87,11 +87,11 @@ export const semanticLight = {
 
   text: {
     primary: "#1a1a1e", // foreground (no exact primitive match — close to zinc[900] but not equal)
-    muted: palette.zinc[500], // foregroundMuted (#71717a)
+    muted: palette.zinc[600], // foregroundMuted (#52525b) — bumped from 500 for AA on elevated surface
     bubble: {
       self: palette.green[900], // bubbleSelfForeground (#14532d)
       other: "#1a1a1e", // bubbleOtherForeground (matches text.primary)
-      meta: palette.zinc[500], // bubbleMeta (#71717a)
+      meta: palette.zinc[500], // bubbleMeta stays at 500 (small meta text)
     },
   },
 
@@ -114,7 +114,7 @@ export const semanticLight = {
   status: {
     destructive: palette.red[600], // (#dc2626)
     destructiveForeground: palette.white,
-    success: "#1FA855", // = accent.base (legacy semantic alias kept for parity)
+    success: "#15803d", // (#15803d) — green-700 for AA contrast on background
     successForeground: palette.white,
 
     // Diff signals (light)
@@ -124,7 +124,7 @@ export const semanticLight = {
     // PR / check status signals
     statusSuccess: "#15803d", // green-700
     statusDanger: "#b91c1c", // red-700
-    statusWarning: "#d97706", // amber-600
+    statusWarning: palette.amber[700], // amber-700 for AA contrast on background
     statusMerged: palette.zinc[600], // (#52525b)
 
     // Daemon connection-dot triad (D-09 add-on for daemon-connection-dot.tsx migration)

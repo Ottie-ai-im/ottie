@@ -93,4 +93,25 @@ describe("useSmoothedText", () => {
     act(() => raf.flushFrame(16.7));
     expect(result.current.length).toBeLessThanOrEqual(3);
   });
+
+  describe("useSmoothedText D-19 / NAT-04 invariant", () => {
+    it("has exactly one production consumer (message.tsx)", () => {
+      const { execSync } = require("child_process");
+      const stdout = execSync(
+        "grep -rln 'useSmoothedText\\b' packages/app/src/ || true",
+      ).toString();
+
+      const isProductionConsumer = (line: string) => {
+        const path = line.trim();
+        if (!path) return false;
+        if (path.endsWith(".test.ts") || path.endsWith(".test.tsx")) return false;
+        if (path.endsWith("hooks/use-smoothed-text.ts")) return false;
+        return true;
+      };
+
+      const consumers = stdout.split("\n").filter(isProductionConsumer);
+
+      expect(consumers).toEqual(["packages/app/src/components/message.tsx"]);
+    });
+  });
 });

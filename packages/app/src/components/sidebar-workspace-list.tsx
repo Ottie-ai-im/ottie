@@ -115,7 +115,7 @@ import {
 import { WorkspaceHoverCard } from "@/components/workspace-hover-card";
 import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
 import { GitHubIcon } from "@/components/icons/github-icon";
-import { isWeb as platformIsWeb, isNative as platformIsNative } from "@/constants/platform";
+import { isWeb, isNative as platformIsNative } from "@/constants/platform";
 
 function toProjectIconDataUri(icon: { mimeType: string; data: string } | null): string | null {
   if (!icon) {
@@ -1064,7 +1064,7 @@ function useLongPressDragInteraction(input: {
       input.drag();
     }, DRAG_ARM_DELAY_MS);
 
-    if (!input.menuController || platformIsWeb) {
+    if (!input.menuController || isWeb) {
       return;
     }
 
@@ -1372,8 +1372,8 @@ function ProjectHeaderRow({
         {...dragAttributes}
         {...dragHandleProps?.listeners}
         ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
-        onPointerEnter={handlePointerEnter}
-        onPointerLeave={handlePointerLeave}
+        onPointerEnter={isWeb ? handlePointerEnter : undefined}
+        onPointerLeave={isWeb ? handlePointerLeave : undefined}
       >
         <ContextMenuTrigger
           enabledOnMobile={false}
@@ -1395,8 +1395,8 @@ function ProjectHeaderRow({
       {...dragAttributes}
       {...dragHandleProps?.listeners}
       ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={handlePointerLeave}
+      onPointerEnter={isWeb ? handlePointerEnter : undefined}
+      onPointerLeave={isWeb ? handlePointerLeave : undefined}
     >
       <Pressable
         style={projectRowStyle}
@@ -1494,8 +1494,8 @@ function WorkspaceRowInner({
         {...dragHandleProps?.listeners}
         ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
         style={styles.workspaceRowContainer}
-        onPointerEnter={handlePointerEnter}
-        onPointerLeave={handlePointerLeave}
+        onPointerEnter={isWeb ? handlePointerEnter : undefined}
+        onPointerLeave={isWeb ? handlePointerLeave : undefined}
       >
         <Pressable
           disabled={isArchiving}

@@ -21,7 +21,6 @@ import {
   Pressable,
   ScrollView,
   StatusBar,
-  StyleSheet as RNStyleSheet,
   Text,
   View,
   type GestureResponderEvent,
@@ -30,7 +29,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, createAnimatedComponent } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { Check, CheckCircle } from "lucide-react-native";
@@ -41,8 +40,10 @@ import {
   useIsolatedBottomSheetVisibility,
 } from "@/components/ui/isolated-bottom-sheet-modal";
 import { isWeb, isNative } from "@/constants/platform";
-import { BlurView } from "expo-blur";
+import { GlassSurface } from "./glass-surface";
 import { useWebScrollbarStyle } from "@/hooks/use-web-scrollbar-style";
+
+const AnimatedGlassSurface = createAnimatedComponent(GlassSurface);
 
 // Keep parity with dropdown-menu action statuses.
 export type ActionStatus = "idle" | "pending" | "success";
@@ -574,27 +575,16 @@ export function ContextMenuContent({
           onPress={handleClose}
           testID={testID ? `${testID}-backdrop` : undefined}
         />
-        <Animated.View
+        <AnimatedGlassSurface
           entering={FadeIn.duration(100)}
           exiting={FadeOut.duration(100)}
           collapsable={false}
           testID={testID}
           onLayout={handleContentLayout}
           style={animatedContentStyle}
+          radius="card"
+          strong
         >
-          {isNative ? (
-            <BlurView
-              tint={
-                theme.colorScheme === "dark"
-                  ? "systemChromeMaterialDark"
-                  : "systemChromeMaterialLight"
-              }
-              intensity={70}
-              experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
-              style={RNStyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-          ) : null}
           <ScrollView
             bounces={false}
             showsVerticalScrollIndicator
@@ -603,7 +593,7 @@ export function ContextMenuContent({
           >
             {children}
           </ScrollView>
-        </Animated.View>
+        </AnimatedGlassSurface>
       </View>
     </Modal>
   );
@@ -831,23 +821,9 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
   },
   content: {
-    backgroundColor: theme.colors.surfaceGlassStrong,
-    borderWidth: 1,
-    borderColor: theme.colors.borderGlass,
-    borderRadius: theme.borderRadius.glassCard,
-    borderCurve: "continuous",
-    ...theme.shadow.glass,
     overflow: "hidden",
-    ...(isWeb ? ({ backdropFilter: "blur(32px) saturate(180%)" } as unknown as object) : {}),
   },
-  sheetBackground: {
-    backgroundColor: theme.colors.surfaceGlassStrong,
-    borderTopLeftRadius: theme.borderRadius.glassSheet,
-    borderTopRightRadius: theme.borderRadius.glassSheet,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderColor: theme.colors.borderGlass,
-  },
+  sheetBackground: {},
   sheetHandle: {
     backgroundColor: theme.colors.surface2,
   },

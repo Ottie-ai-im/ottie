@@ -185,17 +185,6 @@ interface Baseline {
   plan?: string;
 }
 
-function readBaseline(absPath: string): Baseline | null {
-  try {
-    const raw = readFileSync(absPath, "utf8");
-    const parsed = JSON.parse(raw) as Baseline;
-    if (typeof parsed.count !== "number") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
 function writeBaseline(absPath: string, count: number): void {
   const payload: Baseline = {
     count,
@@ -221,46 +210,32 @@ function main(): void {
   const baselinePath = resolve(BASELINE_PATH);
 
   const { violations, count } = lintPointerEventsWebOnly(scanRoot);
-  for (const v of violations) {
+
+  if (count > 0) {
+    for (const v of violations) {
+      process.stderr.write(
+        `ERROR ${v.file}:${v.line}  ${v.prop} used outside .web.* without isWeb gate (CLAUDE.md "NEVER use onPointerEnter/onPointerLeave")\n`,
+      );
+    }
     process.stderr.write(
-      `WARN  ${v.file}:${v.line}  ${v.prop} used outside .web.* without isWeb gate (CLAUDE.md "NEVER use onPointerEnter/onPointerLeave")\n`,
+      `\nFAIL  pointer-events-web-only: ${count} violation(s). NAT-03 promoted from warn to error in Phase 2.\nFix: gate handler with \`isWeb ? handler : undefined\` or move into a .web.tsx file.\n`,
     );
+
+    if (writeBaselineFlag) {
+      writeBaseline(baselinePath, count);
+      process.stderr.write(`\n✓ Baseline updated to ${BASELINE_PATH}: count=${count}\n`);
+    }
+
+    process.exit(1);
+    return;
   }
 
   if (writeBaselineFlag) {
-    writeBaseline(baselinePath, count);
-    process.stderr.write(`\n✓ Baseline written to ${BASELINE_PATH}: count=${count}\n`);
-    process.exit(0);
+    writeBaseline(baselinePath, 0);
+    process.stderr.write(`\n✓ Baseline written to ${BASELINE_PATH}: count=0\n`);
   }
 
-  const baseline = readBaseline(baselinePath);
-  if (!baseline) {
-    process.stderr.write(
-      `\nERROR  No baseline at ${BASELINE_PATH}. Run with --write-baseline to capture one.\n`,
-    );
-    process.exit(1);
-    return;
-  }
-
-  if (count > baseline.count) {
-    process.stderr.write(
-      `\nFAIL  pointer-events regressions: ${count} > baseline ${baseline.count}.\nFix the violations above (gate with \`isWeb ? handler : undefined\` or move into a .web.tsx file) or — if intentional — re-run with --write-baseline after sweeping a known-good surface.\n`,
-    );
-    // PHASE 5: tighten — exit 1 on ANY violation per ROADMAP P5
-    // success criterion #2 (NAT-03 promotion to error).
-    process.exit(1);
-    return;
-  }
-
-  if (count < baseline.count) {
-    process.stderr.write(
-      `\n✓ pointer-events count went DOWN: ${count} < baseline ${baseline.count}. Re-run \`npm run lint:pointer-events:baseline\` to lock in the win.\n`,
-    );
-  } else {
-    process.stderr.write(
-      `\n✓ pointer-events count holds: ${count} == baseline ${baseline.count}.\n`,
-    );
-  }
+  process.stderr.write(`✓ pointer-events-web-only clean: 0 violations.\n`);
   process.exit(0);
 }
 

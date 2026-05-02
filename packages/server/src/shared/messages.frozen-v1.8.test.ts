@@ -93,7 +93,7 @@ describe("v1.8 wire compatibility", () => {
     expect(parsed.type).toBe("create_agent_request");
     expect(parsed.config.provider).toBe("claude");
     // Behavioral compat: a v1.8 client derives this and expects a string-or-empty.
-    expect((parsed.initialPrompt ?? "")).toBe("");
+    expect(parsed.initialPrompt ?? "").toBe("");
   });
 
   it("v1.8 client -> daemon send_agent_message_request parses with current schema", () => {

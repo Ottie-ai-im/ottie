@@ -24,10 +24,11 @@ import { Button } from "@/components/ui/button";
 import { ChatRow } from "@/components/chat-row";
 import { TopRightAddMenu } from "@/components/top-right-add-menu";
 import { MathCurveLoader } from "@/components/math-curve-loader";
-import { OttieLogo } from "@/components/icons/ottie-logo";
+import { otterAssets } from "@/assets/otter";
 import { useAgentHistory } from "@/hooks/use-agent-history";
 import { useOnboardingStateStore } from "@/stores/onboarding-state-store";
 import { makeRowKey, useChatRowStateStore } from "@/stores/chat-row-state-store";
+import { fireDelightToast } from "@/utils/delight-toast";
 import type { AggregatedAgent } from "@/hooks/use-aggregated-agents";
 
 export function SessionsScreen({ serverId }: { serverId: string }) {
@@ -95,6 +96,12 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
     }
   }, [isInitialLoad, sortedAgents.length, isFirstTime, setEmptyOttiePlayed]);
 
+  useEffect(() => {
+    if (!isInitialLoad && sortedAgents.length > 0) {
+      fireDelightToast("first-agent");
+    }
+  }, [isInitialLoad, sortedAgents.length]);
+
   const listFooterComponent = useMemo(
     () =>
       hasMore ? (
@@ -150,7 +157,7 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
         <View style={styles.emptyContainer}>
           {isFirstTime ? (
             <>
-              <OttieLogo size={120} />
+              <otterAssets.emptyState size={120} />
               <Text style={styles.emptyHeadingDisplay}>{t("chat.empty.firstTime.heading")}</Text>
               <Text style={styles.emptyBody}>{t("chat.empty.firstTime.body")}</Text>
             </>

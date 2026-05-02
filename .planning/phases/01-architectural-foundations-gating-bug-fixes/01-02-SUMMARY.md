@@ -108,17 +108,18 @@ No `index.ts` barrel — consumers import the specific tree path (per CONVENTION
 
 ### Migrated consumers
 
-| File                                 | Before                                                                                                          | After                                                                                                                          |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `glass-surface.tsx`                  | `theme.colors.surfaceGlass{,Strong}`, `theme.colors.borderGlass`, `theme.borderRadius.{glassCard,glassPill,…}` | `theme.surface.glass.{tint,tintStrong,border}`, `theme.components.<name>.radius`                                              |
-| `daemon-connection-dot.tsx`          | `theme.colors.palette.{green[400],amber[500],red[500]}`, `theme.colors.foregroundMuted`                         | `theme.status.{online,connecting,offline}`, `theme.text.muted`; styles read `theme.typography.{fontFamily,fontSize}` directly |
-| `math-curve-loader/curves.ts`        | per-preset hardcoded `durationMs/rotationDurationMs/pulseDurationMs`                                            | `...motion.mathCurves.<curveName>` spread; parametric `point` functions stay verbatim. File: 263 → 255 lines                  |
+| File                          | Before                                                                                                         | After                                                                                                                         |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `glass-surface.tsx`           | `theme.colors.surfaceGlass{,Strong}`, `theme.colors.borderGlass`, `theme.borderRadius.{glassCard,glassPill,…}` | `theme.surface.glass.{tint,tintStrong,border}`, `theme.components.<name>.radius`                                              |
+| `daemon-connection-dot.tsx`   | `theme.colors.palette.{green[400],amber[500],red[500]}`, `theme.colors.foregroundMuted`                        | `theme.status.{online,connecting,offline}`, `theme.text.muted`; styles read `theme.typography.{fontFamily,fontSize}` directly |
+| `math-curve-loader/curves.ts` | per-preset hardcoded `durationMs/rotationDurationMs/pulseDurationMs`                                           | `...motion.mathCurves.<curveName>` spread; parametric `point` functions stay verbatim. File: 263 → 255 lines                  |
 
 Zero `theme.colors.palette.*` reach-through remains in any of the three migrated files (grep-verified).
 
 ### Visual-parity guard test
 
 `packages/app/src/components/daemon-connection-dot.test.tsx` — five vitest assertions:
+
 - `semanticLight.status.{online,connecting,offline}` resolve to `palette.{green[400],amber[500],red[500]}`
 - `semanticDark.status.*` mirrors the same triad (light/dark parity)
 - `semanticLight.text.muted` === `palette.zinc[500]`
@@ -137,29 +138,29 @@ Mitigates threat **T-02-01** (silent value drift in semantic.{light,dark}.ts bre
 
 The full per-key map is documented in **`packages/app/src/styles/tokens/semantic.light.ts:13-58`** (head comment block). Phase 4 surface migrations consult that map directly. Highlights:
 
-| Legacy `theme.colors.*` flat key | New nested path                       |
-| -------------------------------- | ------------------------------------- |
-| `surfaceGlass`                   | `theme.surface.glass.tint`            |
-| `surfaceGlassStrong`             | `theme.surface.glass.tintStrong`     |
-| `surfaceGlassHover`              | `theme.surface.glass.tintHover`     |
-| `borderGlass`                    | `theme.surface.glass.border`          |
-| `surfaceSidebar`                 | `theme.surface.sidebar`               |
-| `surfaceSidebarHover`            | `theme.surface.sidebarHover`          |
-| `surfaceChat`                    | `theme.surface.chat`                  |
-| `bubbleSelf` / `bubbleOther`     | `theme.surface.bubble.{self,other}` |
-| `bubbleSelfForeground` etc.      | `theme.text.bubble.{self,other,meta}` |
-| `foreground`                     | `theme.text.primary`                  |
-| `foregroundMuted`                | `theme.text.muted`                    |
-| `border`                         | `theme.border.default`                |
-| `borderAccent`                   | `theme.border.accent`                 |
-| `accent` / `accentBright`        | `theme.accent.{base,bright}`          |
-| `accentForeground`               | `theme.accent.foreground`             |
-| `destructive` / `success`        | `theme.status.{destructive,success}`  |
-| `diffAddition` / `diffDeletion`  | `theme.status.diff{Addition,Deletion}`|
-| `statusSuccess`/`Danger`/etc.    | `theme.status.status{Success,Danger,…}` |
+| Legacy `theme.colors.*` flat key  | New nested path                                      |
+| --------------------------------- | ---------------------------------------------------- |
+| `surfaceGlass`                    | `theme.surface.glass.tint`                           |
+| `surfaceGlassStrong`              | `theme.surface.glass.tintStrong`                     |
+| `surfaceGlassHover`               | `theme.surface.glass.tintHover`                      |
+| `borderGlass`                     | `theme.surface.glass.border`                         |
+| `surfaceSidebar`                  | `theme.surface.sidebar`                              |
+| `surfaceSidebarHover`             | `theme.surface.sidebarHover`                         |
+| `surfaceChat`                     | `theme.surface.chat`                                 |
+| `bubbleSelf` / `bubbleOther`      | `theme.surface.bubble.{self,other}`                  |
+| `bubbleSelfForeground` etc.       | `theme.text.bubble.{self,other,meta}`                |
+| `foreground`                      | `theme.text.primary`                                 |
+| `foregroundMuted`                 | `theme.text.muted`                                   |
+| `border`                          | `theme.border.default`                               |
+| `borderAccent`                    | `theme.border.accent`                                |
+| `accent` / `accentBright`         | `theme.accent.{base,bright}`                         |
+| `accentForeground`                | `theme.accent.foreground`                            |
+| `destructive` / `success`         | `theme.status.{destructive,success}`                 |
+| `diffAddition` / `diffDeletion`   | `theme.status.diff{Addition,Deletion}`               |
+| `statusSuccess`/`Danger`/etc.     | `theme.status.status{Success,Danger,…}`              |
 | `palette.green[400]` (online dot) | `theme.status.online` (NEW alias added in this plan) |
-| `palette.amber[500]` (connecting) | `theme.status.connecting` (NEW)      |
-| `palette.red[500]` (offline)      | `theme.status.offline` (NEW)         |
+| `palette.amber[500]` (connecting) | `theme.status.connecting` (NEW)                      |
+| `palette.red[500]` (offline)      | `theme.status.offline` (NEW)                         |
 
 **Component radii:** `theme.borderRadius.{glassCard,glassSheet,glassPill,button}` → `theme.components.{glassCard,glassSheet,glassPill,button}.radius`. The legacy `theme.borderRadius.*` flat shape is preserved on `commonTheme` for unmigrated consumers.
 
@@ -167,23 +168,23 @@ The full per-key map is documented in **`packages/app/src/styles/tokens/semantic
 
 Top `theme.colors.*` consumers across `packages/app/src/` (excluding `styles/`):
 
-| Key                       | Reach-through count | Phase 4 plan      |
-| ------------------------- | ------------------- | ----------------- |
-| `theme.colors.foregroundMuted`     | 474 | THM-02 (text.muted) |
-| `theme.colors.surface[0-4]`        | 244 | THM-02/03 (surface.*) |
-| `theme.colors.foreground`          | 240 | THM-02 (text.primary) |
-| `theme.colors.border`              | 100 | THM-03 (border.default) |
-| `theme.colors.borderGlass`         |  46 | THM-03 (surface.glass.border) |
-| `theme.colors.destructive`         |  44 | THM-03 (status.destructive) |
-| `theme.colors.accent`              |  37 | THM-03 (accent.base) |
-| `theme.colors.borderAccent`        |  26 | THM-03 (border.accent) |
-| `theme.colors.surfaceGlassStrong`  |  25 | THM-03 (surface.glass.tintStrong) |
-| `theme.colors.palette.red`         |  25 | THM-04 (case-by-case → status.* or accent.*) |
-| `theme.colors.palette.white`       |  23 | THM-04 (semantic.{light,dark}.foreground/background) |
-| `theme.colors.palette.amber`       |  22 | THM-04 (status.warning / connecting) |
-| `theme.colors.surfaceGlass`        |  20 | THM-03 (surface.glass.tint) |
-| `theme.colors.palette.green`       |  18 | THM-04 (status.success / online) |
-| `theme.colors.surfaceGlassHover`   |  14 | THM-03 (surface.glass.tintHover) |
+| Key                               | Reach-through count | Phase 4 plan                                         |
+| --------------------------------- | ------------------- | ---------------------------------------------------- |
+| `theme.colors.foregroundMuted`    | 474                 | THM-02 (text.muted)                                  |
+| `theme.colors.surface[0-4]`       | 244                 | THM-02/03 (surface.\*)                               |
+| `theme.colors.foreground`         | 240                 | THM-02 (text.primary)                                |
+| `theme.colors.border`             | 100                 | THM-03 (border.default)                              |
+| `theme.colors.borderGlass`        | 46                  | THM-03 (surface.glass.border)                        |
+| `theme.colors.destructive`        | 44                  | THM-03 (status.destructive)                          |
+| `theme.colors.accent`             | 37                  | THM-03 (accent.base)                                 |
+| `theme.colors.borderAccent`       | 26                  | THM-03 (border.accent)                               |
+| `theme.colors.surfaceGlassStrong` | 25                  | THM-03 (surface.glass.tintStrong)                    |
+| `theme.colors.palette.red`        | 25                  | THM-04 (case-by-case → status._ or accent._)         |
+| `theme.colors.palette.white`      | 23                  | THM-04 (semantic.{light,dark}.foreground/background) |
+| `theme.colors.palette.amber`      | 22                  | THM-04 (status.warning / connecting)                 |
+| `theme.colors.surfaceGlass`       | 20                  | THM-03 (surface.glass.tint)                          |
+| `theme.colors.palette.green`      | 18                  | THM-04 (status.success / online)                     |
+| `theme.colors.surfaceGlassHover`  | 14                  | THM-03 (surface.glass.tintHover)                     |
 
 Phase 4 plans should chain THM-02 (text/foregrounds — biggest reach-through count) before THM-03 (surface/border) before THM-04 (palette mop-up).
 
@@ -220,18 +221,18 @@ None — no auth surfaces touched in this plan.
 
 ## Verification Results
 
-| Check                                                        | Result                                       |
-| ------------------------------------------------------------ | -------------------------------------------- |
-| `npm run typecheck`                                          | exit 0 (all 7 packages clean)                |
-| `npm run lint -- packages/app/src/styles/`                   | exit 0                                       |
-| `npm run lint -- <four migrated files>`                      | exit 0                                       |
-| `npm run lint -- tools/lint/hardcoded-color.{ts,test.ts}`    | exit 0                                       |
-| `npm run lint:colors`                                        | exit 0 (count == baseline 591)               |
-| `pnpm exec vitest run daemon-connection-dot.test.tsx --bail=1` | exit 0 (5/5 tests pass)                    |
-| `tsx --test tools/lint/hardcoded-color.test.ts`              | exit 0 (13/13 tests pass)                    |
-| `grep -rE 'theme\.colors\.palette' <four migrated files>`    | zero results                                 |
-| `wc -l packages/app/src/styles/theme.ts`                     | 580 (< 716 — file shrank as planned)         |
-| `grep -c 'LEGACY shim' packages/app/src/styles/theme.ts`     | 6 (LEGACY block + dark-shim comment markers) |
+| Check                                                          | Result                                       |
+| -------------------------------------------------------------- | -------------------------------------------- |
+| `npm run typecheck`                                            | exit 0 (all 7 packages clean)                |
+| `npm run lint -- packages/app/src/styles/`                     | exit 0                                       |
+| `npm run lint -- <four migrated files>`                        | exit 0                                       |
+| `npm run lint -- tools/lint/hardcoded-color.{ts,test.ts}`      | exit 0                                       |
+| `npm run lint:colors`                                          | exit 0 (count == baseline 591)               |
+| `pnpm exec vitest run daemon-connection-dot.test.tsx --bail=1` | exit 0 (5/5 tests pass)                      |
+| `tsx --test tools/lint/hardcoded-color.test.ts`                | exit 0 (13/13 tests pass)                    |
+| `grep -rE 'theme\.colors\.palette' <four migrated files>`      | zero results                                 |
+| `wc -l packages/app/src/styles/theme.ts`                       | 580 (< 716 — file shrank as planned)         |
+| `grep -c 'LEGACY shim' packages/app/src/styles/theme.ts`       | 6 (LEGACY block + dark-shim comment markers) |
 
 **Pre-existing repo lint errors (21 total):** confined to `message-input.tsx`, `workspace-screen.tsx`, `i18n/index.ts`, `_layout.tsx`, `landing-page.tsx`, `session.ts`, `button.tsx`, `init.ts`. None in files modified by this plan. These trace back to `c08acb3f chore(phase-01): snapshot in-flight WIP as execution base` and are out of scope per the executor scope-boundary rule.
 
@@ -250,6 +251,7 @@ None — this plan adds zero new attack surface. Token files are constants-only;
 ## Self-Check: PASSED
 
 Created files exist:
+
 - `packages/app/src/styles/tokens/primitives.ts` — FOUND
 - `packages/app/src/styles/tokens/semantic.light.ts` — FOUND
 - `packages/app/src/styles/tokens/semantic.dark.ts` — FOUND
@@ -262,6 +264,7 @@ Created files exist:
 - `tools/lint/hardcoded-color.baseline.json` — FOUND
 
 Commits exist:
+
 - `41230fe2` (Task 1: token tree skeleton + theme.ts composition root) — FOUND
 - `07d808b2` (Task 2: migrate four in-flight files to semantic tokens) — FOUND
 - `14816804` (Task 3: hardcoded-color lint + baseline + npm wiring) — FOUND

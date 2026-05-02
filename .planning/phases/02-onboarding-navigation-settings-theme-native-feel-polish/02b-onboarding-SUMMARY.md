@@ -26,7 +26,7 @@ requires:
 provides:
   - "Persisted OnboardingStateStore (`@ottie:onboarding-state`) — welcomeShown + welcomeShownAt + 3 delight flags + 2 first-time-empty flags. Single source of truth for D-17 + D-21 + D-14 cold-open behaviour"
   - "Welcome route + screen extension: 'Get started' (existing primary CTA) + 'Skip for power users' (new secondary) + 'Don't show again' inline checkbox; routes that consult welcomeShown and redirect to host sessions on subsequent cold opens"
-  - "Pair-scan inline recovery — <PairScanRecoveryCallout> wrapping <CalloutCard variant=\"error\"> inside <GlassSurface radius=\"card\"> with three actions (Regenerate / Manual entry / Use local) and Tauri-only gating on the third"
+  - 'Pair-scan inline recovery — <PairScanRecoveryCallout> wrapping <CalloutCard variant="error"> inside <GlassSurface radius="card"> with three actions (Regenerate / Manual entry / Use local) and Tauri-only gating on the third'
   - "PairLinkModal optional `initialValue` + `onChangeOfferUrl` props — backward-compatible additive change so the recovery flow can preserve typed manual-entry input across error → recovery → retry cycles (D-21)"
   - "i18n parity for welcome.{getStarted,skipForPowerUsers,dontShowAgain} and errors.pairScanFailed.{heading,body,regenerate,manualEntry,useLocal,useLocalDesktopOnly} in en.json + zh.json"
 affects:
@@ -140,40 +140,40 @@ Storage key: `@ottie:onboarding-state` (matches the existing `@ottie:` AsyncStor
 
 ## welcomeShown Read Sites
 
-| Site                                 | Behaviour                                                                                                                                          |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/app/src/app/welcome.tsx`   | Reads `welcomeShown` via `useOnboardingStateStore`. If `true` and an online host exists → `<Redirect href={buildHostSessionsRoute(serverId)} />`. If `true` and no online host → `<Redirect href="/" />` so the index route re-evaluates. If `false`, renders `<WelcomeScreen />` |
-| `packages/app/src/components/welcome-screen.tsx` | Reads only the `setWelcomeShown` setter — not the value. The screen doesn't conditionally render based on the flag (the route already does that); it only writes when the user proceeds with `dontShowAgain` ticked or taps the Skip CTA |
+| Site                                             | Behaviour                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/app/src/app/welcome.tsx`               | Reads `welcomeShown` via `useOnboardingStateStore`. If `true` and an online host exists → `<Redirect href={buildHostSessionsRoute(serverId)} />`. If `true` and no online host → `<Redirect href="/" />` so the index route re-evaluates. If `false`, renders `<WelcomeScreen />` |
+| `packages/app/src/components/welcome-screen.tsx` | Reads only the `setWelcomeShown` setter — not the value. The screen doesn't conditionally render based on the flag (the route already does that); it only writes when the user proceeds with `dontShowAgain` ticked or taps the Skip CTA                                          |
 
 Future plans (02c/02d/02e) may add additional read sites for the delight flags / empty-Otter flags.
 
 ## Tauri Gating Behaviour ("Use local daemon")
 
-| Surface                                | When `getIsElectron()` is true (Tauri)                                                                          | When `getIsElectron()` is false (iOS / Android / browser)                                                                                                       |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<PairScanRecoveryCallout>` action 3   | Label: `t("errors.pairScanFailed.useLocal")` ("Use local daemon" / "切换本机 daemon"); enabled                  | Label: `${t("errors.pairScanFailed.useLocal")} — ${t("errors.pairScanFailed.useLocalDesktopOnly")}` ("Use local daemon — Available on desktop only" / "切换本机 daemon — 仅桌面端可用"); rendered disabled (opacity 0.5, no press) |
-| `pair-scan.tsx` `handleUseLocal`       | Checks `shouldUseDesktopDaemon()` — when true, picks the first host with a directSocket/directPipe connection (or any host as fallback) and `router.replace(buildHostRootRoute(serverId))`. Falls back to `router.replace("/")` when no hosts exist | Early-returns — the disabled callout button can't fire it, but the guard is the second layer of defense (T-02b-02 mitigation)                                  |
+| Surface                              | When `getIsElectron()` is true (Tauri)                                                                                                                                                                                                              | When `getIsElectron()` is false (iOS / Android / browser)                                                                                                                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<PairScanRecoveryCallout>` action 3 | Label: `t("errors.pairScanFailed.useLocal")` ("Use local daemon" / "切换本机 daemon"); enabled                                                                                                                                                      | Label: `${t("errors.pairScanFailed.useLocal")} — ${t("errors.pairScanFailed.useLocalDesktopOnly")}` ("Use local daemon — Available on desktop only" / "切换本机 daemon — 仅桌面端可用"); rendered disabled (opacity 0.5, no press) |
+| `pair-scan.tsx` `handleUseLocal`     | Checks `shouldUseDesktopDaemon()` — when true, picks the first host with a directSocket/directPipe connection (or any host as fallback) and `router.replace(buildHostRootRoute(serverId))`. Falls back to `router.replace("/")` when no hosts exist | Early-returns — the disabled callout button can't fire it, but the guard is the second layer of defense (T-02b-02 mitigation)                                                                                                      |
 
 ## i18n Keys Added (en + zh, parity)
 
 ### `welcome.*`
 
-| Key                          | EN                       | ZH                |
-| ---------------------------- | ------------------------ | ----------------- |
-| `welcome.getStarted`         | "Get started"            | "开始使用"        |
-| `welcome.skipForPowerUsers`  | "Skip for power users"   | "跳过（高阶用户）"|
-| `welcome.dontShowAgain`      | "Don't show this again"  | "不再显示"        |
+| Key                         | EN                      | ZH                 |
+| --------------------------- | ----------------------- | ------------------ |
+| `welcome.getStarted`        | "Get started"           | "开始使用"         |
+| `welcome.skipForPowerUsers` | "Skip for power users"  | "跳过（高阶用户）" |
+| `welcome.dontShowAgain`     | "Don't show this again" | "不再显示"         |
 
 ### `errors.pairScanFailed.*` (nested under existing `errors`)
 
-| Key                                          | EN                                                                                                                                         | ZH                                                                                      |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `errors.pairScanFailed.heading`              | "Couldn't pair"                                                                                                                            | "配对失败"                                                                              |
-| `errors.pairScanFailed.body`                 | "The pairing code didn't match. Try regenerating the code, entering it manually, or switching to a local daemon. Your input is preserved." | "配对码不匹配。可以重新生成、手动输入，或切换到本机 daemon。输入内容已保留。"           |
-| `errors.pairScanFailed.regenerate`           | "Regenerate code"                                                                                                                          | "重新生成"                                                                              |
-| `errors.pairScanFailed.manualEntry`          | "Enter key manually"                                                                                                                       | "手动输入"                                                                              |
-| `errors.pairScanFailed.useLocal`             | "Use local daemon"                                                                                                                         | "切换本机 daemon"                                                                       |
-| `errors.pairScanFailed.useLocalDesktopOnly`  | "Available on desktop only"                                                                                                                | "仅桌面端可用"                                                                          |
+| Key                                         | EN                                                                                                                                         | ZH                                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `errors.pairScanFailed.heading`             | "Couldn't pair"                                                                                                                            | "配对失败"                                                                    |
+| `errors.pairScanFailed.body`                | "The pairing code didn't match. Try regenerating the code, entering it manually, or switching to a local daemon. Your input is preserved." | "配对码不匹配。可以重新生成、手动输入，或切换到本机 daemon。输入内容已保留。" |
+| `errors.pairScanFailed.regenerate`          | "Regenerate code"                                                                                                                          | "重新生成"                                                                    |
+| `errors.pairScanFailed.manualEntry`         | "Enter key manually"                                                                                                                       | "手动输入"                                                                    |
+| `errors.pairScanFailed.useLocal`            | "Use local daemon"                                                                                                                         | "切换本机 daemon"                                                             |
+| `errors.pairScanFailed.useLocalDesktopOnly` | "Available on desktop only"                                                                                                                | "仅桌面端可用"                                                                |
 
 All values match UI-SPEC §Copywriting Contract verbatim.
 
@@ -247,11 +247,11 @@ All values match UI-SPEC §Copywriting Contract verbatim.
 
 ## Known Stubs
 
-| File                                           | Line | Stub                                                                                  | Reason                                                                                                                                                                                                                  |
-| ---------------------------------------------- | ---- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/app/src/i18n/locales/en.json`        | ~32  | `welcome.getStarted` ("Get started" / "开始使用") has no rendering site               | Reserved for a future plan (likely 02e polish sweep) that may unify the platform-specific primary CTA labels into a single "Get started" once local-daemon auto-detection lands. Adding the key now keeps locales in lockstep |
-| `packages/app/src/components/welcome-screen.tsx` | ~340 | The "Get started" tap doesn't fire `useHaptic` (medium beat per UI-SPEC D-18)         | useHaptic was shipped by Plan 02a but the welcome-screen wiring is intentionally deferred to Plan 02e (the polish sweep that owns "wire useHaptic into every meaningful state transition"). NAT-02 stays open until then  |
-| `packages/app/src/app/pair-scan.tsx`           | ~245 | "Regenerate code" only resets the scanner state on the mobile side                    | The actual code-generation path lives on the desktop daemon — there is no mobile-side regenerate API to call. The user regenerates on their desktop and re-scans; we just unblock the scanner. Documented inline         |
+| File                                             | Line | Stub                                                                          | Reason                                                                                                                                                                                                                        |
+| ------------------------------------------------ | ---- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/app/src/i18n/locales/en.json`          | ~32  | `welcome.getStarted` ("Get started" / "开始使用") has no rendering site       | Reserved for a future plan (likely 02e polish sweep) that may unify the platform-specific primary CTA labels into a single "Get started" once local-daemon auto-detection lands. Adding the key now keeps locales in lockstep |
+| `packages/app/src/components/welcome-screen.tsx` | ~340 | The "Get started" tap doesn't fire `useHaptic` (medium beat per UI-SPEC D-18) | useHaptic was shipped by Plan 02a but the welcome-screen wiring is intentionally deferred to Plan 02e (the polish sweep that owns "wire useHaptic into every meaningful state transition"). NAT-02 stays open until then      |
+| `packages/app/src/app/pair-scan.tsx`             | ~245 | "Regenerate code" only resets the scanner state on the mobile side            | The actual code-generation path lives on the desktop daemon — there is no mobile-side regenerate API to call. The user regenerates on their desktop and re-scans; we just unblock the scanner. Documented inline              |
 
 None of these stubs block the plan's success criteria (ONB-01..04). Each is paired with the future plan that will resolve it.
 

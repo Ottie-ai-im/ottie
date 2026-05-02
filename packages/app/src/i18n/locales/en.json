@@ -466,5 +466,57 @@
     "confirmRemoveProjectMessage": "Remove \"{{name}}\" from the sidebar?\n\nFiles on disk will not be changed.",
     "confirmRemoveProjectButton": "Remove",
     "failedRemoveSome": "Failed to remove some workspaces"
+  },
+  "toasts": {
+    "mark-read": {
+      "title": "Marked as read",
+      "message": ""
+    },
+    "mute": {
+      "title": "Muted",
+      "message": "Notifications disabled"
+    },
+    "unmute": {
+      "title": "Unmuted",
+      "message": "Notifications enabled"
+    },
+    "delete": {
+      "title": "Deleted",
+      "message": ""
+    },
+    "send-ack": {
+      "title": "Sent",
+      "message": ""
+    },
+    "agent-run-start": {
+      "title": "Agent started",
+      "message": ""
+    },
+    "agent-run-stop": {
+      "title": "Agent stopped",
+      "message": ""
+    },
+    "permission-approve": {
+      "title": "Allowed",
+      "message": ""
+    },
+    "permission-deny": {
+      "title": "Denied",
+      "message": ""
+    },
+    "delight": {
+      "first-agent": {
+        "title": "Agent ready",
+        "message": "Claude is now helping you in this workspace."
+      },
+      "first-permission": {
+        "title": "Power unlocked",
+        "message": "Agents can now run commands on your behalf."
+      },
+      "first-voice": {
+        "title": "Listening",
+        "message": "You can now control Ottie with your voice."
+      }
+    }
   }
 }

@@ -71,12 +71,12 @@ Carved `packages/server/src/server/session.ts` (9592 lines) along the C-1/C-2/C-
 
 ## D-02 wc -l Shrinkage — How
 
-| Commit  | session.ts | Delta from prev | Delta from 9592 |
-| ------- | ---------- | --------------- | --------------- |
-| Baseline | 9592       | —               | 0               |
+| Commit   | session.ts | Delta from prev | Delta from 9592                                                                  |
+| -------- | ---------- | --------------- | -------------------------------------------------------------------------------- |
+| Baseline | 9592       | —               | 0                                                                                |
 | Task 1   | 9592       | 0               | 0 (no shrinkage in Task 1; parse boundary lifts work out of websocket-server.ts) |
-| Task 2   | 9589       | -3              | -3              |
-| Task 3   | 9585       | -4              | -7              |
+| Task 2   | 9589       | -3              | -3                                                                               |
+| Task 3   | 9585       | -4              | -7                                                                               |
 
 **Strategy used** (matches plan deterministic-strategy guidance — adapted because the actual codebase shape diverged slightly from the plan's predictions):
 
@@ -89,8 +89,8 @@ Carved `packages/server/src/server/session.ts` (9592 lines) along the C-1/C-2/C-
 
 All 4 combinations green (parse + router + inflight-counter + permission-handler files, 20 tests each, 80 assertions total per combo):
 
-| OTTIE_USE_NEW_ROUTER | OTTIE_USE_PERMISSION_HANDLER | Result |
-| -------------------- | ---------------------------- | ------ |
+| OTTIE_USE_NEW_ROUTER | OTTIE_USE_PERMISSION_HANDLER | Result                          |
+| -------------------- | ---------------------------- | ------------------------------- |
 | 0                    | 0                            | 4 / 4 files, 20 / 20 tests pass |
 | 0                    | 1                            | 4 / 4 files, 20 / 20 tests pass |
 | 1                    | 0                            | 4 / 4 files, 20 / 20 tests pass |

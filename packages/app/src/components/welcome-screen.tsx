@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { resolveAppVersion } from "@/utils/app-version";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
 import { buildHostRootRoute, buildHostSessionsRoute } from "@/utils/host-routes";
-import { OttieLogo } from "@/components/icons/ottie-logo";
+import { otterAssets } from "@/assets/otter";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { isWeb, isNative } from "@/constants/platform";
 import { useOnboardingStateStore } from "@/stores/onboarding-state-store";
@@ -361,7 +361,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
         testID="welcome-screen"
       >
         <View style={styles.content}>
-          <OttieLogo size={96} />
+          <otterAssets.welcome size={96} />
           <View style={styles.copyBlock}>
             {isConnectingToSavedHosts ? (
               <Text style={styles.subtitle}>{t("common.loading")}</Text>

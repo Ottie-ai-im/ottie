@@ -36,12 +36,12 @@ cannot start safely (per D-02 + ROADMAP P1 success criterion #2).
 
 ## Test counts
 
-| File                                | `it(...)` blocks        |
-| ----------------------------------- | ----------------------- |
-| `messages.frozen-v1.8.test.ts`      | 4                       |
-| `messages.frozen-v1.9.test.ts`      | 4                       |
-| `messages.frozen-v1.10.test.ts`     | 4                       |
-| `messages.reserved-fields.test.ts`  | 1                       |
+| File                                       | `it(...)` blocks     |
+| ------------------------------------------ | -------------------- |
+| `messages.frozen-v1.8.test.ts`             | 4                    |
+| `messages.frozen-v1.9.test.ts`             | 4                    |
+| `messages.frozen-v1.10.test.ts`            | 4                    |
+| `messages.reserved-fields.test.ts`         | 1                    |
 | `tools/lint/deprecated-annotation.test.ts` | 8 (node:test format) |
 
 All test counts ≥ acceptance criteria (≥4 per frozen-vX.Y file).

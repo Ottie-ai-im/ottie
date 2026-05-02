@@ -15,7 +15,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet as RNStyleSheet,
   Text,
   View,
   Dimensions,
@@ -26,13 +25,14 @@ import {
   type ViewStyle,
   type StyleProp,
 } from "react-native";
-import Animated, { Keyframe, runOnJS } from "react-native-reanimated";
+import Animated, { Keyframe, runOnJS, createAnimatedComponent } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Check, CheckCircle } from "lucide-react-native";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useWebScrollbarStyle } from "@/hooks/use-web-scrollbar-style";
-import { isNative, isWeb } from "@/constants/platform";
-import { BlurView } from "expo-blur";
+import { GlassSurface } from "./glass-surface";
+
+const AnimatedGlassSurface = createAnimatedComponent(GlassSurface);
 
 // Action status for menu items with loading/success feedback
 export type ActionStatus = "idle" | "pending" | "success";
@@ -485,32 +485,21 @@ export function DropdownMenuContent({
           testID={testID ? `${testID}-backdrop` : undefined}
         />
         {!closing ? (
-          <Animated.View
+          <AnimatedGlassSurface
             entering={contentEntering}
             exiting={contentExiting.withCallback((finished) => {
               "worklet";
               if (finished) {
-                runOnJS(setModalVisible)(false);
+                runOnJS(setModalVisibleInternal)(false);
               }
             })}
             collapsable={false}
             testID={testID}
             onLayout={handleContentLayout}
             style={contentStyle}
+            radius="card"
+            strong
           >
-            {isNative ? (
-              <BlurView
-                tint={
-                  theme.colorScheme === "dark"
-                    ? "systemChromeMaterialDark"
-                    : "systemChromeMaterialLight"
-                }
-                intensity={70}
-                experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
-                style={RNStyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
-            ) : null}
             <ScrollView
               bounces={false}
               showsVerticalScrollIndicator
@@ -519,7 +508,7 @@ export function DropdownMenuContent({
             >
               {children}
             </ScrollView>
-          </Animated.View>
+          </AnimatedGlassSurface>
         ) : null}
       </View>
     </Modal>
@@ -763,14 +752,7 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
   },
   content: {
-    backgroundColor: theme.colors.surfaceGlassStrong,
-    borderWidth: 1,
-    borderColor: theme.colors.borderGlass,
-    borderRadius: theme.borderRadius.glassCard,
-    borderCurve: "continuous",
     overflow: "hidden",
-    ...theme.shadow.glass,
-    ...(isWeb ? ({ backdropFilter: "blur(32px) saturate(180%)" } as unknown as object) : {}),
   },
   labelContainer: {
     paddingHorizontal: theme.spacing[3],

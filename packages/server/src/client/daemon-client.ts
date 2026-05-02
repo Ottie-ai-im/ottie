@@ -3073,9 +3073,7 @@ export class DaemonClient {
    * indicating whether a token is configured. Used by the Settings → Advanced
    * → Local daemon panel.
    */
-  async getLocalTokenStatus(options?: {
-    requestId?: string;
-  }): Promise<{
+  async getLocalTokenStatus(options?: { requestId?: string }): Promise<{
     requestId: string;
     mode?: "loopback-trust" | "token-file" | "explicit";
     tokenPresent?: boolean;

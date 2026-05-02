@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { AppleHelloEffect } from "@/components/apple-hello-effect";
-import { OttieLogo } from "@/components/icons/ottie-logo";
+import { otterAssets } from "@/assets/otter";
 import { TotalUnreadPopup } from "@/components/total-unread-popup";
 import { useChatRowStateStore } from "@/stores/chat-row-state-store";
 
@@ -86,7 +86,7 @@ export function SplashOverlay() {
     >
       <View style={styles.center} pointerEvents="none">
         <View style={styles.logo}>
-          <OttieLogo size={48} />
+          <otterAssets.logo size={48} />
         </View>
         <AppleHelloEffect text={greeting} width={280} durationMs={SPLASH_DURATION_MS} />
       </View>

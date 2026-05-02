@@ -14,7 +14,7 @@ requires:
       ]
 provides:
   - "Three-mode local-daemon auth: Mode A loopback-trust (default, npm run dev preserved), Mode B Tauri token-file ($OTTIE_HOME/local-token mode 0o600 + write-before-spawn), Mode C OTTIE_LOCAL_TOKEN env"
-  - "WS bearer-token gate in verifyWsClient with HTTP 401 + WWW-Authenticate: Bearer realm=\"ottie-local\" + authRejected runtime counter"
+  - 'WS bearer-token gate in verifyWsClient with HTTP 401 + WWW-Authenticate: Bearer realm="ottie-local" + authRejected runtime counter'
   - "Pino redaction (T-05-03 mitigation): headers.authorization / *.authorization / *.token / *.OTTIE_LOCAL_TOKEN censored to [REDACTED]"
   - "LocalTokenService class + registerLocalTokenHandlers helper — self-contained server-side wiring; session.ts surface delta is +12 lines (4 for the registration + 8 for SessionOptions.localTokenMode field)"
   - "Four NEW v1.11 WS schemas: LocalTokenStatus{Request,Response} + LocalTokenRegenerate{Request,Response}; all .optional() fields; payload-nested response shape matching the codebase's correlated-response convention"
@@ -34,11 +34,7 @@ affects:
 # Tech tracking
 tech-stack:
   added:
-    [
-      "rand=0.8 (Tauri Cargo.toml)",
-      "base64=0.22 (Tauri Cargo.toml)",
-      "dirs=5 (Tauri Cargo.toml)",
-    ]
+    ["rand=0.8 (Tauri Cargo.toml)", "base64=0.22 (Tauri Cargo.toml)", "dirs=5 (Tauri Cargo.toml)"]
   patterns:
     [
       "Three-mode auth resolution at daemon bootstrap with constant-time bearer compare via crypto.timingSafeEqual",
@@ -80,7 +76,7 @@ key-files:
     ]
 
 key-decisions:
-  - "Mode A is the default (preserves npm run dev behavior); the WS server constructor takes localTokenMode with a default of {kind:\"loopback-trust\"} so existing tests / non-bootstrap call sites keep working unchanged."
+  - 'Mode A is the default (preserves npm run dev behavior); the WS server constructor takes localTokenMode with a default of {kind:"loopback-trust"} so existing tests / non-bootstrap call sites keep working unchanged.'
   - "Token VALUE never crosses the WS — only status. The View Token row in the panel surfaces a guidance Alert pointing at $OTTIE_HOME/local-token (with a Copy button for the path), not a Tauri-bridge file-read implementation. Tauri-bridge token-read is deferred — users locate the file directly."
   - "v1.11 RPC response schemas use the payload-nested {payload: {requestId, ...}} convention matching the rest of the daemon's correlated-response messages. This integrates with sendCorrelatedSessionRequest / DaemonClient unchanged."
   - "Pino redaction lives in the central createRootLogger in packages/server/src/server/logger.ts:287 — modifying this single export covers every child logger in the daemon (Phase 5 documentation should cite this file as the canonical logger)."
@@ -278,12 +274,12 @@ When v1.12 ships, every NEW field added to any of the four v1.11 schemas must:
 
 Four message kinds shipped:
 
-| Kind                                | Direction       | Top-level fields                                                                              |
-| ----------------------------------- | --------------- | --------------------------------------------------------------------------------------------- |
-| `local_token_status_request`        | client → daemon | `requestId: string`                                                                           |
-| `local_token_status_response`       | daemon → client | `payload: { requestId: string, mode?: enum, tokenPresent?: boolean }`                         |
-| `local_token_regenerate_request`    | client → daemon | `requestId: string`                                                                           |
-| `local_token_regenerate_response`   | daemon → client | `payload: { requestId: string, success?: boolean, error?: string }`                           |
+| Kind                              | Direction       | Top-level fields                                                      |
+| --------------------------------- | --------------- | --------------------------------------------------------------------- |
+| `local_token_status_request`      | client → daemon | `requestId: string`                                                   |
+| `local_token_status_response`     | daemon → client | `payload: { requestId: string, mode?: enum, tokenPresent?: boolean }` |
+| `local_token_regenerate_request`  | client → daemon | `requestId: string`                                                   |
+| `local_token_regenerate_response` | daemon → client | `payload: { requestId: string, success?: boolean, error?: string }`   |
 
 `mode` enum values: `"loopback-trust" | "token-file" | "explicit"`.
 

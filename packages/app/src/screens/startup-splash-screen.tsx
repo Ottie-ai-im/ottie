@@ -4,7 +4,7 @@ import * as Clipboard from "expo-clipboard";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { BookOpen, Check, Copy, RotateCw, TriangleAlert } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { OttieLogo } from "@/components/icons/ottie-logo";
+import { otterAssets } from "@/assets/otter";
 import { Button } from "@/components/ui/button";
 import { Fonts } from "@/constants/theme";
 import { getDesktopDaemonLogs, type DesktopDaemonLogs } from "@/desktop/daemon/desktop-daemon";
@@ -287,7 +287,7 @@ export function StartupSplashScreen({ bootstrapState }: StartupSplashScreenProps
     return (
       <View style={styles.container}>
         <TitlebarDragRegion />
-        <OttieLogo size={96} />
+        <otterAssets.logo size={96} />
         <Text style={styles.subtitle}>Connecting…</Text>
       </View>
     );
@@ -298,7 +298,7 @@ export function StartupSplashScreen({ bootstrapState }: StartupSplashScreenProps
       <View style={styles.container}>
         <TitlebarDragRegion />
         <View style={styles.centeredContent}>
-          <OttieLogo size={96} />
+          <otterAssets.logo size={96} />
           <Text style={styles.title}>Welcome to Ottie</Text>
           <View style={styles.progressSteps}>
             {progressSteps.map((step) => (
@@ -327,7 +327,7 @@ export function StartupSplashScreen({ bootstrapState }: StartupSplashScreenProps
       >
         <View style={styles.errorContent}>
           <View style={styles.errorHeader}>
-            <OttieLogo size={64} />
+            <otterAssets.logo size={64} />
             <Text style={TITLE_ERROR_STYLE}>Something went wrong</Text>
           </View>
 

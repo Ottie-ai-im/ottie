@@ -24,6 +24,7 @@ import {
   computeScrollOffsetFromDragDelta,
   computeVerticalScrollbarGeometry,
 } from "./web-desktop-scrollbar.math";
+import { isWeb } from "../constants/platform";
 
 export interface TerminalEmulatorHandle {
   writeOutput: (text: string) => void;
@@ -737,8 +738,8 @@ export default function TerminalEmulator({
           <div
             style={handleContainerStyle}
             onPointerDown={handleScrollbarPointerDown}
-            onPointerEnter={handleScrollbarPointerEnter}
-            onPointerLeave={handleScrollbarPointerLeave}
+            onPointerEnter={isWeb ? handleScrollbarPointerEnter : undefined}
+            onPointerLeave={isWeb ? handleScrollbarPointerLeave : undefined}
           >
             <div style={handleInnerStyle} />
           </div>

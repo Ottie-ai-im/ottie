@@ -3,7 +3,6 @@ import type { ReactNode, Ref } from "react";
 import { createPortal } from "react-dom";
 import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { TextInputProps } from "react-native";
-import { BlurView } from "expo-blur";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { getOverlayRoot, OVERLAY_Z } from "../lib/overlay-root";
@@ -20,7 +19,8 @@ import {
   IsolatedBottomSheetModal,
   useIsolatedBottomSheetVisibility,
 } from "@/components/ui/isolated-bottom-sheet-modal";
-import { isNative, isWeb } from "@/constants/platform";
+import { GlassSurface } from "@/components/ui/glass-surface";
+import { isWeb } from "@/constants/platform";
 
 type EscHandler = () => void;
 const escStack: EscHandler[] = [];
@@ -71,14 +71,6 @@ const styles = StyleSheet.create((theme) => ({
     maxHeight: "85%",
     flexShrink: 1,
     minHeight: 0,
-    backgroundColor: theme.colors.surfaceGlassStrong,
-    borderRadius: theme.borderRadius.glassSheet,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderColor: theme.colors.borderGlass,
-    overflow: "hidden",
-    ...theme.shadow.glassDeep,
-    ...(isWeb ? ({ backdropFilter: "blur(40px) saturate(180%)" } as unknown as object) : {}),
   },
   header: {
     paddingHorizontal: theme.spacing[6],
@@ -156,40 +148,7 @@ const styles = StyleSheet.create((theme) => ({
 }));
 
 function SheetBackground({ style }: BottomSheetBackgroundProps) {
-  const { theme } = useUnistyles();
-  const isDark = theme.colorScheme === "dark";
-  const combinedStyle = useMemo(
-    () => [
-      style,
-      {
-        backgroundColor: theme.colors.surfaceGlassStrong,
-        borderTopLeftRadius: theme.borderRadius.glassSheet,
-        borderTopRightRadius: theme.borderRadius.glassSheet,
-        borderCurve: "continuous" as const,
-        borderTopWidth: 1,
-        borderColor: theme.colors.borderGlass,
-        overflow: "hidden" as const,
-        ...(isWeb ? ({ backdropFilter: "blur(40px) saturate(180%)" } as unknown as object) : {}),
-      },
-    ],
-    [
-      style,
-      theme.colors.surfaceGlassStrong,
-      theme.colors.borderGlass,
-      theme.borderRadius.glassSheet,
-    ],
-  );
-  if (isNative) {
-    return (
-      <BlurView
-        tint={isDark ? "systemThickMaterialDark" : "systemThickMaterialLight"}
-        intensity={70}
-        experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
-        style={combinedStyle}
-      />
-    );
-  }
-  return <View style={combinedStyle} />;
+  return <GlassSurface radius="sheet" strong style={style} />;
 }
 
 export interface AdaptiveModalSheetProps {
@@ -331,17 +290,10 @@ export function AdaptiveModalSheet({
   ) : (
     cardInner
   );
-  const card = isNative ? (
-    <BlurView
-      tint={theme.colorScheme === "dark" ? "systemThickMaterialDark" : "systemThickMaterialLight"}
-      intensity={70}
-      experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
-      style={desktopCardStyle}
-    >
+  const card = (
+    <GlassSurface radius="sheet" strong style={desktopCardStyle}>
       {cardWithDrop}
-    </BlurView>
-  ) : (
-    <View style={desktopCardStyle}>{cardWithDrop}</View>
+    </GlassSurface>
   );
 
   const desktopContent = (

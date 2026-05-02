@@ -156,14 +156,14 @@ _All commits include their own RED → GREEN sequence in a single commit (test-f
 
 ## Registered Actions (post-execution snapshot)
 
-| ActionId               | Modalities                  | EN label             | ZH label   |
-| ---------------------- | --------------------------- | -------------------- | ---------- |
-| `agent.create`         | voice, kbd, cmdk, menu      | New chat             | 新建       |
-| `workspace.switch`     | voice, cmdk, menu           | Switch workspace     | 切换工作区 |
-| `session.jump.recent`  | voice, cmdk, kbd            | Jump to recent       | 跳转到最近 |
-| `permission.decide`    | voice, menu, kbd            | Decide permission    | 处理权限   |
-| `settings.open`        | voice, cmdk, kbd            | Open settings        | 打开设置   |
-| `theme.cycle`          | voice, cmdk, kbd            | Cycle theme          | 切换主题   |
+| ActionId              | Modalities             | EN label          | ZH label   |
+| --------------------- | ---------------------- | ----------------- | ---------- |
+| `agent.create`        | voice, kbd, cmdk, menu | New chat          | 新建       |
+| `workspace.switch`    | voice, cmdk, menu      | Switch workspace  | 切换工作区 |
+| `session.jump.recent` | voice, cmdk, kbd       | Jump to recent    | 跳转到最近 |
+| `permission.decide`   | voice, menu, kbd       | Decide permission | 处理权限   |
+| `settings.open`       | voice, cmdk, kbd       | Open settings     | 打开设置   |
+| `theme.cycle`         | voice, cmdk, kbd       | Cycle theme       | 切换主题   |
 
 All 6 actions are reachable from ≥3 modalities — 100% multi-modality coverage at plan close (well above the 80% gate).
 
@@ -231,9 +231,9 @@ All 4 gates pass. The locale gate is the bilingual safeguard CLAUDE.md requires.
 
 ## Known Stubs
 
-| File | Line | Stub | Reason |
-|------|------|------|--------|
-| `packages/app/src/actions/built-in-actions.ts` | ~110 | `permission.decide` handler is empty | Wired in Plan 02c via permission-store; keeps the action discoverable for cmdk/voice/parity test without overstepping into Plan 03's ARCH-01 work |
+| File                                           | Line | Stub                                                                                                              | Reason                                                                                                                                                                                                                                               |
+| ---------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/app/src/actions/built-in-actions.ts` | ~110 | `permission.decide` handler is empty                                                                              | Wired in Plan 02c via permission-store; keeps the action discoverable for cmdk/voice/parity test without overstepping into Plan 03's ARCH-01 work                                                                                                    |
 | `packages/app/src/actions/built-in-actions.ts` | ~145 | `theme.cycle` handler delegates to `keyboardActionDispatcher.dispatch` with a cast (`id: "theme.cycle" as never`) | Keyboard dispatcher's `KeyboardActionDefinition` union doesn't include `theme.cycle` — the actual cycle logic lives in `use-keyboard-shortcuts.ts`. Dispatch silently no-ops if no handler matches; Plan 02e's polish sweep will add a proper bridge |
 
 Both stubs are intentional and documented inline. Neither blocks the plan's NAT-01 acceptance criteria — modalities + locales are present, and dispatch is safe (returns false).
