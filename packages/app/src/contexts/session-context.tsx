@@ -1898,7 +1898,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         console.warn("[Session] respondToPermission skipped: daemon unavailable");
         return;
       }
-      if (response === "allow") {
+      if ((response as string) === "allow") {
         fireDelightToast("first-permission");
       }
       void client.respondToPermission(agentId, requestId, response).catch((error) => {

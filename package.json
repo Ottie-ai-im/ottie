@@ -1,6 +1,6 @@
 {
   "name": "ottie",
-  "version": "1.10.0",
+  "version": "1.11.0-beta.1",
   "private": true,
   "description": "Local-first IM client where AI agents are first-class members",
   "keywords": [],
