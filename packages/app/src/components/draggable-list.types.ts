@@ -61,4 +61,9 @@ export interface DraggableListProps<T> {
    * lists coordinated by a shared NestableScrollContainer.
    */
   nestable?: boolean;
+  /**
+   * Web-only: when true, skips rendering the internal DndContext, assuming an
+   * outer DndContext is provided.
+   */
+  skipDndContextWrapper?: boolean;
 }

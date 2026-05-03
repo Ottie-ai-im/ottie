@@ -55,6 +55,7 @@ import {
 } from "lucide-react-native";
 import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { DraggableList, type DraggableRenderItemInfo } from "./draggable-list";
+import { SidebarProjectDropZone } from "./sidebar-project-drop-zone";
 import type { DraggableListDragHandleProps } from "./draggable-list.types";
 import { getHostRuntimeStore, isHostRuntimeConnected } from "@/runtime/host-runtime";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -112,6 +113,8 @@ import {
   requireWorkspaceExecutionDirectory,
   resolveWorkspaceExecutionDirectory,
 } from "@/utils/workspace-execution";
+import { PrBadge, getWorkspacePrIconColor } from "./sidebar/pr-badge";
+import { SidebarWorkspaceAiProviderLogo } from "./sidebar-workspace-ai-provider-logo";
 import { WorkspaceHoverCard } from "@/components/workspace-hover-card";
 import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
 import { GitHubIcon } from "@/components/icons/github-icon";
@@ -132,20 +135,6 @@ const DEFAULT_STATUS_DOT_SIZE = 7;
 const EMPHASIZED_STATUS_DOT_SIZE = 9;
 const DEFAULT_STATUS_DOT_OFFSET = 0;
 const EMPHASIZED_STATUS_DOT_OFFSET = -1;
-function getWorkspacePrIconColor(
-  theme: ReturnType<typeof useUnistyles>["theme"],
-  state: PrHint["state"],
-) {
-  switch (state) {
-    case "merged":
-      return theme.colors.palette.zinc[400];
-    case "open":
-      return theme.colors.palette.green[500];
-    case "closed":
-      return theme.colors.palette.red[500];
-  }
-}
-
 interface SidebarWorkspaceListProps {
   projects: SidebarProjectEntry[];
   serverId: string | null;
@@ -230,59 +219,6 @@ function useSidebarWorkspaceEntry(
   return useWorkspaceFields(serverId, workspaceId, projectWorkspaceEntry);
 }
 
-export function PrBadge({ hint }: { hint: PrHint }) {
-  const { theme } = useUnistyles();
-  const [isHovered, setIsHovered] = useState(false);
-  const activeColor = isHovered ? theme.colors.foreground : theme.colors.foregroundMuted;
-  const iconColor = getWorkspacePrIconColor(theme, hint.state);
-
-  const handlePressIn = useCallback((event: GestureResponderEvent) => {
-    event.stopPropagation();
-  }, []);
-
-  const handlePress = useCallback(
-    (event: GestureResponderEvent) => {
-      event.stopPropagation();
-      void openExternalUrl(hint.url);
-    },
-    [hint.url],
-  );
-
-  const handleHoverIn = useCallback(() => setIsHovered(true), []);
-  const handleHoverOut = useCallback(() => setIsHovered(false), []);
-
-  const prBadgeTextStyle = useMemo(
-    () => [prBadgeStyles.text, { color: activeColor }],
-    [activeColor],
-  );
-
-  return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={`Pull request #${hint.number}`}
-      hitSlop={4}
-      onPressIn={handlePressIn}
-      onPress={handlePress}
-      onHoverIn={handleHoverIn}
-      onHoverOut={handleHoverOut}
-      style={prBadgePressableStyle}
-    >
-      {isHovered ? (
-        <ExternalLink size={12} color={activeColor} />
-      ) : (
-        <GitPullRequest size={12} color={iconColor} />
-      )}
-      <Text style={prBadgeTextStyle} numberOfLines={1}>
-        #{hint.number}
-      </Text>
-    </Pressable>
-  );
-}
-
-function prBadgePressableStyle({ pressed }: PressableStateCallbackType) {
-  return [prBadgeStyles.badge, pressed && prBadgeStyles.badgePressed];
-}
-
 function projectKebabStyle({
   hovered = false,
 }: PressableStateCallbackType & { hovered?: boolean }) {
@@ -296,22 +232,6 @@ function workspaceKebabStyle({
 }
 
 function noop() {}
-
-const prBadgeStyles = StyleSheet.create((theme) => ({
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  badgePressed: {
-    opacity: 0.82,
-  },
-  text: {
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.normal,
-    lineHeight: 14,
-  },
-}));
 
 function ChecksBadge({ checks }: { checks: PrHint["checks"] }): ReactElement | null {
   const { theme } = useUnistyles();
@@ -644,6 +564,13 @@ function WorkspaceRowRightGroup({
   const showKebab = Boolean(onArchive && (isHovered || isTouchPlatform));
   return (
     <View style={styles.workspaceRowRight}>
+      <View testID="workspace-ai-logo-icon" accessibilityLabel="AI Provider Logo">
+        <SidebarWorkspaceAiProviderLogo
+          serverId={workspace.serverId}
+          workspaceDirectory={workspace.workspaceDirectory}
+          hasRunningService={hasRunningService}
+        />
+      </View>
       {showScriptsIcon ? (
         <View testID="workspace-globe-icon" accessibilityLabel="Scripts available">
           {hasRunningService ? (
@@ -2074,19 +2001,47 @@ function WorkspaceRowItem({
     navigateToWorkspace(serverId, workspace.workspaceId, { currentPathname });
   }, [serverId, onWorkspacePress, workspace.workspaceId, currentPathname]);
 
+  const { theme } = useUnistyles();
+  const { active } = useDndContext();
+  const isDraggingProvider = active?.data.current?.type === "provider";
+
+  const hasRunningScripts = workspace.hasRunningScripts || workspace.statusBucket !== "done";
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: `workspace-row-${workspace.workspaceKey}`,
+    data: {
+      type: "workspace-change-ai",
+      serverId: workspace.serverId,
+      workspaceId: workspace.workspaceId,
+      hasRunningScripts,
+    },
+  });
+
   return (
-    <WorkspaceRow
-      workspace={workspace}
-      shortcutNumber={shortcutNumber}
-      showShortcutBadge={showShortcutBadge}
-      canCopyBranchName={canCopyBranchName}
-      isCreating={isCreating}
-      selectionEnabled={selectionEnabled}
-      onPress={handlePress}
-      drag={drag ?? noop}
-      isDragging={isDragging}
-      dragHandleProps={dragHandleProps}
-    />
+    <View
+      ref={setNodeRef}
+      style={
+        isOver && isDraggingProvider && !hasRunningScripts
+          ? {
+              backgroundColor: theme.colors.palette.blue[500] + "1A",
+              borderRadius: 6,
+            }
+          : undefined
+      }
+    >
+      <WorkspaceRow
+        workspace={workspace}
+        shortcutNumber={shortcutNumber}
+        showShortcutBadge={showShortcutBadge}
+        canCopyBranchName={canCopyBranchName}
+        isCreating={isCreating}
+        selectionEnabled={selectionEnabled}
+        onPress={handlePress}
+        drag={drag ?? noop}
+        isDragging={isDragging}
+        dragHandleProps={dragHandleProps}
+      />
+    </View>
   );
 }
 
@@ -2381,8 +2336,18 @@ function ProjectBlock({
               scrollEnabled={false}
               useDragHandle
               nestable={useNestable}
+              skipDndContextWrapper={isWeb}
               simultaneousGestureRef={parentGestureRef}
               containerStyle={styles.workspaceListContainer}
+              ListFooterComponent={
+                <SidebarProjectDropZone
+                  projectKey={project.projectKey}
+                  serverId={serverId!}
+                  workspaceId={project.workspaces[0]?.workspaceId}
+                  projectRootPath={project.iconWorkingDir}
+                  projectName={project.projectName}
+                />
+              }
             />
           ) : null}
         </>
@@ -2681,6 +2646,7 @@ export function SidebarWorkspaceList({
           scrollEnabled={false}
           useDragHandle
           nestable={platformIsNative}
+          skipDndContextWrapper={isWeb}
           simultaneousGestureRef={parentGestureRef}
           containerStyle={styles.projectListContainer}
         />

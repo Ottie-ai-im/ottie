@@ -8,6 +8,7 @@ import {
   type Modifier,
   useSensor,
   useSensors,
+  useDndMonitor,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -134,6 +135,7 @@ export function DraggableList<T>({
   // simultaneousGestureRef is native-only, ignored on web
   onDragBegin,
   nestable: _nestable = false,
+  skipDndContextWrapper = false,
 }: DraggableListProps<T>) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragItems, setDragItems] = useState<T[] | null>(null);
@@ -189,9 +191,28 @@ export function DraggableList<T>({
   );
 
   const ids = useMemo(
-    () => items.map((item, index) => keyExtractor(item, index)),
+    () => items.map((item, index) => String(keyExtractor(item, index))),
     [items, keyExtractor],
   );
+
+  useDndMonitor({
+    onDragStart(event) {
+      if (skipDndContextWrapper && ids.includes(String(event.active.id))) {
+        handleDragStart(event);
+      }
+    },
+    onDragCancel() {
+      if (skipDndContextWrapper && activeId) {
+        clearDragState();
+      }
+    },
+    onDragEnd(event) {
+      if (skipDndContextWrapper && ids.includes(String(event.active.id))) {
+        handleDragEnd(event);
+      }
+    },
+  });
+
   const wrapperStyle = useMemo(
     () => [
       { position: "relative" as const },
@@ -217,14 +238,7 @@ export function DraggableList<T>({
         >
           {ListHeaderComponent}
           {items.length === 0 && ListEmptyComponent}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            modifiers={DND_MODIFIERS}
-            onDragStart={handleDragStart}
-            onDragCancel={clearDragState}
-            onDragEnd={handleDragEnd}
-          >
+          {skipDndContextWrapper ? (
             <SortableContext items={ids} strategy={verticalListSortingStrategy}>
               {items.map((item, index) => {
                 const id = keyExtractor(item, index);
@@ -241,21 +255,40 @@ export function DraggableList<T>({
                 );
               })}
             </SortableContext>
-          </DndContext>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              modifiers={DND_MODIFIERS}
+              onDragStart={handleDragStart}
+              onDragCancel={clearDragState}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+                {items.map((item, index) => {
+                  const id = keyExtractor(item, index);
+                  return (
+                    <SortableItem
+                      key={id}
+                      id={id}
+                      item={item}
+                      index={index}
+                      renderItem={renderItem}
+                      activeId={activeId}
+                      useDragHandle={useDragHandle}
+                    />
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
+          )}
           {ListFooterComponent}
         </ScrollView>
       ) : (
         <>
           {ListHeaderComponent}
           {items.length === 0 && ListEmptyComponent}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            modifiers={DND_MODIFIERS}
-            onDragStart={handleDragStart}
-            onDragCancel={clearDragState}
-            onDragEnd={handleDragEnd}
-          >
+          {skipDndContextWrapper ? (
             <SortableContext items={ids} strategy={verticalListSortingStrategy}>
               {items.map((item, index) => {
                 const id = keyExtractor(item, index);
@@ -272,7 +305,33 @@ export function DraggableList<T>({
                 );
               })}
             </SortableContext>
-          </DndContext>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              modifiers={DND_MODIFIERS}
+              onDragStart={handleDragStart}
+              onDragCancel={clearDragState}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+                {items.map((item, index) => {
+                  const id = keyExtractor(item, index);
+                  return (
+                    <SortableItem
+                      key={id}
+                      id={id}
+                      item={item}
+                      index={index}
+                      renderItem={renderItem}
+                      activeId={activeId}
+                      useDragHandle={useDragHandle}
+                    />
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
+          )}
           {ListFooterComponent}
         </>
       )}

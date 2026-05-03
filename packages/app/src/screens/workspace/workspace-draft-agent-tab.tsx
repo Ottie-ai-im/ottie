@@ -15,6 +15,7 @@ import { buildDraftStoreKey } from "@/stores/draft-keys";
 import type { Agent } from "@/stores/session-store";
 import { useWorkspaceExecutionAuthority } from "@/stores/session-store-hooks";
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
+import { useGlobalDragStore } from "@/stores/global-drag-store";
 import { encodeImages } from "@/utils/encode-images";
 import { shouldAutoFocusWorkspaceDraftComposer } from "@/screens/workspace/workspace-draft-pane-focus";
 import type { AgentCapabilityFlags } from "@server/server/agent/agent-sdk-types";
@@ -315,6 +316,18 @@ export function WorkspaceDraftAgentTab({
   const clearDraftInput = draftInput.clear;
   const setDraftText = draftInput.setText;
   const setDraftAttachments = draftInput.setAttachments;
+
+  useEffect(() => {
+    const pendingProvider = useGlobalDragStore.getState().pendingDroppedProvider;
+    if (
+      pendingProvider &&
+      composerState.providerDefinitions?.some((p: any) => p.id === pendingProvider)
+    ) {
+      useGlobalDragStore.getState().setPendingDroppedProvider(null);
+      composerState.setProviderFromUser(pendingProvider);
+    }
+  }, [composerState]);
+
   const pendingAutoSubmit = useWorkspaceDraftSubmissionStore((state) => {
     const pending = state.pendingByDraftId[draftId] ?? null;
     return pending?.serverId === serverId && pending.workspaceId === workspaceId ? pending : null;

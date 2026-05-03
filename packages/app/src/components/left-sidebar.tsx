@@ -41,6 +41,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { HEADER_TOP_PADDING_MOBILE, useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import { BlurView } from "expo-blur";
+import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SidebarProvidersPanel } from "./sidebar/sidebar-providers-panel";
+import { useGlobalDragStore } from "@/stores/global-drag-store";
+import { buildHostWorkspaceOpenRoute, buildHostNewWorkspaceRoute } from "@/utils/host-routes";
 import { useSidebarAnimation } from "@/contexts/sidebar-animation-context";
 import { useOpenProjectPicker } from "@/hooks/use-open-project-picker";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -269,6 +273,53 @@ export const LeftSidebar = memo(function LeftSidebar({
     renderHostOption,
   };
 
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: { distance: 5 },
+  });
+  const sensors = useSensors(pointerSensor);
+  const setPendingDroppedProvider = useGlobalDragStore((state) => state.setPendingDroppedProvider);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over) return;
+
+      if (active.data.current?.type === "provider") {
+        const providerId = active.id as string;
+
+        if (over.data.current?.type === "project-new-task") {
+          setPendingDroppedProvider(providerId);
+
+          const serverId = over.data.current.serverId as string;
+          const workspaceId = over.data.current.workspaceId as string | undefined;
+          const projectRootPath = over.data.current.projectRootPath as string;
+          const projectName = over.data.current.projectName as string;
+
+          if (workspaceId) {
+            router.navigate(buildHostWorkspaceOpenRoute(serverId, workspaceId, "draft:new"));
+          } else {
+            router.navigate(
+              buildHostNewWorkspaceRoute(serverId, projectRootPath, {
+                displayName: projectName,
+              }) as Href,
+            );
+          }
+        } else if (over.data.current?.type === "workspace-change-ai") {
+          if (over.data.current.hasRunningScripts) {
+            return;
+          }
+          setPendingDroppedProvider(providerId);
+
+          const serverId = over.data.current.serverId as string;
+          const workspaceId = over.data.current.workspaceId as string;
+
+          router.navigate(buildHostWorkspaceOpenRoute(serverId, workspaceId, "draft:new"));
+        }
+      }
+    },
+    [setPendingDroppedProvider],
+  );
+
   if (isCompactLayout) {
     return (
       <MobileSidebar
@@ -285,14 +336,19 @@ export const LeftSidebar = memo(function LeftSidebar({
   }
 
   return (
-    <DesktopSidebar
-      {...sharedProps}
-      insetsTop={insets.top}
-      isOpen={isOpen}
-      handleOpenProject={handleOpenProjectDesktop}
-      handleSettings={handleSettingsDesktop}
-      handleViewMore={handleViewMoreNavigate}
-    />
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <View style={{ flexDirection: "row", height: "100%", zIndex: 10 }}>
+        <DesktopSidebar
+          {...sharedProps}
+          insetsTop={insets.top}
+          isOpen={isOpen}
+          handleOpenProject={handleOpenProjectDesktop}
+          handleSettings={handleSettingsDesktop}
+          handleViewMore={handleViewMoreNavigate}
+        />
+        <SidebarProvidersPanel />
+      </View>
+    </DndContext>
   );
 });
 
