@@ -136,7 +136,7 @@ export function SearchInput({
 }: SearchInputProps): ReactElement {
   const { theme } = useUnistyles();
   const inputRef = useRef<TextInput>(null);
-  const InputComponent = useBottomSheetInput ? BottomSheetTextInput : TextInput;
+  const InputComponent = useBottomSheetInput && !IS_WEB ? BottomSheetTextInput : TextInput;
 
   useEffect(() => {
     if (autoFocus && IS_WEB && inputRef.current) {
@@ -982,13 +982,24 @@ function MobileComboboxBody(props: MobileBodyProps): ReactElement {
           useBottomSheetInput
         />
       ) : null}
-      <BottomSheetScrollView
-        contentContainerStyle={styles.comboboxScrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {body}
-      </BottomSheetScrollView>
+      {IS_WEB ? (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.comboboxScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {body}
+        </ScrollView>
+      ) : (
+        <BottomSheetScrollView
+          contentContainerStyle={styles.comboboxScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {body}
+        </BottomSheetScrollView>
+      )}
     </IsolatedBottomSheetModal>
   );
 }

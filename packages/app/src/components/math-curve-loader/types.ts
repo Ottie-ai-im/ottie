@@ -1,6 +1,12 @@
 import type { CurveName } from "./curves";
+import type { MathCurveContext } from "./sanctioned-uses";
 
 export interface MathCurveLoaderProps {
+  /**
+   * Required brand context (Plan 02e).
+   * Restricts high-fidelity motion to sanctioned brand moments.
+   */
+  brandContext: MathCurveContext;
   /** Which preset to render. See ./curves for the 6 names. */
   curve: CurveName;
   /** Square edge length in px (web) / dp (native). */

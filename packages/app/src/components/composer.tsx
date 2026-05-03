@@ -1,5 +1,11 @@
-import { View, Pressable, Text, Image, type PressableStateCallbackType } from "react-native";
-import { MathCurveLoader } from "@/components/math-curve-loader";
+import {
+  View,
+  Pressable,
+  Text,
+  Image,
+  ActivityIndicator,
+  type PressableStateCallbackType,
+} from "react-native";
 import { useState, useEffect, useRef, useCallback, useMemo, memo, type ReactElement } from "react";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -834,7 +840,7 @@ function ComposerCancelButton({
   const accessibilityLabel = isCancellingAgent ? "Canceling agent" : "Stop agent";
   const cancelLoaderSize = Math.round(buttonIconSize * 1.6);
   const icon = isCancellingAgent ? (
-    <MathCurveLoader curve="rose-three" size={cancelLoaderSize} color="white" />
+    <ActivityIndicator size="small" color="white" />
   ) : (
     <Square size={buttonIconSize} color="white" fill="white" />
   );

@@ -146,6 +146,7 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
       {isInitialLoad ? (
         <View style={styles.loadingContainer}>
           <MathCurveLoader
+            brandContext="chats"
             curve="rose-three"
             size={64}
             color={theme.colors.foregroundMuted}

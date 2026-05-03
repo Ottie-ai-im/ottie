@@ -843,7 +843,12 @@ function WorkingIndicator() {
   const { theme } = useUnistyles();
   return (
     <View style={stylesheet.workingIndicatorBubble}>
-      <MathCurveLoader curve="lissajous-drift" size={26} color={theme.colors.foregroundMuted} />
+      <MathCurveLoader
+        brandContext="thinking"
+        curve="lissajous-drift"
+        size={26}
+        color={theme.colors.foregroundMuted}
+      />
     </View>
   );
 }

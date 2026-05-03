@@ -613,19 +613,39 @@ export class VoiceAssistantWebSocketServer {
     // returns HTTP 401 + WWW-Authenticate per D-14 (the user-facing copy lives
     // client-side; the daemon's job is the structured 401).
     if (this.localTokenMode.kind !== "loopback-trust") {
-      const authHeader = req.headers["authorization"];
-      const provided =
-        typeof authHeader === "string" && authHeader.startsWith("Bearer ")
-          ? authHeader.slice("Bearer ".length).trim()
-          : undefined;
-      if (!verifyBearerToken(provided, this.localTokenMode)) {
-        this.incrementRuntimeCounter("authRejected");
-        this.logger.warn(
-          { ...requestMetadata },
-          "Rejected connection — missing or invalid local token",
-        );
-        callback(false, 401, 'Bearer realm="ottie-local"');
-        return;
+      // TRUST-01: Explicitly trust the desktop shell's origin.
+      // Webview browsers often cannot set custom headers for WebSocket handshakes.
+      // Since tauri://localhost is our own shell, we can trust it if the mode is token-file.
+      const isDesktopShell = origin === "tauri://localhost" || origin === "http://tauri.localhost";
+
+      if (!isDesktopShell) {
+        const authHeader = req.headers["authorization"];
+        let provided =
+          typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+            ? authHeader.slice("Bearer ".length).trim()
+            : undefined;
+
+        if (!provided && req.url) {
+          try {
+            const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+            const queryToken = url.searchParams.get("token");
+            if (queryToken) {
+              provided = queryToken;
+            }
+          } catch {
+            // ignore URL parse errors
+          }
+        }
+
+        if (!verifyBearerToken(provided, this.localTokenMode)) {
+          this.incrementRuntimeCounter("authRejected");
+          this.logger.warn(
+            { ...requestMetadata, url: req.url },
+            "Rejected connection — missing or invalid local token",
+          );
+          callback(false, 401, 'Bearer realm="ottie-local"');
+          return;
+        }
       }
     }
 

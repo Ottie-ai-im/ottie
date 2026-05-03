@@ -18,7 +18,11 @@ import {
 import { decodeOfferFragmentPayload, normalizeHostPort } from "@/utils/daemon-endpoints";
 import { resolveAppVersion } from "@/utils/app-version";
 import { ConnectionOfferSchema, type ConnectionOffer } from "@server/shared/connection-offer";
-import { shouldUseDesktopDaemon, startDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
+import {
+  shouldUseDesktopDaemon,
+  startDesktopDaemon,
+  getDesktopDaemonStatus,
+} from "@/desktop/daemon/desktop-daemon";
 import { connectToDaemon } from "@/utils/test-daemon-connection";
 import { buildDaemonWebSocketUrl, buildRelayWebSocketUrl } from "@/utils/daemon-endpoints";
 import { getOrCreateClientId } from "@/utils/client-id";
@@ -464,9 +468,15 @@ function createDefaultDeps(): HostRuntimeControllerDeps {
         });
       }
       if (connection.type === "directTcp") {
+        let url = buildDaemonWebSocketUrl(connection.endpoint);
+        if (connection.localToken) {
+          const parsed = new URL(url);
+          parsed.searchParams.set("token", connection.localToken);
+          url = parsed.toString();
+        }
         return new DaemonClient({
           ...base,
-          url: buildDaemonWebSocketUrl(connection.endpoint),
+          url,
         });
       }
       return new DaemonClient({
@@ -1264,18 +1274,49 @@ export class HostRuntimeStore {
           error: "Desktop daemon did not return a server id.",
         };
       }
-      if (!connectionFromListen(listenAddress)) {
+
+      const connection = connectionFromListen(listenAddress);
+      if (!connection) {
         return {
           ok: false,
           error: `Desktop daemon returned an unsupported listen address: ${listenAddress}`,
         };
       }
-      return {
-        ok: true,
-        listenAddress,
-        serverId,
-        hostname: daemon.hostname,
-      };
+
+      // If we have a token, attach it to the connection object so it gets persisted
+      if (connection.type === "directTcp" && daemon.token) {
+        connection.localToken = daemon.token;
+      }
+
+      try {
+        const {
+          client,
+          serverId: realServerId,
+          hostname,
+        } = await connectToDaemon(connection, {
+          timeoutMs: DEFAULT_LOCALHOST_BOOTSTRAP_TIMEOUT_MS,
+          localToken: daemon.token,
+        });
+
+        await this.upsertHostConnection({
+          serverId: realServerId,
+          label: hostname ?? undefined,
+          connection,
+          existingClient: client,
+        });
+
+        return {
+          ok: true,
+          listenAddress,
+          serverId: realServerId,
+          hostname,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: `Failed to connect to desktop daemon: ${toErrorMessage(error)}`,
+        };
+      }
     } catch (error) {
       return {
         ok: false,
@@ -1283,7 +1324,6 @@ export class HostRuntimeStore {
       };
     }
   }
-
   private async bootstrapLocalhost(): Promise<void> {
     try {
       const connection = connectionFromListen(DEFAULT_LOCALHOST_ENDPOINT);
@@ -1291,10 +1331,26 @@ export class HostRuntimeStore {
         return;
       }
 
+      let localToken: string | null = null;
+      if (shouldUseDesktopDaemon()) {
+        try {
+          const status = await getDesktopDaemonStatus();
+          localToken = status.token;
+        } catch {
+          // ignore
+        }
+      }
+
       try {
         const { client, serverId, hostname } = await connectToDaemon(connection, {
           timeoutMs: DEFAULT_LOCALHOST_BOOTSTRAP_TIMEOUT_MS,
+          localToken,
         });
+
+        // If we have a token, attach it to the connection object so it gets persisted
+        if (connection.type === "directTcp" && localToken) {
+          connection.localToken = localToken;
+        }
 
         await this.upsertHostConnection({
           serverId,
@@ -1314,6 +1370,7 @@ export class HostRuntimeStore {
     serverId: string;
     endpoint: string;
     label?: string;
+    localToken?: string | null;
     existingClient?: DaemonClient;
   }): Promise<HostProfile> {
     const endpoint = normalizeHostPort(input.endpoint);
@@ -1324,6 +1381,7 @@ export class HostRuntimeStore {
         id: `direct:${endpoint}`,
         type: "directTcp",
         endpoint,
+        localToken: input.localToken,
       },
       existingClient: input.existingClient,
     });

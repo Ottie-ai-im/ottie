@@ -11,6 +11,7 @@ export function MathCurveLoaderRenderer({
   color,
   reduceMotion = false,
   ariaLabel,
+  brandContext: _brandContext,
 }: MathCurveLoaderProps) {
   const preset = CURVE_PRESETS[curve];
   const groupRef = useRef<SVGGElement | null>(null);

@@ -392,7 +392,7 @@ export function ContextMenuContent({
   const { theme } = useUnistyles();
   const webScrollbarStyle = useWebScrollbarStyle();
   const isMobile = useIsCompactFormFactor();
-  const useMobileSheet = isMobile && mobileMode === "sheet";
+  const useMobileSheet = isMobile && mobileMode === "sheet" && !isWeb;
   const { open, setOpen, triggerRef, anchorRect } = context;
   const sheetSnapPoints = useMemo(() => ["30%", "55%"], []);
   const [triggerRect, setTriggerRect] = useState<Rect | null>(null);
@@ -539,7 +539,7 @@ export function ContextMenuContent({
           onChange={handleSheetChange}
           backdropComponent={renderSheetBackdrop}
           enablePanDownToClose
-          backgroundStyle={sheetBackgroundStyle}
+          backgroundComponent={DefaultContextMenuBackground}
           handleIndicatorStyle={sheetHandleStyle}
           keyboardBehavior="extend"
           keyboardBlurBehavior="restore"

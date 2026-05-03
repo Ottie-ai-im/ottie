@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useCallback, useMemo, useRef, ReactNode } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, ScrollView } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import Animated from "react-native-reanimated";
 import {
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/isolated-bottom-sheet-modal";
 import { resolveToolCallIcon } from "@/utils/tool-call-icon";
 import { ToolCallDetailsContent } from "./tool-call-details";
+import { isWeb } from "@/constants/platform";
 
 // ----- Types -----
 
@@ -143,6 +144,8 @@ function ToolCallSheetContent({ data, onClose }: ToolCallSheetContentProps) {
 
   const IconComponent = resolveToolCallIcon(toolName, detail);
 
+  const ContentComponent = isWeb ? ScrollView : BottomSheetScrollView;
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -159,14 +162,14 @@ function ToolCallSheetContent({ data, onClose }: ToolCallSheetContentProps) {
       </View>
 
       {/* Content */}
-      <BottomSheetScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ContentComponent style={styles.content} contentContainerStyle={styles.contentContainer}>
         <ToolCallDetailsContent
           detail={detail}
           errorText={errorText}
           fillAvailableHeight
           showLoadingSkeleton={showLoadingSkeleton}
         />
-      </BottomSheetScrollView>
+      </ContentComponent>
     </View>
   );
 }

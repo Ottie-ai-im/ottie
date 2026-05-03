@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
-import { useHostRuntimeBootstrapState, useStoreReady } from "@/app/_layout";
+import {
+  useHostRuntimeBootstrapState,
+  useStoreReady,
+} from "@/contexts/host-runtime-bootstrap-context";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { StartupSplashScreen } from "@/screens/startup-splash-screen";
 

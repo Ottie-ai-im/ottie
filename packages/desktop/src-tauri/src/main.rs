@@ -111,6 +111,7 @@ fn main() {
                     .map(|h| format!("{h}/.ottie"))
                     .unwrap_or_else(|_| ".ottie".into())
             }),
+            token: daemon::ensure_local_token().unwrap_or_default(),
         })))
         .setup(move |app| {
             // Apply the bridge init script to every existing webview. New
@@ -132,9 +133,12 @@ fn main() {
 
             let handle = app.handle().clone();
             match daemon::spawn(&handle) {
-                Ok(child) => {
+                Ok((child, token)) => {
                     let state = app.state::<AppState>();
                     *state.daemon.lock().unwrap() = Some(child);
+                    // Ensure the state token matches what was actually used/generated
+                    let info_state = app.state::<bridge::DaemonInfoState>();
+                    info_state.0.lock().unwrap().token = token;
                 }
                 Err(err) => {
                     log::error!("daemon sidecar failed to start: {err}");

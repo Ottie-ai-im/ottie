@@ -12,10 +12,8 @@ import {
   useRouter,
 } from "expo-router";
 import {
-  createContext,
   type ReactNode,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -104,19 +102,13 @@ import {
 import { resolveWorkspaceIdByExecutionDirectory } from "@/utils/workspace-execution";
 import { prepareWorkspaceTab } from "@/utils/workspace-navigation";
 
+import {
+  HostRuntimeBootstrapContext,
+  type HostRuntimeBootstrapState,
+  useStoreReady,
+} from "@/contexts/host-runtime-bootstrap-context";
+
 polyfillCrypto();
-
-export interface HostRuntimeBootstrapState {
-  phase: "starting-daemon" | "connecting" | "online" | "error";
-  error: string | null;
-  retry: () => void;
-}
-
-const HostRuntimeBootstrapContext = createContext<HostRuntimeBootstrapState>({
-  phase: "starting-daemon",
-  error: null,
-  retry: () => {},
-});
 
 function PushNotificationRouter() {
   const router = useRouter();
@@ -226,6 +218,10 @@ function PushNotificationRouter() {
         | undefined;
       openNotification(data);
     };
+
+    if (isWeb) {
+      return;
+    }
 
     const subscription = Notifications.addNotificationResponseReceivedListener(openFromResponse);
 
@@ -406,14 +402,6 @@ function HostRuntimeBootstrapProvider({ children }: { children: ReactNode }) {
       {children}
     </HostRuntimeBootstrapContext.Provider>
   );
-}
-
-export function useStoreReady(): boolean {
-  return useContext(HostRuntimeBootstrapContext).phase === "online";
-}
-
-export function useHostRuntimeBootstrapState(): HostRuntimeBootstrapState {
-  return useContext(HostRuntimeBootstrapContext);
 }
 
 function QueryProvider({ children }: { children: ReactNode }) {
@@ -968,6 +956,12 @@ function RuntimeProviders({ children }: { children: ReactNode }) {
 }
 
 function RootProviders({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    if (isWeb) {
+      console.log("[OTTIE] RootProviders mount");
+    }
+  }, []);
+
   return (
     <PortalProvider>
       <SafeAreaProvider>

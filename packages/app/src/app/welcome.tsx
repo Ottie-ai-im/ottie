@@ -40,11 +40,8 @@ export default function WelcomeRoute() {
   const hosts = useHosts();
   const anyOnlineServerId = useFirstOnlineServerId(hosts.map((h) => h.serverId));
 
-  if (welcomeShown) {
-    if (anyOnlineServerId) {
-      return <Redirect href={buildHostSessionsRoute(anyOnlineServerId)} />;
-    }
-    return <Redirect href="/" />;
+  if (welcomeShown && anyOnlineServerId) {
+    return <Redirect href={buildHostSessionsRoute(anyOnlineServerId)} />;
   }
 
   return <WelcomeScreen />;

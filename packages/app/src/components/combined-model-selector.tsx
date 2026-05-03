@@ -445,7 +445,7 @@ function ProviderSearchInput({
   const { theme } = useUnistyles();
   const inputRef = useRef<TextInput>(null);
   const isMobile = useIsCompactFormFactor();
-  const InputComponent = isMobile ? BottomSheetTextInput : TextInput;
+  const InputComponent = isMobile && !platformIsWeb ? BottomSheetTextInput : TextInput;
 
   useEffect(() => {
     if (autoFocus && platformIsWeb && inputRef.current) {
@@ -488,6 +488,7 @@ function SelectorEmptyState({ isLoading, hasAnyRow }: { isLoading: boolean; hasA
     return (
       <View style={styles.emptyState}>
         <MathCurveLoader
+          brandContext="thinking"
           curve="lemniscate-bloom"
           size={56}
           color={theme.colors.foregroundMuted}

@@ -49,6 +49,7 @@ export class DaemonConnectionTestError extends Error {
 export async function buildClientConfig(
   connection: HostConnection,
   serverId?: string,
+  localToken?: string | null,
 ): Promise<DaemonClientConfig> {
   const clientId = await getOrCreateClientId();
   const localTransportFactory = createDesktopLocalDaemonTransportFactory();
@@ -76,9 +77,15 @@ export async function buildClientConfig(
   }
 
   if (connection.type === "directTcp") {
+    let url = buildDaemonWebSocketUrl(connection.endpoint);
+    if (localToken) {
+      const parsed = new URL(url);
+      parsed.searchParams.set("token", localToken);
+      url = parsed.toString();
+    }
     return {
       ...base,
-      url: buildDaemonWebSocketUrl(connection.endpoint),
+      url,
     };
   }
 
@@ -153,6 +160,7 @@ export function connectAndProbe(
 interface ProbeOptions {
   serverId?: string;
   timeoutMs?: number;
+  localToken?: string | null;
 }
 
 function resolveTimeout(connection: HostConnection, options?: ProbeOptions): number {
@@ -164,6 +172,6 @@ export async function connectToDaemon(
   connection: HostConnection,
   options?: ProbeOptions,
 ): Promise<{ client: DaemonClient; serverId: string; hostname: string | null }> {
-  const config = await buildClientConfig(connection, options?.serverId);
+  const config = await buildClientConfig(connection, options?.serverId, options?.localToken);
   return connectAndProbe(config, resolveTimeout(connection, options));
 }

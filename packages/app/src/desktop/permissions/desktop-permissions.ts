@@ -45,7 +45,7 @@ interface NavigatorLike {
 }
 
 export function shouldShowDesktopPermissionSection(): boolean {
-  return isWeb && getDesktopHost() !== null;
+  return isWeb;
 }
 
 function status(input: DesktopPermissionStatus): DesktopPermissionStatus {

@@ -61,9 +61,6 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.spacing[6],
     zIndex: OVERLAY_Z.modal,
     pointerEvents: "auto" as const,
-    // Web-only: blur the page behind the modal so the dialog reads as
-    // a true glass surface floating over the workspace.
-    ...(isWeb ? ({ backdropFilter: "blur(28px) saturate(160%)" } as unknown as object) : {}),
   },
   desktopCard: {
     width: "100%",
@@ -71,6 +68,7 @@ const styles = StyleSheet.create((theme) => ({
     maxHeight: "85%",
     flexShrink: 1,
     minHeight: 0,
+    overflow: "hidden",
   },
   header: {
     paddingHorizontal: theme.spacing[6],
@@ -213,7 +211,7 @@ export function AdaptiveModalSheet({
     return pushEscHandler(onClose);
   }, [visible, isMobile, onClose]);
 
-  if (isMobile) {
+  if (isMobile && !isWeb) {
     return (
       <IsolatedBottomSheetModal
         ref={sheetRef}
@@ -330,7 +328,7 @@ export const AdaptiveTextInput = forwardRef<TextInput, TextInputProps>(
   function AdaptiveTextInput(props, ref) {
     const isMobile = useIsCompactFormFactor();
 
-    if (isMobile) {
+    if (isMobile && !isWeb) {
       return <BottomSheetTextInput ref={ref as unknown as Ref<never>} {...props} />;
     }
 

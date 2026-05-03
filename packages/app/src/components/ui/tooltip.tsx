@@ -405,8 +405,12 @@ export function TooltipTrigger({
       onFocus: composeEventHandlers(childProps.onFocus as never, handleFocus),
       onBlur: composeEventHandlers(childProps.onBlur as never, handleBlur),
       onPress: composeEventHandlers(childProps.onPress as never, handlePress),
-      onPointerEnter: composeEventHandlers(childProps.onPointerEnter as never, handleHoverIn),
-      onPointerLeave: composeEventHandlers(childProps.onPointerLeave as never, handleHoverOut),
+      onPointerEnter: isWeb
+        ? composeEventHandlers(childProps.onPointerEnter as never, handleHoverIn)
+        : undefined,
+      onPointerLeave: isWeb
+        ? composeEventHandlers(childProps.onPointerLeave as never, handleHoverOut)
+        : undefined,
     } as Record<string, unknown>;
 
     const existingRefProp = childProps[triggerRefProp] as Ref<View | null> | undefined;

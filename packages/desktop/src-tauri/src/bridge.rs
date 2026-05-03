@@ -36,6 +36,7 @@ pub fn ottie_get_pending_open_project(state: State<'_, PendingOpenProject>) -> O
 pub struct DaemonInfo {
     pub listen: String,
     pub home: String,
+    pub token: String,
 }
 
 pub struct DaemonInfoState(pub Mutex<DaemonInfo>);
@@ -155,6 +156,7 @@ fn daemon_status_value(info: &DaemonInfo) -> Value {
         "hostname": "localhost",
         "pid": null,
         "home": info.home,
+        "token": info.token,
         "version": null,
         "desktopManaged": true,
         "error": null,

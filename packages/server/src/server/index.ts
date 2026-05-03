@@ -5,6 +5,7 @@ import { createRootLogger } from "./logger.js";
 import { loadPersistedConfig } from "./persisted-config.js";
 import { acquirePidLock, PidLockError, releasePidLock, updatePidLock } from "./pid-lock.js";
 import type { DaemonLifecycleIntent } from "./bootstrap.js";
+import { fixPathEnv } from "../utils/fix-path.js";
 
 type SupervisorLifecycleMessage =
   | {
@@ -22,6 +23,9 @@ interface BootstrapResult {
 }
 
 function bootstrapFromEnvironment(): BootstrapResult {
+  // Ensure PATH is fixed on macOS before we start resolving config or logger.
+  fixPathEnv();
+
   try {
     const ottieHome = resolveOttieHome();
     const persistedConfig = loadPersistedConfig(ottieHome);

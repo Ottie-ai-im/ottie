@@ -196,16 +196,7 @@ export function ProjectPickerModal() {
     return () => window.removeEventListener("keydown", handler, true);
   }, [activeIndex, handleSelectPath, handleSubmitCustom, open, options, query, setOpen]);
 
-  const panelStyle = useMemo(
-    () => [
-      styles.panel,
-      {
-        borderColor: theme.colors.borderGlass,
-        backgroundColor: theme.colors.surfaceGlassStrong,
-      },
-    ],
-    [theme.colors.borderGlass, theme.colors.surfaceGlassStrong],
-  );
+  const panelStyle = useMemo(() => [styles.panel], []);
   const headerStyle = useMemo(
     () => [styles.header, { borderBottomColor: theme.colors.borderGlass }],
     [theme.colors.borderGlass],

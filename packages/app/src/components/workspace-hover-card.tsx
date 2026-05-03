@@ -22,7 +22,7 @@ import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list"
 import { isWeb } from "@/constants/platform";
 import type { PrHint } from "@/hooks/use-checkout-pr-status-query";
 import { openExternalUrl } from "@/utils/open-external-url";
-import { PrBadge } from "@/components/sidebar-workspace-list";
+import { PrBadge } from "./sidebar/pr-badge";
 import { useHoverSafeZone } from "@/hooks/use-hover-safe-zone";
 
 interface Rect {

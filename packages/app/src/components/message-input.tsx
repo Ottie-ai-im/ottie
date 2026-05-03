@@ -4,6 +4,7 @@ import {
   TextInput,
   Platform,
   Pressable,
+  ActivityIndicator,
   StyleSheet as RNStyleSheet,
   NativeSyntheticEvent,
   TextInputContentSizeChangeEventData,
@@ -11,7 +12,6 @@ import {
   TextInputSelectionChangeEventData,
 } from "react-native";
 import { BlurView } from "expo-blur";
-import { MathCurveLoader } from "@/components/math-curve-loader";
 import {
   useState,
   useRef,
@@ -425,19 +425,14 @@ function SendTooltipBody({
 function SendButtonContent({
   isSubmitLoading,
   submitIcon,
-  buttonIconSize,
+  buttonIconSize: _buttonIconSize,
 }: {
   isSubmitLoading: boolean;
   submitIcon: "arrow" | "return";
   buttonIconSize: number;
 }) {
   if (isSubmitLoading) {
-    // Rose Three breathes inside a 100×100 viewBox, but the actual petals span
-    // only ~60% of it. Bump the rendered size so the rose reads as a rose at
-    // button scale rather than a dot — the button has padding around the icon
-    // so a slight overflow is fine.
-    const loaderSize = Math.round(buttonIconSize * 1.6);
-    return <MathCurveLoader curve="rose-three" size={loaderSize} color="white" />;
+    return <ActivityIndicator size="small" color="white" />;
   }
   if (submitIcon === "return") {
     return <CornerDownLeft size={buttonIconSize} color="white" />;

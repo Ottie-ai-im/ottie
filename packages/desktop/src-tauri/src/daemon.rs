@@ -24,7 +24,7 @@ use tauri_plugin_shell::ShellExt;
 /// The write completes synchronously before this function returns, so `spawn()`
 /// can call `ensure_local_token()?` ahead of `.spawn()` and the daemon is
 /// guaranteed to see the file on boot. Race is impossible by ordering.
-fn ensure_local_token() -> Result<(), String> {
+pub fn ensure_local_token() -> Result<String, String> {
     let home = std::env::var("OTTIE_HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
@@ -35,7 +35,7 @@ fn ensure_local_token() -> Result<(), String> {
     std::fs::create_dir_all(&home).map_err(|e| format!("create OTTIE_HOME: {e}"))?;
     let token_path = home.join("local-token");
     if token_path.exists() {
-        return Ok(());
+        return std::fs::read_to_string(&token_path).map_err(|e| format!("read token: {e}"));
     }
     let mut buf = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut buf);
@@ -62,7 +62,7 @@ fn ensure_local_token() -> Result<(), String> {
         // <code_context> Windows ACL note.
         std::fs::write(&token_path, &token).map_err(|e| format!("write token: {e}"))?;
     }
-    Ok(())
+    Ok(token)
 }
 
 pub struct DaemonHandle {
@@ -83,11 +83,11 @@ impl DaemonHandle {
     }
 }
 
-pub fn spawn<R: Runtime>(app: &AppHandle<R>) -> Result<DaemonHandle, String> {
+pub fn spawn<R: Runtime>(app: &AppHandle<R>) -> Result<(DaemonHandle, String), String> {
     // ARCH-03 (D-15): write the local-daemon auth token before spawning the
     // daemon. The synchronous write completes before .spawn() returns, so the
     // daemon is guaranteed to see the file on boot. Race-free by ordering.
-    ensure_local_token()?;
+    let token = ensure_local_token()?;
 
     // Origins the renderer can connect from. In dev the renderer is served
     // by Expo at http://localhost:8081; in packaged builds Tauri's webview
@@ -144,5 +144,5 @@ pub fn spawn<R: Runtime>(app: &AppHandle<R>) -> Result<DaemonHandle, String> {
         }
     });
 
-    Ok(DaemonHandle { child })
+    Ok((DaemonHandle { child }, token))
 }

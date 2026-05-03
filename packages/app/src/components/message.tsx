@@ -2288,7 +2288,14 @@ function resolveExpandableBadgeIconColor({
 // than a plain CLI spinner.
 function ThinkingIconSlot() {
   const { theme } = useUnistyles();
-  return <MathCurveLoader curve="lissajous-drift" size={18} color={theme.colors.accent} />;
+  return (
+    <MathCurveLoader
+      brandContext="thinking"
+      curve="lissajous-drift"
+      size={18}
+      color={theme.colors.accent}
+    />
+  );
 }
 
 function renderExpandableBadgeIcon({

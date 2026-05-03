@@ -101,6 +101,24 @@ pnpm dev:app      # Expo Metro bundler (web + native)
 pnpm dev          # daemon + Expo together in tmux
 ```
 
+## Build & Release
+
+### Web App
+To build and deploy the web application:
+```bash
+cd packages/app
+pnpm run build:web    # Local production build
+pnpm run deploy:web   # Build and deploy to Cloudflare Pages
+```
+
+### Desktop App (macOS)
+To build the signed macOS DMG:
+```bash
+cd packages/desktop
+pnpm run build        # Automates web build, sidecar bundling, and DMG packaging
+```
+The resulting DMG will be located at `packages/desktop/src-tauri/target/release/bundle/dmg/`.
+
 Stop everything:
 
 ```bash

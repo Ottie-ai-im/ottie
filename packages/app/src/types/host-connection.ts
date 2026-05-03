@@ -4,6 +4,7 @@ export interface DirectTcpHostConnection {
   id: string;
   type: "directTcp";
   endpoint: string;
+  localToken?: string | null;
 }
 
 export interface DirectSocketHostConnection {
@@ -58,7 +59,7 @@ function hostConnectionEquals(left: HostConnection, right: HostConnection): bool
   }
 
   if (left.type === "directTcp" && right.type === "directTcp") {
-    return left.endpoint === right.endpoint;
+    return left.endpoint === right.endpoint && left.localToken === right.localToken;
   }
   if (left.type === "directSocket" && right.type === "directSocket") {
     return left.path === right.path;
@@ -238,7 +239,11 @@ function normalizeStoredConnection(connection: unknown): HostConnection | null {
       const endpoint = normalizeLoopbackToLocalhost(
         normalizeHostPort(String(record.endpoint ?? "")),
       );
-      return { id: `direct:${endpoint}`, type: "directTcp", endpoint };
+      const localToken =
+        typeof record.localToken === "string" && record.localToken.length > 0
+          ? record.localToken
+          : undefined;
+      return { id: `direct:${endpoint}`, type: "directTcp", endpoint, localToken };
     } catch {
       return null;
     }
