@@ -45,11 +45,9 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
-  ExternalLink,
   Folder,
   FolderPlus,
   FolderGit2,
-  GitPullRequest,
   Globe,
   SquareTerminal,
   Monitor,
@@ -116,12 +114,11 @@ import {
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
 import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-archive-redirect";
-import { openExternalUrl } from "@/utils/open-external-url";
 import {
   requireWorkspaceExecutionDirectory,
   resolveWorkspaceExecutionDirectory,
 } from "@/utils/workspace-execution";
-import { PrBadge, getWorkspacePrIconColor } from "./sidebar/pr-badge";
+import { PrBadge } from "./sidebar/pr-badge";
 import { SidebarWorkspaceAiProviderLogo } from "./sidebar-workspace-ai-provider-logo";
 import { WorkspaceHoverCard } from "@/components/workspace-hover-card";
 import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";

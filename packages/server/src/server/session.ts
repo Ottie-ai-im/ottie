@@ -8833,12 +8833,20 @@ export class Session {
           { agentId: target.agentId, scheduleId: schedule.id },
           "Schedule created for agent, dispatching update",
         );
-        void this.dispatchAgentUpdate(target.agentId).then(() => {
-          this.sessionLogger.info(
-            { agentId: target.agentId, scheduleId: schedule.id },
-            "Agent update dispatched",
-          );
-        });
+        void this.dispatchAgentUpdate(target.agentId)
+          .then(() => {
+            this.sessionLogger.info(
+              { agentId: target.agentId, scheduleId: schedule.id },
+              "Agent update dispatched",
+            );
+            return undefined;
+          })
+          .catch((err: unknown) => {
+            this.sessionLogger.warn(
+              { agentId: target.agentId, scheduleId: schedule.id, err },
+              "Failed to dispatch agent update after schedule create",
+            );
+          });
       }
     } catch (error) {
       this.emitScheduleRpcError(request, error);

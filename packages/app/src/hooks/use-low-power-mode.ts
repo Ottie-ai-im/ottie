@@ -19,6 +19,7 @@ export function useLowPowerMode(): boolean {
     Battery.isLowPowerModeEnabledAsync()
       .then((enabled) => {
         if (!cancelled) setIsLowPower(enabled);
+        return undefined;
       })
       .catch(() => {
         // Fallback if the native module fails

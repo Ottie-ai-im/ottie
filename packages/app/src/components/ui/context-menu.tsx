@@ -29,7 +29,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, { FadeIn, FadeOut, createAnimatedComponent } from "react-native-reanimated";
+import { FadeIn, FadeOut, createAnimatedComponent } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { Check, CheckCircle } from "lucide-react-native";

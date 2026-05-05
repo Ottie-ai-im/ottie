@@ -1,5 +1,5 @@
-import { useMemo, useCallback } from "react";
-import { View, Text, StyleSheet as RNStyleSheet, Pressable } from "react-native";
+import { useMemo } from "react";
+import { View, Text } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useDraggable } from "@dnd-kit/core";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";

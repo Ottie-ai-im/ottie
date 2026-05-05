@@ -1,5 +1,3 @@
-import { useMemo } from "react";
-import { View } from "react-native";
 import { useUnistyles } from "react-native-unistyles";
 import { useSessionStore } from "@/stores/session-store";
 import { normalizeWorkspacePath } from "@/utils/workspace-identity";

@@ -1,7 +1,7 @@
 import { forwardRef, useCallback, useEffect, useMemo } from "react";
 import type { ReactNode, Ref } from "react";
 import { createPortal } from "react-dom";
-import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { TextInputProps } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";

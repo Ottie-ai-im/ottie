@@ -26,7 +26,7 @@ import {
 } from "react-native";
 import { Portal } from "@gorhom/portal";
 import { useBottomSheetModalInternal } from "@gorhom/bottom-sheet";
-import Animated, { FadeIn, FadeOut, createAnimatedComponent } from "react-native-reanimated";
+import { FadeIn, FadeOut, createAnimatedComponent } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";

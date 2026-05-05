@@ -33,7 +33,6 @@ import {
   Plus,
   Square,
   Clock,
-  Calendar,
   ChevronRight,
 } from "lucide-react-native";
 import { format, addDays, setHours, setMinutes } from "date-fns";
@@ -61,7 +60,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { ChevronLeft } from "lucide-react-native";
 import { useWebElementScrollbar } from "@/components/use-web-scrollbar";

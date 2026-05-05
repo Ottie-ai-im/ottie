@@ -46,9 +46,12 @@ if (!i18n.isInitialized) {
 
   // Pull persisted language out of AsyncStorage and switch if it's set
   // and supported.
-  void AsyncStorage.getItem(LANGUAGE_STORAGE_KEY).then((stored) => {
-    if (stored && (SUPPORTED_LANGUAGES as readonly string[]).includes(stored)) {
-      void i18n.changeLanguage(stored);
-    }
-  });
+  void AsyncStorage.getItem(LANGUAGE_STORAGE_KEY)
+    .then((stored) => {
+      if (stored && (SUPPORTED_LANGUAGES as readonly string[]).includes(stored)) {
+        void i18n.changeLanguage(stored);
+      }
+      return undefined;
+    })
+    .catch(() => undefined);
 }

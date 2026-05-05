@@ -38,7 +38,7 @@ import {
   shouldShowCustomComboboxOption,
 } from "./combobox-options";
 import type { ComboboxOptionModel } from "./combobox-options";
-import { isNative, isWeb } from "@/constants/platform";
+import { isWeb } from "@/constants/platform";
 import { GlassSurface } from "./glass-surface";
 import {
   IsolatedBottomSheetModal,

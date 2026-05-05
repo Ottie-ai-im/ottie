@@ -25,7 +25,7 @@ import {
   type ViewStyle,
   type StyleProp,
 } from "react-native";
-import Animated, { Keyframe, runOnJS, createAnimatedComponent } from "react-native-reanimated";
+import { Keyframe, runOnJS, createAnimatedComponent } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Check, CheckCircle } from "lucide-react-native";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
