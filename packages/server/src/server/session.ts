@@ -623,6 +623,18 @@ export interface SessionOptions {
   logger: pino.Logger;
   downloadTokenStore: DownloadTokenStore;
   pushTokenStore: PushTokenStore;
+  /**
+   * Optional push service for sending notifications. Supplied by
+   * websocket-server. Used by handlers that need to notify the user
+   * out-of-band (e.g. OpenClaw assistant replies that arrive while
+   * the user has navigated away from the Assistants tab).
+   */
+  pushService?: {
+    sendPush: (
+      tokens: string[],
+      payload: { title: string; body: string; data?: Record<string, unknown> },
+    ) => Promise<void>;
+  };
   ottieHome: string;
   agentManager: AgentManager;
   agentStorage: AgentStorage;
@@ -826,6 +838,14 @@ export class Session {
   private readonly mcpBaseUrl: string | null;
   private readonly downloadTokenStore: DownloadTokenStore;
   private readonly pushTokenStore: PushTokenStore;
+  private readonly pushService:
+    | {
+        sendPush: (
+          tokens: string[],
+          payload: { title: string; body: string; data?: Record<string, unknown> },
+        ) => Promise<void>;
+      }
+    | undefined;
   private readonly providerRegistry: ReturnType<typeof buildProviderRegistry>;
   private unsubscribeAgentEvents: (() => void) | null = null;
   private agentUpdatesSubscription: AgentUpdatesSubscriptionState | null = null;
@@ -902,6 +922,7 @@ export class Session {
       logger,
       downloadTokenStore,
       pushTokenStore,
+      pushService,
       ottieHome,
       agentManager,
       agentStorage,
@@ -944,6 +965,7 @@ export class Session {
     this.onLifecycleIntent = onLifecycleIntent ?? null;
     this.downloadTokenStore = downloadTokenStore;
     this.pushTokenStore = pushTokenStore;
+    this.pushService = pushService;
     this.ottieHome = ottieHome;
     this.sessionLogger = logger.child({
       module: "session",
@@ -9098,6 +9120,23 @@ export class Session {
     }
   }
 
+  private notifyOpenclawReply(args: { requestText: string; reply: string }): void {
+    if (!this.pushService) return;
+    const tokens = this.pushTokenStore.getAllTokens();
+    if (tokens.length === 0) return;
+    // Truncate so iOS / Android notification banners stay readable.
+    const body = args.reply.slice(0, 140) + (args.reply.length > 140 ? "…" : "");
+    void this.pushService
+      .sendPush(tokens, {
+        title: "OpenClaw replied",
+        body: body || "(empty reply)",
+        data: { kind: "openclaw_reply", preview: args.requestText.slice(0, 80) },
+      })
+      .catch((err) => {
+        this.sessionLogger.warn({ err }, "openclaw push notification failed");
+      });
+  }
+
   private async handleOpenclawListAgentsRequest(
     request: Extract<SessionInboundMessage, { type: "openclaw/agents/list" }>,
   ): Promise<void> {
@@ -9164,6 +9203,11 @@ export class Session {
         type: "openclaw/chat/send/response",
         payload: { requestId: request.requestId, reply: result.reply, error: null },
       });
+      // Fire-and-forget push notification so the user gets pinged on
+      // their phone / desktop when an OpenClaw reply arrives. We don't
+      // await — the WS response above is the primary delivery channel,
+      // pushes are a courtesy.
+      this.notifyOpenclawReply({ requestText: request.text, reply: result.reply });
     } catch (error) {
       this.sessionLogger.error(
         { requestId: request.requestId, err: error },

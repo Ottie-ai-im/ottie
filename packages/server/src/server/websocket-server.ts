@@ -907,6 +907,7 @@ export class VoiceAssistantWebSocketServer {
       logger: connectionLogger.child({ module: "session" }),
       downloadTokenStore: this.downloadTokenStore,
       pushTokenStore: this.pushTokenStore,
+      pushService: this.pushService,
       ottieHome: this.ottieHome,
       agentManager: this.agentManager,
       agentStorage: this.agentStorage,

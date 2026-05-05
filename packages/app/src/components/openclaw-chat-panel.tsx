@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,88 +12,120 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Send } from "lucide-react-native";
 
-import { useOpenclawAgents, useOpenclawSend } from "@/hooks/use-openclaw-chat";
-
-interface ChatTurn {
-  id: string;
-  role: "user" | "assistant" | "error";
-  text: string;
-  ts: number;
-}
+import { useOpenclawAgents } from "@/hooks/use-openclaw-chat";
+import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import {
+  useOpenclawChatStore,
+  selectConversation,
+  type OpenclawTurn,
+} from "@/stores/openclaw-chat-store";
 
 export interface OpenclawChatPanelProps {
   serverId: string | null;
 }
 
 /**
- * Native Ottie chat panel for OpenClaw — drop-in replacement for the
- * iframe wrapper. Renders a message log + composer at the bottom and
- * an agent picker at the top. Talks to OpenClaw via the daemon
- * (sendOpenclawMessage), so the user can type in Ottie and the
- * request goes daemon → http://127.0.0.1:18789/api/sessions/main/messages.
+ * Native Ottie chat panel for OpenClaw. Differs from the trivial
+ * request-response version in two ways:
  *
- * Conversation history is in-memory only for this mount — OpenClaw's
- * own gateway holds the real session state, this panel just shows the
- * round trip.
+ *  1. Conversation state lives in `useOpenclawChatStore` (Zustand +
+ *     AsyncStorage). Switching tabs unmounts this component but the
+ *     turns survive — when the user navigates back the log is still
+ *     there.
+ *
+ *  2. The send mutation is dispatched against the *daemon client*
+ *     directly (not a TanStack mutation tied to the component
+ *     lifecycle), and onResolve writes to the store. So even if the
+ *     user navigates away while OpenClaw is thinking, the eventual
+ *     reply still lands in the store and shows up next time the
+ *     panel mounts. Server-side push notifications (added in the
+ *     same commit) cover the "wake the user up" case.
  */
 export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const { agents } = useOpenclawAgents(serverId, true);
-  const { send, isPending, lastError } = useOpenclawSend(serverId);
+  const client = useHostRuntimeClient(serverId ?? "");
 
-  const [agentId, setAgentId] = useState<string | null>(null);
+  const conversation = useOpenclawChatStore((s) => selectConversation(s, serverId ?? ""));
+  const appendTurn = useOpenclawChatStore((s) => s.appendTurn);
+  const setPending = useOpenclawChatStore((s) => s.setPending);
+  const setSelectedAgent = useOpenclawChatStore((s) => s.setSelectedAgent);
+  const turns = conversation.turns;
+  const isPending = conversation.pending !== null;
+  const agentId = conversation.selectedAgentId;
+
   const [draft, setDraft] = useState("");
-  const [turns, setTurns] = useState<ChatTurn[]>([]);
   const scrollRef = useRef<ScrollView | null>(null);
+
+  const setAgentId = useCallback(
+    (id: string | null) => {
+      if (!serverId) return;
+      setSelectedAgent(serverId, id);
+    },
+    [serverId, setSelectedAgent],
+  );
 
   const onSend = useCallback(async () => {
     const text = draft.trim();
-    if (!text || isPending) return;
-    const userTurn: ChatTurn = {
+    if (!text || !serverId || !client || isPending) return;
+    const requestId = `oc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const userTurn: OpenclawTurn = {
       id: `u-${Date.now()}`,
       role: "user",
       text,
       ts: Date.now(),
     };
-    setTurns((prev) => [...prev, userTurn]);
+    appendTurn(serverId, userTurn);
+    setPending(serverId, { id: requestId, agentId, startedAt: Date.now() });
     setDraft("");
-    try {
-      const result = await send({ text, agentId });
-      setTurns((prev) => [
-        ...prev,
-        {
+
+    // Fire-and-forget: dispatch the send against the long-lived
+    // daemon client. The promise can resolve after this component
+    // unmounts; appendTurn writes to the global store, which is
+    // observed by whichever component (this one or a remount) is
+    // showing the conversation.
+    client
+      .sendOpenclawMessage({ text, agentId, requestId })
+      .then((result) => {
+        appendTurn(serverId, {
           id: `a-${Date.now()}`,
           role: "assistant",
           text: result.reply || "(empty reply)",
           ts: Date.now(),
-        },
-      ]);
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err);
-      // Common failure: the daemon you're talking to predates the
-      // openclaw/chat/send schema. Surface a more actionable message
-      // alongside the raw daemon response so the user knows to update.
-      const friendly =
-        raw.toLowerCase().includes("unknown request schema") ||
-        raw.toLowerCase().includes("unknown_schema")
-          ? `${raw}\n\nTip: your Ottie daemon is older than this client and doesn't know about openclaw/chat/send. Restart the daemon (or run "pnpm build:daemon" if you're in a dev checkout) to pick up the new RPC.`
-          : raw;
-      console.error("[openclaw-chat-panel] send failed", err);
-      setTurns((prev) => [
-        ...prev,
-        {
+        });
+      })
+      .catch((err: unknown) => {
+        const raw = err instanceof Error ? err.message : String(err);
+        const friendly =
+          raw.toLowerCase().includes("unknown request schema") ||
+          raw.toLowerCase().includes("unknown_schema")
+            ? `${raw}\n\nTip: your Ottie daemon is older than this client and doesn't know about openclaw/chat/send. Restart the daemon (or run "pnpm build:daemon" if you're in a dev checkout) to pick up the new RPC.`
+            : raw;
+        console.error("[openclaw-chat-panel] send failed", err);
+        appendTurn(serverId, {
           id: `e-${Date.now()}`,
           role: "error",
           text: friendly,
           ts: Date.now(),
-        },
-      ]);
-    }
+        });
+      })
+      .finally(() => {
+        setPending(serverId, null);
+      });
+
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
     });
-  }, [draft, isPending, send, agentId]);
+  }, [draft, serverId, client, isPending, appendTurn, setPending, agentId]);
+
+  // Auto-scroll when new turns arrive (covers the case where reply
+  // lands while the panel is mounted).
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+  }, [turns.length]);
 
   const agentChips = useMemo(() => {
     const items: Array<{ id: string | null; label: string }> = [
@@ -174,7 +206,6 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
             </Text>
           </View>
         ) : null}
-        {lastError && !isPending ? <Text style={styles.bottomError}>{lastError}</Text> : null}
       </ScrollView>
 
       <View style={styles.composer}>
