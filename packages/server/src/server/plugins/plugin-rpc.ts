@@ -23,6 +23,7 @@ export function registerPluginHandlers(
           author: p.author,
           platforms: Array.from(p.platforms),
           status: p.status,
+          enabled: p.enabled,
           companionApp: p.companionApp,
         };
       });
@@ -79,7 +80,9 @@ export function registerPluginHandlers(
 
   router.register("plugin_uninstall_request", async (msg) => {
     if (msg.type !== "plugin_uninstall_request") return;
-    const result = await installer.uninstall(msg.pluginId);
+    const result = await installer.uninstall(msg.pluginId, {
+      removeCompanion: msg.removeCompanion ?? false,
+    });
     emit({
       type: "plugin_uninstall_response",
       payload: {
@@ -103,5 +106,45 @@ export function registerPluginHandlers(
         error: result.error,
       },
     });
+  });
+
+  router.register("plugin_set_enabled_request", async (msg) => {
+    if (msg.type !== "plugin_set_enabled_request") return;
+    const result = await installer.setEnabled(msg.pluginId, msg.enabled);
+    emit({
+      type: "plugin_set_enabled_response",
+      payload: {
+        requestId: msg.requestId,
+        pluginId: result.pluginId,
+        success: result.success,
+        enabled: result.enabled,
+        error: result.error,
+      },
+    });
+  });
+
+  router.register("plugin_refresh_catalog_request", async (msg) => {
+    if (msg.type !== "plugin_refresh_catalog_request") return;
+    try {
+      const refreshed = await installer.refreshRemoteCatalog();
+      emit({
+        type: "plugin_refresh_catalog_response",
+        payload: {
+          requestId: msg.requestId,
+          success: true,
+          refreshed: refreshed.refreshed,
+          count: refreshed.count,
+        },
+      });
+    } catch (err) {
+      emit({
+        type: "plugin_refresh_catalog_response",
+        payload: {
+          requestId: msg.requestId,
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
   });
 }

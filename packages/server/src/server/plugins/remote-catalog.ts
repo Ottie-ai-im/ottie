@@ -260,11 +260,17 @@ export async function readCachedCatalog(ottieHome: string): Promise<PluginCatalo
   try {
     const data = await fs.readFile(file, "utf-8");
     const parsed = CachedCatalogSchema.parse(JSON.parse(data));
-    return parsed.entries.map((entry) => ({
-      ...entry,
-      platforms: entry.platforms as readonly PluginPlatform[],
-      companionApp: entry.companionApp,
-    }));
+    return parsed.entries.map(
+      (entry): PluginCatalogEntry => ({
+        id: entry.id,
+        name: entry.name,
+        description: entry.description,
+        author: entry.author,
+        platforms: entry.platforms as readonly PluginPlatform[],
+        bridgeSource: entry.bridgeSource,
+        companionApp: entry.companionApp,
+      }),
+    );
   } catch {
     return null;
   }
@@ -279,8 +285,13 @@ export async function writeCachedCatalog(
     version: 1,
     fetchedAt: new Date().toISOString(),
     entries: entries.map((entry) => ({
-      ...entry,
+      id: entry.id,
+      name: entry.name,
+      description: entry.description,
+      author: entry.author,
       platforms: Array.from(entry.platforms) as PluginPlatform[],
+      bridgeSource: entry.bridgeSource,
+      companionApp: entry.companionApp,
     })),
   };
   await fs.mkdir(path.dirname(file), { recursive: true });

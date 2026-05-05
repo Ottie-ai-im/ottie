@@ -6,10 +6,10 @@
 // and "Show in Finder" actions. Incompatible / not-installed entries are
 // hidden — the discovery UI for those is the Extensions tab.
 
-import { useCallback } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { useCallback, useMemo } from "react";
+import { ActivityIndicator, Pressable, Switch, Text, View } from "react-native";
 import * as Linking from "expo-linking";
-import { FolderOpen, RefreshCw, Trash2 } from "lucide-react-native";
+import { CloudDownload, FolderOpen, RefreshCw, Trash2 } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,6 +24,7 @@ interface InstalledPluginRow {
   name: string;
   author?: string;
   status: string;
+  enabled: boolean;
   companionPath?: string;
 }
 
@@ -52,6 +53,7 @@ export function ExtensionsSection() {
           name: p.name ?? p.id,
           author: p.author,
           status: p.status ?? "installed",
+          enabled: p.enabled ?? true,
           companionPath: p.companionApp?.path,
         }));
     },
@@ -96,6 +98,47 @@ export function ExtensionsSection() {
     },
   });
 
+  const setEnabledMutation = useMutation({
+    mutationFn: async (input: { pluginId: string; enabled: boolean }) => {
+      if (!client) throw new Error("Daemon not connected");
+      return client.setPluginEnabled(input.pluginId, input.enabled);
+    },
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error ?? "Toggle failed");
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: PLUGIN_QUERY_KEY });
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : String(err));
+    },
+  });
+
+  const refreshCatalogMutation = useMutation({
+    mutationFn: async () => {
+      if (!client) throw new Error("Daemon not connected");
+      return client.refreshPluginCatalog();
+    },
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error ?? "Catalog refresh failed");
+        return;
+      }
+      if (result.refreshed) {
+        toast.show(t("settings.extensions.refreshed", { count: result.count ?? 0 }), {
+          variant: "success",
+        });
+      } else {
+        toast.show(t("settings.extensions.refreshNotConfigured"));
+      }
+      void queryClient.invalidateQueries({ queryKey: PLUGIN_QUERY_KEY });
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : String(err));
+    },
+  });
+
   const handleReinstall = useCallback(
     (pluginId: string) => reinstallMutation.mutate(pluginId),
     [reinstallMutation],
@@ -108,6 +151,14 @@ export function ExtensionsSection() {
     if (!companionPath) return;
     await Linking.openURL(`file://${companionPath}`);
   }, []);
+  const handleSetEnabled = useCallback(
+    (pluginId: string, enabled: boolean) => setEnabledMutation.mutate({ pluginId, enabled }),
+    [setEnabledMutation],
+  );
+  const handleRefreshCatalog = useCallback(
+    () => refreshCatalogMutation.mutate(),
+    [refreshCatalogMutation],
+  );
 
   let body: React.ReactNode;
   if (!isConnected) {
@@ -135,34 +186,89 @@ export function ExtensionsSection() {
             row={row}
             isReinstalling={reinstallMutation.isPending && reinstallMutation.variables === row.id}
             isUninstalling={uninstallMutation.isPending && uninstallMutation.variables === row.id}
+            isToggling={
+              setEnabledMutation.isPending && setEnabledMutation.variables?.pluginId === row.id
+            }
             onReinstall={handleReinstall}
             onUninstall={handleUninstall}
             onRevealInFinder={handleRevealInFinder}
+            onSetEnabled={handleSetEnabled}
           />
         ))}
       </View>
     );
   }
 
-  return <SettingsSection title={t("settings.extensions.title")}>{body}</SettingsSection>;
+  const refreshTrailing = useMemo(
+    () => (
+      <RefreshCatalogButton
+        isPending={refreshCatalogMutation.isPending}
+        isConnected={isConnected}
+        label={t("settings.extensions.refreshCatalog")}
+        onPress={handleRefreshCatalog}
+      />
+    ),
+    [refreshCatalogMutation.isPending, isConnected, t, handleRefreshCatalog],
+  );
+
+  return (
+    <SettingsSection title={t("settings.extensions.title")} trailing={refreshTrailing}>
+      {body}
+    </SettingsSection>
+  );
+}
+
+interface RefreshCatalogButtonProps {
+  isPending: boolean;
+  isConnected: boolean;
+  label: string;
+  onPress: () => void;
+}
+
+function RefreshCatalogButton({
+  isPending,
+  isConnected,
+  label,
+  onPress,
+}: RefreshCatalogButtonProps) {
+  const { theme } = useUnistyles();
+  return (
+    <Pressable
+      style={styles.refreshButton}
+      disabled={isPending || !isConnected}
+      onPress={onPress}
+      accessibilityRole="button"
+    >
+      {isPending ? (
+        <ActivityIndicator size="small" color={theme.colors.foregroundMuted} />
+      ) : (
+        <CloudDownload size={14} color={theme.colors.foregroundMuted} />
+      )}
+      <Text style={styles.refreshButtonText}>{label}</Text>
+    </Pressable>
+  );
 }
 
 interface ExtensionRowProps {
   row: InstalledPluginRow;
   isReinstalling: boolean;
   isUninstalling: boolean;
+  isToggling: boolean;
   onReinstall: (pluginId: string) => void;
   onUninstall: (pluginId: string) => void;
   onRevealInFinder: (companionPath?: string) => void;
+  onSetEnabled: (pluginId: string, enabled: boolean) => void;
 }
 
 function ExtensionRow({
   row,
   isReinstalling,
   isUninstalling,
+  isToggling,
   onReinstall,
   onUninstall,
   onRevealInFinder,
+  onSetEnabled,
 }: ExtensionRowProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -172,6 +278,10 @@ function ExtensionRow({
     () => onRevealInFinder(row.companionPath),
     [onRevealInFinder, row.companionPath],
   );
+  const handleToggle = useCallback(
+    (next: boolean) => onSetEnabled(row.id, next),
+    [onSetEnabled, row.id],
+  );
 
   return (
     <View style={styles.card}>
@@ -179,7 +289,16 @@ function ExtensionRow({
         <View style={styles.cardTitleColumn}>
           <Text style={styles.cardTitle}>{row.name}</Text>
           {row.author ? <Text style={styles.cardSubtitle}>by {row.author}</Text> : null}
+          {!row.enabled ? (
+            <Text style={styles.disabledLabel}>{t("settings.extensions.disabled")}</Text>
+          ) : null}
         </View>
+        <Switch
+          value={row.enabled}
+          onValueChange={handleToggle}
+          disabled={isToggling}
+          accessibilityLabel={t("settings.extensions.enabledToggle")}
+        />
       </View>
       <View style={styles.cardActions}>
         <Pressable
@@ -283,5 +402,30 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.destructive,
+  },
+  disabledLabel: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foregroundMuted,
+    marginTop: 2,
+  },
+  refreshButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.button,
+    borderCurve: "continuous" as const,
+    backgroundColor: theme.colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+  },
+  refreshButtonText: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+    fontWeight: theme.fontWeight.medium,
   },
 }));

@@ -1,8 +1,0 @@
-9597 packages/server/src/server/session.ts
-# Baseline bumped from 9585 → 9597 by Plan 01-05 (LocalTokenService one-line registration + SessionOptions.localTokenMode field).
-# Net +12 lines: 4 lines for the import + service field + 2 constructor lines (per-plan budget),
-# plus 8 lines for the JSDoc-annotated optional `localTokenMode` field on SessionOptions and
-# the destructuring extraction. This is the minimum surface-area addition required to wire
-# the new auth surface onto the existing session-construction path. Documented exception to
-# the per-commit shrinkage rule per Plan 01-05 task 2b instructions; future Phase 3 / Phase 5
-# carves resume the shrinkage discipline from this new baseline.

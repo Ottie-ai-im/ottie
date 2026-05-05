@@ -4,6 +4,7 @@ import * as Clipboard from "expo-clipboard";
 import * as QRCode from "qrcode";
 import { useQuery } from "@tanstack/react-query";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
 import { RotateCw, Copy, Check } from "lucide-react-native";
 import { settingsStyles } from "@/styles/settings";
 import { Button } from "@/components/ui/button";
@@ -21,18 +22,19 @@ function resolvePairingViewState(args: {
   isError: boolean;
   error: unknown;
   data: { url?: string | null; relayEnabled?: boolean } | undefined;
+  t: (key: string) => string;
 }): PairingViewState {
   if (args.isPending) return { tag: "loading" };
   if (args.isError) {
     const message =
-      args.error instanceof Error ? args.error.message : "Failed to load pairing offer.";
+      args.error instanceof Error ? args.error.message : args.t("pairDevice.loadFailed");
     return { tag: "error", message };
   }
   if (!args.data?.url) {
     const message =
       args.data?.relayEnabled === false
-        ? "Relay is not enabled. Enable relay to pair a device."
-        : "Pairing offer unavailable.";
+        ? args.t("pairDevice.relayDisabled")
+        : args.t("pairDevice.unavailable");
     return { tag: "unavailable", message };
   }
   return { tag: "ready", url: args.data.url };
@@ -40,6 +42,7 @@ function resolvePairingViewState(args: {
 
 export function PairDeviceSection() {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const showSection = shouldUseDesktopDaemon();
   const [copied, setCopied] = useState(false);
 
@@ -104,6 +107,7 @@ export function PairDeviceSection() {
     isError: pairingQuery.isError,
     error: pairingQuery.error,
     data: pairingQuery.data,
+    t,
   });
 
   return (
@@ -149,12 +153,13 @@ function PairDeviceBody(props: PairDeviceBodyProps) {
     handleRefetch,
     handleCopyPress,
   } = props;
+  const { t } = useTranslation();
 
   if (viewState.tag === "loading") {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="small" />
-        <Text style={styles.hint}>Loading pairing offer…</Text>
+        <Text style={styles.hint}>{t("pairDevice.loading")}</Text>
       </View>
     );
   }
@@ -164,7 +169,7 @@ function PairDeviceBody(props: PairDeviceBodyProps) {
       <View style={styles.centered}>
         <Text style={styles.hint}>{viewState.message}</Text>
         <Button variant="outline" size="sm" leftIcon={retryIcon} onPress={handleRefetch}>
-          Retry
+          {t("pairDevice.retry")}
         </Button>
       </View>
     );
@@ -172,9 +177,7 @@ function PairDeviceBody(props: PairDeviceBodyProps) {
 
   return (
     <View style={styles.content}>
-      <Text style={styles.hint}>
-        Scan this QR code with Ottie on your phone, or copy the link below.
-      </Text>
+      <Text style={styles.hint}>{t("pairDevice.scanHint")}</Text>
       <View style={styles.qrContainer}>
         <PairDeviceQrContent qrImageSource={qrImageSource} qrQuery={qrQuery} />
       </View>
@@ -189,7 +192,7 @@ function PairDeviceBody(props: PairDeviceBodyProps) {
           />
         </View>
         <Button variant="outline" size="sm" leftIcon={copyButtonIcon} onPress={handleCopyPress}>
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("pairDevice.copied") : t("pairDevice.copy")}
         </Button>
       </View>
     </View>
@@ -200,11 +203,12 @@ function PairDeviceQrContent(props: {
   qrImageSource: { uri: string } | null;
   qrQuery: { isError: boolean };
 }) {
+  const { t } = useTranslation();
   if (props.qrImageSource) {
     return <Image source={props.qrImageSource} style={styles.qrImage} resizeMode="contain" />;
   }
   if (props.qrQuery.isError) {
-    return <Text style={styles.hint}>QR code unavailable.</Text>;
+    return <Text style={styles.hint}>{t("pairDevice.qrUnavailable")}</Text>;
   }
   return <ActivityIndicator size="small" />;
 }

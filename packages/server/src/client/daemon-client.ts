@@ -83,6 +83,11 @@ import {
   type LocalServiceStatusPayload,
   type InstallerAvailability,
 } from "../server/local-services/rpc-schemas.js";
+import {
+  OpenclawListAgentsResponseSchema,
+  OpenclawSendMessageResponseSchema,
+  type OpenclawAgent,
+} from "../server/openclaw/rpc-schemas.js";
 import type {
   CreateScheduleInput,
   ScheduleSummary,
@@ -3156,12 +3161,19 @@ export class DaemonClient {
     });
   }
 
-  async uninstallPlugin(pluginId: string, options?: { requestId?: string }) {
+  async uninstallPlugin(
+    pluginId: string,
+    options?: { requestId?: string; removeCompanion?: boolean },
+  ) {
     return this.sendCorrelatedSessionRequest({
       requestId: options?.requestId,
-      message: { type: "plugin_uninstall_request", pluginId },
+      message: {
+        type: "plugin_uninstall_request",
+        pluginId,
+        removeCompanion: options?.removeCompanion,
+      },
       responseType: "plugin_uninstall_response",
-      timeout: 30_000,
+      timeout: 60_000,
     });
   }
 
@@ -3171,6 +3183,24 @@ export class DaemonClient {
       message: { type: "plugin_launch_request", pluginId },
       responseType: "plugin_launch_response",
       timeout: 20_000,
+    });
+  }
+
+  async setPluginEnabled(pluginId: string, enabled: boolean, options?: { requestId?: string }) {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "plugin_set_enabled_request", pluginId, enabled },
+      responseType: "plugin_set_enabled_response",
+      timeout: 20_000,
+    });
+  }
+
+  async refreshPluginCatalog(options?: { requestId?: string }) {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "plugin_refresh_catalog_request" },
+      responseType: "plugin_refresh_catalog_response",
+      timeout: 30_000,
     });
   }
 
@@ -4507,6 +4537,51 @@ export class DaemonClient {
       output: payload.output,
       port: payload.port,
     };
+  }
+
+  async listOpenclawAgents(params?: { requestId?: string }): Promise<OpenclawAgent[]> {
+    const requestId = this.createRequestId(params?.requestId);
+    const payload = await this.sendRequest<any>({
+      requestId,
+      message: { type: "openclaw/agents/list", requestId },
+      timeout: 10_000,
+      select: (msg) => {
+        if (msg.type === "openclaw/agents/list/response" && msg.payload.requestId === requestId) {
+          return OpenclawListAgentsResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.agents;
+  }
+
+  async sendOpenclawMessage(args: {
+    text: string;
+    agentId?: string | null;
+    sessionId?: string | null;
+    requestId?: string;
+  }): Promise<{ reply: string }> {
+    const requestId = this.createRequestId(args.requestId);
+    const payload = await this.sendRequest<any>({
+      requestId,
+      message: {
+        type: "openclaw/chat/send",
+        requestId,
+        text: args.text,
+        agentId: args.agentId ?? null,
+        sessionId: args.sessionId ?? null,
+      },
+      timeout: 90_000,
+      select: (msg) => {
+        if (msg.type === "openclaw/chat/send/response" && msg.payload.requestId === requestId) {
+          return OpenclawSendMessageResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+    if (payload.error) throw new Error(payload.error);
+    return { reply: payload.reply };
   }
 
   async getUsage(params?: { requestId?: string }): Promise<UsageSummary> {

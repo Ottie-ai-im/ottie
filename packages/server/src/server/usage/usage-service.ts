@@ -2,6 +2,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+import { fetchClaudeQuota, fetchCodexQuota, type ProviderQuota } from "./quota-fetcher.js";
+
 // Per-million-token USD pricing for Claude models. Used to estimate cost when
 // the user is on subscription — these are list prices, so the number is an
 // upper-bound estimate, not what they're actually billed.
@@ -41,6 +43,18 @@ export interface ProviderUsage {
   // 7-day rolling sums.
   weekTokens: number;
   weekCostUsd: number | null;
+  // Live quota windows fetched from the provider's OAuth usage endpoint.
+  // Independent from the locally-derived `currentBlock*` fields above:
+  // those are computed from session logs, these are what the provider's
+  // backend says is left on the subscription. May be null when the daemon
+  // can't read the OAuth token (e.g. Linux/Windows host with no env var) or
+  // the endpoint failed.
+  quotaFiveHourUsedPercent: number | null;
+  quotaFiveHourResetsAt: string | null;
+  quotaWeeklyUsedPercent: number | null;
+  quotaWeeklyResetsAt: string | null;
+  planTier: string | null;
+  quotaError: string | null;
 }
 
 export interface UsageSummary {
@@ -130,6 +144,12 @@ async function aggregateClaude(home: string): Promise<ProviderUsage> {
     currentBlockTokens: 0,
     weekTokens: 0,
     weekCostUsd: 0,
+    quotaFiveHourUsedPercent: null,
+    quotaFiveHourResetsAt: null,
+    quotaWeeklyUsedPercent: null,
+    quotaWeeklyResetsAt: null,
+    planTier: null,
+    quotaError: null,
   };
 
   let files: string[];
@@ -231,6 +251,12 @@ async function aggregateClaude(home: string): Promise<ProviderUsage> {
     currentBlockTokens: blockTokens,
     weekTokens,
     weekCostUsd: weekCost,
+    quotaFiveHourUsedPercent: null,
+    quotaFiveHourResetsAt: null,
+    quotaWeeklyUsedPercent: null,
+    quotaWeeklyResetsAt: null,
+    planTier: null,
+    quotaError: null,
   };
 }
 
@@ -268,6 +294,12 @@ async function aggregateCodex(home: string): Promise<ProviderUsage> {
     currentBlockTokens: 0,
     weekTokens: 0,
     weekCostUsd: null,
+    quotaFiveHourUsedPercent: null,
+    quotaFiveHourResetsAt: null,
+    quotaWeeklyUsedPercent: null,
+    quotaWeeklyResetsAt: null,
+    planTier: null,
+    quotaError: null,
   };
 
   let files: string[];
@@ -362,14 +394,53 @@ async function aggregateCodex(home: string): Promise<ProviderUsage> {
     currentBlockTokens: blockTokens,
     weekTokens,
     weekCostUsd: null,
+    quotaFiveHourUsedPercent: null,
+    quotaFiveHourResetsAt: null,
+    quotaWeeklyUsedPercent: null,
+    quotaWeeklyResetsAt: null,
+    planTier: null,
+    quotaError: null,
+  };
+}
+
+function mergeQuota(provider: ProviderUsage, quota: ProviderQuota): ProviderUsage {
+  return {
+    ...provider,
+    quotaFiveHourUsedPercent: quota.fiveHour ? quota.fiveHour.usedPercent : null,
+    quotaFiveHourResetsAt: quota.fiveHour ? quota.fiveHour.resetsAt : null,
+    quotaWeeklyUsedPercent: quota.weekly ? quota.weekly.usedPercent : null,
+    quotaWeeklyResetsAt: quota.weekly ? quota.weekly.resetsAt : null,
+    planTier: quota.plan,
+    quotaError: quota.error,
   };
 }
 
 export async function getUsageSummary(): Promise<UsageSummary> {
   const home = os.homedir();
-  const [claude, codex] = await Promise.all([aggregateClaude(home), aggregateCodex(home)]);
+  const [claude, codex, claudeQuota, codexQuota] = await Promise.all([
+    aggregateClaude(home),
+    aggregateCodex(home),
+    fetchClaudeQuota().catch(
+      (e: unknown) =>
+        ({
+          fiveHour: null,
+          weekly: null,
+          plan: null,
+          error: e instanceof Error ? e.message : String(e),
+        }) as ProviderQuota,
+    ),
+    fetchCodexQuota().catch(
+      (e: unknown) =>
+        ({
+          fiveHour: null,
+          weekly: null,
+          plan: null,
+          error: e instanceof Error ? e.message : String(e),
+        }) as ProviderQuota,
+    ),
+  ]);
   return {
     generatedAt: new Date().toISOString(),
-    providers: [claude, codex],
+    providers: [mergeQuota(claude, claudeQuota), mergeQuota(codex, codexQuota)],
   };
 }

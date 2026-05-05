@@ -9,6 +9,7 @@ import { isWeb } from "@/constants/platform";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { useHosts } from "@/runtime/host-runtime";
 import { useInstallLocalService, useLocalServices } from "@/hooks/use-local-services";
+import { OpenclawChatPanel } from "@/components/openclaw-chat-panel";
 import { DEFAULT_OPEN_WEBUI_URL, useAssistantsConfigStore } from "@/stores/assistants-config-store";
 
 interface KnownDashboard {
@@ -142,7 +143,11 @@ export function AssistantsScreen() {
                 onSelect={setSelectedServiceId}
               />
             ) : null}
-            <EmbeddedWebUi url={activeService.url ?? openWebUiUrl} />
+            {activeService.id === "openclaw" ? (
+              <OpenclawChatPanel serverId={serverId} />
+            ) : (
+              <EmbeddedWebUi url={activeService.url ?? openWebUiUrl} />
+            )}
           </>
         ) : (
           <NotRunningCard

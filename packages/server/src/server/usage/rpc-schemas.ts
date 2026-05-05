@@ -17,6 +17,14 @@ export const UsageProviderSummarySchema = z.object({
   currentBlockTokens: z.number(),
   weekTokens: z.number(),
   weekCostUsd: z.number().nullable(),
+  // Live provider-reported quota windows. All optional so a 6-month-old
+  // client still parses a new daemon's payload (CLAUDE.md schema rule).
+  quotaFiveHourUsedPercent: z.number().nullable().optional(),
+  quotaFiveHourResetsAt: z.string().nullable().optional(),
+  quotaWeeklyUsedPercent: z.number().nullable().optional(),
+  quotaWeeklyResetsAt: z.string().nullable().optional(),
+  planTier: z.string().nullable().optional(),
+  quotaError: z.string().nullable().optional(),
 });
 
 export const UsageSummarySchema = z.object({

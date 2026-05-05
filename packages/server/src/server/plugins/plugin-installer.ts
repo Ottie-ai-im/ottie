@@ -49,12 +49,20 @@ export interface PluginListEntry {
   author: string;
   platforms: readonly PluginPlatform[];
   status: PluginInstallStatus;
+  enabled: boolean;
   companionApp?: {
     bundleName: string;
     state: "installed" | "manual" | "skipped" | "not_installed";
     path?: string;
     releaseBrowserUrl?: string;
   };
+}
+
+export interface PluginSetEnabledResult {
+  success: boolean;
+  pluginId: string;
+  enabled?: boolean;
+  error?: string;
 }
 
 export interface PluginInstallResult {
@@ -270,8 +278,15 @@ async function installMacAppFromAsset(params: {
   }
 }
 
+interface PluginStateFile {
+  disabled?: string[];
+}
+
 export class PluginInstaller {
   private readonly pluginsDir: string;
+  private readonly stateFilePath: string;
+  private disabledIds = new Set<string>();
+  private stateLoaded = false;
 
   constructor(
     private readonly ottieHome: string,
@@ -279,6 +294,113 @@ export class PluginInstaller {
     private readonly pluginManager: PluginManager,
   ) {
     this.pluginsDir = path.join(this.ottieHome, "plugins");
+    this.stateFilePath = path.join(this.ottieHome, "plugin-state.json");
+  }
+
+  private async loadState(): Promise<void> {
+    if (this.stateLoaded) return;
+    this.stateLoaded = true;
+    try {
+      const raw = await fs.readFile(this.stateFilePath, "utf-8");
+      const parsed = JSON.parse(raw) as PluginStateFile;
+      if (Array.isArray(parsed.disabled)) {
+        this.disabledIds = new Set(parsed.disabled.filter((id) => typeof id === "string"));
+      }
+    } catch {
+      // No state file yet; treat all installed plugins as enabled.
+    }
+  }
+
+  private async saveState(): Promise<void> {
+    const body: PluginStateFile = { disabled: Array.from(this.disabledIds).sort() };
+    await fs.mkdir(path.dirname(this.stateFilePath), { recursive: true });
+    await fs.writeFile(this.stateFilePath, JSON.stringify(body, null, 2));
+  }
+
+  /**
+   * Toggle a plugin without uninstalling it. Disabled plugins keep their
+   * files on disk but the worker is unloaded and the next daemon boot
+   * skips their activation. Useful when a plugin misbehaves but the user
+   * doesn't want to lose its settings.
+   */
+  async setEnabled(pluginId: string, enabled: boolean): Promise<PluginSetEnabledResult> {
+    await this.loadState();
+    const entry = findCatalogEntry(pluginId);
+    if (!entry) {
+      return { success: false, pluginId, error: `Unknown plugin "${pluginId}"` };
+    }
+    const installedDir = path.join(this.pluginsDir, pluginId);
+    const installed = await pathExists(path.join(installedDir, "package.json"));
+    if (!installed) {
+      return {
+        success: false,
+        pluginId,
+        error: `Plugin "${pluginId}" is not installed`,
+      };
+    }
+    if (enabled) {
+      this.disabledIds.delete(pluginId);
+    } else {
+      this.disabledIds.add(pluginId);
+    }
+    try {
+      await this.saveState();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, pluginId, error: message };
+    }
+    if (enabled) {
+      await this.pluginManager
+        .loadPlugin(pluginId, installedDir)
+        .catch((err) =>
+          this.logger.warn({ err, pluginId }, "Failed to (re)activate enabled plugin"),
+        );
+    } else {
+      await this.pluginManager
+        .unloadPlugin(pluginId)
+        .catch((err) =>
+          this.logger.warn({ err, pluginId }, "Failed to deactivate disabled plugin"),
+        );
+    }
+    return { success: true, pluginId, enabled };
+  }
+
+  isEnabled(pluginId: string): boolean {
+    return !this.disabledIds.has(pluginId);
+  }
+
+  /**
+   * Called after PluginManager.initialize() during bootstrap so any plugins
+   * the user previously disabled get unloaded immediately. PluginManager
+   * itself has no notion of "disabled" — it just loads what's on disk.
+   */
+  async applyDisabledStateOnBoot(): Promise<void> {
+    await this.loadState();
+    for (const id of this.disabledIds) {
+      await this.pluginManager.unloadPlugin(id).catch(() => {});
+    }
+  }
+
+  /**
+   * Force a re-fetch of the signed remote catalog. Returns whether a
+   * refresh actually happened (env config present + signature verified)
+   * and the number of remote-only entries now visible.
+   */
+  async refreshRemoteCatalog(): Promise<{ refreshed: boolean; count: number }> {
+    const { readRemoteCatalogConfigFromEnv, fetchRemoteCatalog, writeCachedCatalog } =
+      await import("./remote-catalog.js");
+    const { setRemoteCatalogEntries, BUILTIN_PLUGIN_CATALOG } = await import("./plugin-catalog.js");
+    const config = readRemoteCatalogConfigFromEnv();
+    if (!config) {
+      return { refreshed: false, count: 0 };
+    }
+    const remoteEntries = await fetchRemoteCatalog(config);
+    setRemoteCatalogEntries(remoteEntries);
+    await writeCachedCatalog(this.ottieHome, remoteEntries);
+    const builtinIds = new Set(BUILTIN_PLUGIN_CATALOG.map((e) => e.id));
+    const remoteOnly = remoteEntries.filter((e) => !builtinIds.has(e.id)).length;
+    this.logger.info({ count: remoteEntries.length }, "Manual catalog refresh succeeded");
+    return { refreshed: true, count: remoteOnly };
   }
 
   /**
@@ -287,6 +409,7 @@ export class PluginInstaller {
    * the UI can hide or disable them without filtering on the client.
    */
   async list(): Promise<PluginListEntry[]> {
+    await this.loadState();
     const entries: PluginListEntry[] = [];
     for (const entry of getCatalog()) {
       const compatible = isCompatiblePlatform(entry);
@@ -333,6 +456,7 @@ export class PluginInstaller {
         author: entry.author,
         platforms: entry.platforms,
         status,
+        enabled: !this.disabledIds.has(entry.id),
         companionApp,
       });
     }
@@ -401,7 +525,10 @@ export class PluginInstaller {
     };
   }
 
-  async uninstall(pluginId: string): Promise<PluginUninstallResult> {
+  async uninstall(
+    pluginId: string,
+    options?: { removeCompanion?: boolean },
+  ): Promise<PluginUninstallResult> {
     const entry = findCatalogEntry(pluginId);
     if (!entry) {
       return { success: false, pluginId, error: `Unknown plugin "${pluginId}"` };
@@ -410,13 +537,75 @@ export class PluginInstaller {
       await this.pluginManager.unloadPlugin(entry.id).catch((err) => {
         this.logger.warn({ err, pluginId }, "Plugin deactivate threw on uninstall");
       });
+
+      if (options?.removeCompanion) {
+        await this.removeCompanionApp(entry, pluginId);
+      }
+
       await rmrf(path.join(this.pluginsDir, entry.id));
-      this.logger.info({ pluginId }, "Plugin uninstalled");
+      this.logger.info(
+        { pluginId, removeCompanion: Boolean(options?.removeCompanion) },
+        "Plugin uninstalled",
+      );
       return { success: true, pluginId };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, pluginId, error: message };
     }
+  }
+
+  // Best-effort: quit the running companion macOS app and move its .app
+  // bundle to Trash via Finder (recoverable, NOT rm -rf). Failures are logged
+  // but never abort the bridge uninstall — the user already confirmed and the
+  // daemon-side bridge MUST come down regardless.
+  private async removeCompanionApp(entry: PluginCatalogEntry, pluginId: string): Promise<void> {
+    const companion = entry.companionApp;
+    if (!companion) return;
+    if (CURRENT_PLATFORM !== "darwin") {
+      this.logger.warn(
+        { pluginId, platform: CURRENT_PLATFORM },
+        "removeCompanion requested but only supported on macOS — skipping",
+      );
+      return;
+    }
+    const appPath = companion.preferredInstallPath;
+    const exists = await pathExists(appPath);
+    if (!exists) {
+      this.logger.info(
+        { pluginId, appPath },
+        "Companion app not present on disk — nothing to remove",
+      );
+      return;
+    }
+
+    // 1. Try to quit the running app (graceful). If it's not running this
+    // becomes a no-op — `tell application "X" to quit` succeeds either way.
+    // We escape any embedded double-quotes in the bundle name defensively;
+    // typical names ("CodeIsland Notch") have none but we don't trust input.
+    const escapedBundle = companion.bundleName.replace(/"/g, '\\"');
+    await runCommand("osascript", ["-e", `tell application "${escapedBundle}" to quit`], {
+      timeoutMs: 5_000,
+    }).catch((err) => {
+      this.logger.warn(
+        { err, pluginId, bundle: companion.bundleName },
+        "Failed to quit companion app (continuing to move to Trash anyway)",
+      );
+    });
+
+    // 2. Move the .app to Trash via Finder. This is recoverable — the user
+    // can drag it back from Trash if they regret the choice. We deliberately
+    // do NOT use `rm -rf` on /Applications.
+    const escapedPath = appPath.replace(/"/g, '\\"');
+    await runCommand(
+      "osascript",
+      ["-e", `tell application "Finder" to delete POSIX file "${escapedPath}"`],
+      { timeoutMs: 10_000 },
+    ).catch((err) => {
+      this.logger.warn(
+        { err, pluginId, appPath },
+        "Failed to move companion app to Trash — user may need to remove it manually",
+      );
+    });
   }
 
   async launch(pluginId: string): Promise<PluginLaunchResult> {

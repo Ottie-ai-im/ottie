@@ -145,6 +145,7 @@ import { createScriptStatusEmitter } from "./script-status-projection.js";
 import { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-store.js";
 import { isHostnameAllowed, type HostnamesConfig } from "./hostnames.js";
 import { PluginManager } from "./plugins/plugin-manager.js";
+import { PluginInstaller } from "./plugins/plugin-installer.js";
 
 type AgentMcpTransportMap = Map<string, StreamableHTTPServerTransport>;
 
@@ -820,6 +821,14 @@ export async function createOttieDaemon(
     logger.warn({ err }, "Plugin catalog bootstrap failed; using built-in only");
   }
   await pluginManager.initialize();
+  const pluginInstaller = new PluginInstaller(
+    config.ottieHome,
+    logger.child({ module: "plugin-installer" }),
+    pluginManager,
+  );
+  await pluginInstaller.applyDisabledStateOnBoot().catch((err) => {
+    logger.warn({ err }, "Failed to apply disabled plugin state on boot");
+  });
 
   const start = async () => {
     // Start main HTTP server

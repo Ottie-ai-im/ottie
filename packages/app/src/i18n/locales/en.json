@@ -256,7 +256,12 @@
       "notConnected": "Connect to a daemon to manage extensions.",
       "reinstall": "Reinstall",
       "uninstall": "Uninstall",
-      "revealInFinder": "Show in Finder"
+      "revealInFinder": "Show in Finder",
+      "enabledToggle": "Enabled",
+      "disabled": "Disabled — files kept; no events received",
+      "refreshCatalog": "Refresh catalog",
+      "refreshed": "Catalog refreshed ({{count}} extensions available)",
+      "refreshNotConfigured": "Remote catalog not configured (set OTTIE_PLUGIN_CATALOG_URL + OTTIE_PLUGIN_CATALOG_PUBKEY)"
     }
   },
   "integrations": {
@@ -354,6 +359,14 @@
       "installHint": "Install:"
     }
   },
+  "openclaw": {
+    "defaultAgent": "Default agent",
+    "emptyTitle": "Talk to OpenClaw",
+    "emptyHint": "Type a message below — Ottie sends it to your local OpenClaw Gateway.",
+    "thinking": "OpenClaw is thinking…",
+    "placeholder": "Message OpenClaw…",
+    "send": "Send"
+  },
   "usage": {
     "title": "Usage",
     "subtitle": "Tokens used by your AI coding agents on this machine.",
@@ -407,7 +420,14 @@
     "nothingRecorded": "Nothing recorded yet — totals will appear after the first agent turn.",
     "reset": "Reset",
     "resetConfirmTitle": "Reset usage totals?",
-    "resetConfirmMessage": "This clears the locally stored token and cost totals. This cannot be undone."
+    "resetConfirmMessage": "This clears the locally stored token and cost totals. This cannot be undone.",
+    "quotaTitle": "Subscription limits",
+    "quotaFiveHour": "5-hour window",
+    "quotaWeekly": "Weekly window",
+    "quotaUsed": "{{used}} used",
+    "quotaRemaining": "{{remaining}} left",
+    "quotaUnavailable": "Live quota unavailable: {{reason}}",
+    "quotaPlatformNote": "Live subscription quotas are fetched from Anthropic and OpenAI's undocumented OAuth endpoints. Claude quota only works when the daemon runs on macOS (the OAuth token is read from the Keychain) or when CLAUDE_CODE_OAUTH_TOKEN is set. Codex quota works on every platform via ~/.codex/auth.json."
   },
   "actions": {
     "agentCreate": "New chat",
@@ -520,7 +540,52 @@
     "description": "Discover and install community extensions to power up your daemon.",
     "installed": "Installed",
     "install": "Install",
-    "by": "by {{author}}"
+    "by": "by {{author}}",
+    "openReleasePage": "Open release page",
+    "bridgeInstalledHint": "Bridge installed. Get {{app}} from GitHub:",
+    "companionAppFallback": "the companion app",
+    "action": {
+      "open": "Open",
+      "companionMissing": "Companion missing",
+      "uninstall": "Uninstall"
+    },
+    "badge": {
+      "platformsOnly": "{{platforms}} only",
+      "unsupported": "Unsupported"
+    },
+    "empty": {
+      "notConnected": "Connect to a daemon to browse extensions.",
+      "loadFailed": "Failed to load extensions",
+      "none": "No extensions are available yet."
+    },
+    "phase": {
+      "writingBridge": "Writing bridge…",
+      "fetchingRelease": "Fetching release info…",
+      "downloading": "Downloading…",
+      "extracting": "Extracting…",
+      "installingApp": "Installing app…",
+      "done": "Done",
+      "bytesDownloaded": "{{size}} downloaded"
+    },
+    "toast": {
+      "installFailed": "Install of {{id}} failed",
+      "bridgeInstalled": "{{id}} bridge installed. Finish installing the companion app from GitHub.",
+      "readyToLaunch": "{{id}} ready to launch",
+      "installed": "{{id}} installed",
+      "uninstallFailed": "Uninstall failed",
+      "removed": "{{id}} removed",
+      "removedFull": "{{id}} fully removed (companion app moved to Trash)",
+      "launchFailed": "Launch failed"
+    },
+    "uninstall": {
+      "confirmTitle": "Uninstall {{name}}?",
+      "confirmBody": "The bridge will be removed. This can't be undone.",
+      "confirmBodyWithCompanion": "The daemon-side bridge will be removed. {{app}} will stay on your computer — you'll be asked separately whether to also remove it.",
+      "fullTitle": "Also move {{app}} to Trash?",
+      "fullBody": "This will quit {{app}} if it's running and move {{path}} to the Trash. It's recoverable from the Trash.\n\nIf you use {{app}} for anything else, choose \"Keep the app\" — the bridge will still be uninstalled.",
+      "moveToTrash": "Move to Trash",
+      "keepApp": "Keep the app"
+    }
   },
   "rename": {
     "title": "Rename workspace",
@@ -545,6 +610,33 @@
     "connecting": "Connecting...",
     "hostRequired": "Host is required",
     "hostFormatError": "Enter host:port only (no ws://, no /ws)"
+  },
+  "addHostMethod": {
+    "title": "Add connection",
+    "direct": {
+      "label": "Direct connection",
+      "sub": "Local network or VPN."
+    },
+    "scanQr": {
+      "label": "Scan QR code",
+      "sub": "Encrypted relay connection."
+    },
+    "pasteLink": {
+      "label": "Paste pairing link",
+      "sub": "Encrypted relay connection."
+    }
+  },
+  "pairDevice": {
+    "title": "Pair a device",
+    "loading": "Loading pairing offer…",
+    "loadFailed": "Failed to load pairing offer.",
+    "relayDisabled": "Relay is not enabled. Enable relay to pair a device.",
+    "unavailable": "Pairing offer unavailable.",
+    "retry": "Retry",
+    "scanHint": "Scan this QR code with Ottie on your phone, or copy the link below.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "qrUnavailable": "QR code unavailable."
   },
   "workspace": {
     "hostNotConnected": "Host is not connected",

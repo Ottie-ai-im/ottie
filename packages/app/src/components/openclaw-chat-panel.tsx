@@ -1,0 +1,341 @@
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
+import { Send } from "lucide-react-native";
+
+import { useOpenclawAgents, useOpenclawSend } from "@/hooks/use-openclaw-chat";
+
+interface ChatTurn {
+  id: string;
+  role: "user" | "assistant" | "error";
+  text: string;
+  ts: number;
+}
+
+export interface OpenclawChatPanelProps {
+  serverId: string | null;
+}
+
+/**
+ * Native Ottie chat panel for OpenClaw — drop-in replacement for the
+ * iframe wrapper. Renders a message log + composer at the bottom and
+ * an agent picker at the top. Talks to OpenClaw via the daemon
+ * (sendOpenclawMessage), so the user can type in Ottie and the
+ * request goes daemon → http://127.0.0.1:18789/api/sessions/main/messages.
+ *
+ * Conversation history is in-memory only for this mount — OpenClaw's
+ * own gateway holds the real session state, this panel just shows the
+ * round trip.
+ */
+export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const { agents } = useOpenclawAgents(serverId, true);
+  const { send, isPending, lastError } = useOpenclawSend(serverId);
+
+  const [agentId, setAgentId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const scrollRef = useRef<ScrollView | null>(null);
+
+  const onSend = useCallback(async () => {
+    const text = draft.trim();
+    if (!text || isPending) return;
+    const userTurn: ChatTurn = {
+      id: `u-${Date.now()}`,
+      role: "user",
+      text,
+      ts: Date.now(),
+    };
+    setTurns((prev) => [...prev, userTurn]);
+    setDraft("");
+    try {
+      const result = await send({ text, agentId });
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: `a-${Date.now()}`,
+          role: "assistant",
+          text: result.reply || "(empty reply)",
+          ts: Date.now(),
+        },
+      ]);
+    } catch (err) {
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: `e-${Date.now()}`,
+          role: "error",
+          text: err instanceof Error ? err.message : String(err),
+          ts: Date.now(),
+        },
+      ]);
+    }
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+  }, [draft, isPending, send, agentId]);
+
+  const agentChips = useMemo(() => {
+    const items: Array<{ id: string | null; label: string }> = [
+      { id: null, label: t("openclaw.defaultAgent") },
+    ];
+    for (const a of agents) items.push({ id: a.id, label: a.label });
+    return items;
+  }, [agents, t]);
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={64}
+      style={styles.root}
+    >
+      {agentChips.length > 1 ? (
+        <View style={styles.agentBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.agentBarContent}
+          >
+            {agentChips.map((chip) => {
+              const active = chip.id === agentId;
+              return (
+                <Pressable
+                  key={chip.id ?? "default"}
+                  onPress={() => setAgentId(chip.id)}
+                  style={[styles.agentChip, active ? styles.agentChipActive : null]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={[styles.agentChipText, active ? styles.agentChipTextActive : null]}>
+                    {chip.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      <ScrollView ref={scrollRef} style={styles.log} contentContainerStyle={styles.logContent}>
+        {turns.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>{t("openclaw.emptyTitle")}</Text>
+            <Text style={styles.emptyHint}>{t("openclaw.emptyHint")}</Text>
+          </View>
+        ) : null}
+        {turns.map((turn) => (
+          <View
+            key={turn.id}
+            style={[
+              styles.bubble,
+              turn.role === "user"
+                ? styles.bubbleUser
+                : turn.role === "error"
+                  ? styles.bubbleError
+                  : styles.bubbleAssistant,
+            ]}
+          >
+            <Text
+              style={[
+                styles.bubbleText,
+                turn.role === "user" ? styles.bubbleTextUser : null,
+                turn.role === "error" ? styles.bubbleTextError : null,
+              ]}
+              selectable
+            >
+              {turn.text}
+            </Text>
+          </View>
+        ))}
+        {isPending ? (
+          <View style={[styles.bubble, styles.bubbleAssistant]}>
+            <Text style={[styles.bubbleText, styles.bubbleTextMuted]}>
+              {t("openclaw.thinking")}
+            </Text>
+          </View>
+        ) : null}
+        {lastError && !isPending ? <Text style={styles.bottomError}>{lastError}</Text> : null}
+      </ScrollView>
+
+      <View style={styles.composer}>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          placeholder={t("openclaw.placeholder")}
+          placeholderTextColor={theme.colors.foregroundMuted}
+          style={styles.input}
+          multiline
+          editable={!isPending}
+          onSubmitEditing={onSend}
+          submitBehavior="blurAndSubmit"
+          testID="openclaw-composer-input"
+        />
+        <Pressable
+          onPress={onSend}
+          disabled={isPending || draft.trim().length === 0}
+          style={[
+            styles.sendButton,
+            isPending || draft.trim().length === 0 ? styles.sendButtonDisabled : null,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={t("openclaw.send")}
+          testID="openclaw-composer-send"
+        >
+          <Send size={18} color={theme.colors.accentForeground} />
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create((theme) => ({
+  root: {
+    flex: 1,
+    minHeight: 0,
+  },
+  agentBar: {
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderGlass,
+  },
+  agentBarContent: {
+    flexDirection: "row",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[2],
+  },
+  agentChip: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.full,
+    borderCurve: "continuous",
+    backgroundColor: theme.colors.surface2,
+  },
+  agentChipActive: {
+    backgroundColor: theme.colors.accent,
+  },
+  agentChipText: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foreground,
+  },
+  agentChipTextActive: {
+    color: theme.colors.accentForeground,
+    fontWeight: theme.fontWeight.medium,
+  },
+  log: {
+    flex: 1,
+    minHeight: 0,
+  },
+  logContent: {
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[3],
+    gap: theme.spacing[2],
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: theme.spacing[8],
+    gap: theme.spacing[1],
+  },
+  emptyTitle: {
+    fontFamily: theme.fontFamily.rounded,
+    fontSize: theme.fontSize.lg,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+  },
+  emptyHint: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+    textAlign: "center",
+  },
+  bubble: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous",
+    maxWidth: "85%",
+  },
+  bubbleUser: {
+    alignSelf: "flex-end",
+    backgroundColor: theme.colors.accent,
+  },
+  bubbleAssistant: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+  },
+  bubbleError: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.surfaceGlass,
+    borderWidth: 1,
+    borderColor: theme.colors.destructive,
+  },
+  bubbleText: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foreground,
+    lineHeight: 20,
+  },
+  bubbleTextUser: {
+    color: theme.colors.accentForeground,
+  },
+  bubbleTextMuted: {
+    color: theme.colors.foregroundMuted,
+    fontStyle: "italic",
+  },
+  bubbleTextError: {
+    color: theme.colors.destructive,
+  },
+  bottomError: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.destructive,
+    textAlign: "center",
+    marginTop: theme.spacing[2],
+  },
+  composer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: theme.spacing[2],
+    padding: theme.spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderGlass,
+    backgroundColor: theme.colors.surface0,
+  },
+  input: {
+    flex: 1,
+    maxHeight: 140,
+    minHeight: 36,
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foreground,
+    backgroundColor: theme.colors.surface2,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous",
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.borderRadius.full,
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+}));

@@ -179,6 +179,8 @@ export function UsageScreen() {
           p.totalTokens > 0 ? <ProviderCard key={p.provider} provider={p} now={now} /> : null,
         )}
 
+        <Text style={styles.platformNote}>{t("usage.quotaPlatformNote")}</Text>
+
         {hasLocalData ? (
           <View style={styles.manageCard}>
             <View style={styles.manageHeader}>
@@ -288,7 +290,14 @@ function ProviderCard({ provider, now }: { provider: UsageProviderSummary; now: 
           <ProviderIcon size={20} color={accent.foreground} />
         </View>
         <View style={styles.providerHeaderText}>
-          <Text style={styles.providerName}>{providerLabel}</Text>
+          <View style={styles.providerNameRow}>
+            <Text style={styles.providerName}>{providerLabel}</Text>
+            {provider.planTier ? (
+              <View style={styles.planChip}>
+                <Text style={styles.planChipText}>{provider.planTier.toUpperCase()}</Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={styles.providerMeta}>
             {t("usage.sessionsCount", { n: provider.sessionsCount })}
           </Text>
@@ -316,6 +325,8 @@ function ProviderCard({ provider, now }: { provider: UsageProviderSummary; now: 
           />
         ) : null}
       </View>
+
+      <QuotaSection provider={provider} now={now} accentColor={accent.background} />
 
       {provider.currentBlockResetsAt ? (
         <View style={styles.block}>
@@ -350,6 +361,108 @@ function Stat({ label, value, small }: { label: string; value: string; small?: b
     <View style={small ? styles.statSmall : styles.stat}>
       <Text style={small ? styles.statLabelSmall : styles.statLabel}>{label}</Text>
       <Text style={small ? styles.statValueSmall : styles.statValue}>{value}</Text>
+    </View>
+  );
+}
+
+function QuotaSection({
+  provider,
+  now,
+  accentColor,
+}: {
+  provider: UsageProviderSummary;
+  now: number;
+  accentColor: string;
+}) {
+  const { t } = useTranslation();
+  const five = provider.quotaFiveHourUsedPercent;
+  const week = provider.quotaWeeklyUsedPercent;
+  const hasFive = typeof five === "number" && Number.isFinite(five);
+  const hasWeek = typeof week === "number" && Number.isFinite(week);
+
+  if (!hasFive && !hasWeek) {
+    if (provider.quotaError) {
+      return (
+        <View style={styles.quotaSection}>
+          <Text style={styles.quotaTitle}>{t("usage.quotaTitle")}</Text>
+          <Text style={styles.quotaErrorText}>
+            {t("usage.quotaUnavailable", { reason: provider.quotaError })}
+          </Text>
+        </View>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <View style={styles.quotaSection}>
+      <Text style={styles.quotaTitle}>{t("usage.quotaTitle")}</Text>
+      {hasFive ? (
+        <QuotaBar
+          label={t("usage.quotaFiveHour")}
+          usedPercent={five as number}
+          resetsAt={provider.quotaFiveHourResetsAt ?? null}
+          accentColor={accentColor}
+          now={now}
+        />
+      ) : null}
+      {hasWeek ? (
+        <QuotaBar
+          label={t("usage.quotaWeekly")}
+          usedPercent={week as number}
+          resetsAt={provider.quotaWeeklyResetsAt ?? null}
+          accentColor={accentColor}
+          now={now}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function QuotaBar({
+  label,
+  usedPercent,
+  resetsAt,
+  accentColor,
+  now,
+}: {
+  label: string;
+  usedPercent: number;
+  resetsAt: string | null;
+  accentColor: string;
+  now: number;
+}) {
+  const { t } = useTranslation();
+  const clamped = Math.max(0, Math.min(1, usedPercent));
+  const usedLabel = `${Math.round(clamped * 100)}%`;
+  const remainingLabel = `${Math.round((1 - clamped) * 100)}%`;
+  const resetText = resetsAt ? formatRelativeTime(resetsAt, now, t) : null;
+
+  return (
+    <View style={styles.quotaRow}>
+      <View style={styles.quotaRowHeader}>
+        <Text style={styles.quotaRowLabel}>{label}</Text>
+        <Text style={styles.quotaRowMeta}>
+          {t("usage.quotaRemaining", { remaining: remainingLabel })}
+        </Text>
+      </View>
+      <View style={styles.quotaBarTrack}>
+        <View
+          style={[
+            styles.quotaBarFill,
+            {
+              width: `${(clamped * 100).toFixed(1)}%` as unknown as number,
+              backgroundColor: accentColor,
+            },
+          ]}
+        />
+      </View>
+      <View style={styles.quotaRowFooter}>
+        <Text style={styles.quotaRowFootMeta}>{t("usage.quotaUsed", { used: usedLabel })}</Text>
+        {resetText ? (
+          <Text style={styles.quotaRowFootMeta}>{t("usage.resetsIn", { time: resetText })}</Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -532,12 +645,98 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     gap: 2,
   },
+  providerNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
   providerName: {
     fontFamily: theme.fontFamily.rounded,
     fontSize: theme.fontSize.lg,
     fontWeight: theme.fontWeight.semibold,
     color: theme.colors.foreground,
     letterSpacing: -0.2,
+  },
+  planChip: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.surface2,
+  },
+  planChipText: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+    letterSpacing: 0.6,
+  },
+  quotaSection: {
+    paddingTop: theme.spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderGlass,
+    gap: theme.spacing[3],
+  },
+  quotaTitle: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+  },
+  quotaErrorText: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+    lineHeight: 18,
+  },
+  quotaRow: {
+    gap: theme.spacing[1],
+  },
+  quotaRowHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  quotaRowLabel: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
+  },
+  quotaRowMeta: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
+    fontVariant: ["tabular-nums"],
+  },
+  quotaBarTrack: {
+    height: 8,
+    width: "100%",
+    backgroundColor: theme.colors.surface2,
+    borderRadius: theme.borderRadius.full,
+    overflow: "hidden",
+  },
+  quotaBarFill: {
+    height: "100%",
+  },
+  quotaRowFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  quotaRowFootMeta: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+  },
+  platformNote: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+    lineHeight: 18,
+    marginHorizontal: theme.spacing[6],
+    marginTop: theme.spacing[2],
+    marginBottom: theme.spacing[1],
   },
   providerMeta: {
     fontFamily: theme.fontFamily.system,

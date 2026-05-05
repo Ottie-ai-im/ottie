@@ -110,8 +110,6 @@ The app runs on iOS, Android, web (browser), and web (Tauri desktop). Code is cr
 
 Find the complete daemon logs and traces in the $OTTIE_HOME/daemon.log
 
-<!-- GSD:project-start source:PROJECT.md -->
-
 ## Project
 
 **Ottie**
@@ -134,9 +132,6 @@ If everything else fails, this single property must hold: the developer trusts t
 - **Build / test discipline** (per CLAUDE.md) — never restart the main daemon on :6868 without permission; never run the full test suite locally; always `npm run typecheck && npm run lint && npm run format` after every change
 - **Cross-platform default** — code is cross-platform unless gated; gates come from `@/constants/platform`, never written locally
 - **Bilingual** — every user-visible string change must update both `en.json` and `zh.json`
-<!-- GSD:project-end -->
-
-<!-- GSD:stack-start source:codebase/STACK.md -->
 
 ## Technology Stack
 
@@ -222,9 +217,6 @@ If everything else fails, this single property must hold: the developer trusts t
 
 - **Vitest** — unit + integration tests (server, app)
 - **Playwright** `^1.56.1` — E2E browser tests (app)
-<!-- GSD:stack-end -->
-
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
 
 ## Conventions
 
@@ -296,10 +288,6 @@ If everything else fails, this single property must hold: the developer trusts t
 ## Logic Density
 
 ## Centralize Policy
-
-<!-- GSD:conventions-end -->
-
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
 
 ## Architecture
 
@@ -458,37 +446,3 @@ If everything else fails, this single property must hold: the developer trusts t
 - **Providers handle their own auth**: Ottie is auth-agnostic; keys stay in provider config files
 - **Schema backward-compatibility**: Old clients must always parse new daemon messages
 - **Relay is zero-knowledge**: The relay routes encrypted blobs and cannot read content
-<!-- GSD:architecture-end -->
-
-<!-- GSD:skills-start source:skills/ -->
-
-## Project Skills
-
-No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
-
-<!-- GSD:skills-end -->
-
-<!-- GSD:workflow-start source:GSD defaults -->
-
-## GSD Workflow Enforcement
-
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
-
-Use these entry points:
-
-- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd-debug` for investigation and bug fixing
-- `/gsd-execute-phase` for planned phase work
-
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-
-<!-- GSD:workflow-end -->
-
-<!-- GSD:profile-start -->
-
-## Developer Profile
-
-> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-
-<!-- GSD:profile-end -->

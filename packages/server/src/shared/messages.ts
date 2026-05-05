@@ -51,6 +51,12 @@ import {
   LocalServicesInstallResponseSchema,
 } from "../server/local-services/rpc-schemas.js";
 import {
+  OpenclawListAgentsRequestSchema,
+  OpenclawListAgentsResponseSchema,
+  OpenclawSendMessageRequestSchema,
+  OpenclawSendMessageResponseSchema,
+} from "../server/openclaw/rpc-schemas.js";
+import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -1792,6 +1798,7 @@ const PluginListEntrySchema = z.object({
   author: z.string().optional(),
   platforms: z.array(z.string()).optional(),
   status: PluginInstallStatusSchema.optional(),
+  enabled: z.boolean().optional(),
   companionApp: PluginCompanionAppListSchema.optional(),
 });
 
@@ -1839,6 +1846,10 @@ export const PluginUninstallRequestSchema = z.object({
   type: z.literal("plugin_uninstall_request"),
   requestId: z.string(),
   pluginId: z.string(),
+  // When true and a macOS companion app is installed, also quit it and move
+  // the .app bundle to Trash. Optional + default false so old daemons keep
+  // ignoring it (backward-compatible per CLAUDE.md schema rules).
+  removeCompanion: z.boolean().optional(),
 });
 
 export const PluginUninstallResponseSchema = z.object({
@@ -1890,6 +1901,40 @@ export const PluginInstallProgressSchema = z.object({
     bytesLoaded: z.number().optional(),
     bytesTotal: z.number().optional(),
     note: z.string().optional(),
+  }),
+});
+
+export const PluginSetEnabledRequestSchema = z.object({
+  type: z.literal("plugin_set_enabled_request"),
+  requestId: z.string(),
+  pluginId: z.string(),
+  enabled: z.boolean(),
+});
+
+export const PluginSetEnabledResponseSchema = z.object({
+  type: z.literal("plugin_set_enabled_response"),
+  payload: z.object({
+    requestId: z.string(),
+    pluginId: z.string().optional(),
+    success: z.boolean().optional(),
+    enabled: z.boolean().optional(),
+    error: z.string().optional(),
+  }),
+});
+
+export const PluginRefreshCatalogRequestSchema = z.object({
+  type: z.literal("plugin_refresh_catalog_request"),
+  requestId: z.string(),
+});
+
+export const PluginRefreshCatalogResponseSchema = z.object({
+  type: z.literal("plugin_refresh_catalog_response"),
+  payload: z.object({
+    requestId: z.string(),
+    success: z.boolean().optional(),
+    refreshed: z.boolean().optional(),
+    count: z.number().optional(),
+    error: z.string().optional(),
   }),
 });
 
@@ -2001,6 +2046,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   UsageListRequestSchema,
   LocalServicesListRequestSchema,
   LocalServicesInstallRequestSchema,
+  OpenclawListAgentsRequestSchema,
+  OpenclawSendMessageRequestSchema,
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -2014,6 +2061,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   PluginInstallRequestSchema,
   PluginUninstallRequestSchema,
   PluginLaunchRequestSchema,
+  PluginSetEnabledRequestSchema,
+  PluginRefreshCatalogRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3617,6 +3666,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   UsageListResponseSchema,
   LocalServicesListResponseSchema,
   LocalServicesInstallResponseSchema,
+  OpenclawListAgentsResponseSchema,
+  OpenclawSendMessageResponseSchema,
   LoopRunResponseSchema,
   LoopListResponseSchema,
   LoopInspectResponseSchema,
@@ -3631,6 +3682,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   PluginUninstallResponseSchema,
   PluginLaunchResponseSchema,
   PluginInstallProgressSchema,
+  PluginSetEnabledResponseSchema,
+  PluginRefreshCatalogResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

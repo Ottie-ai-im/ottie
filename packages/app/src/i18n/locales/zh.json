@@ -256,7 +256,12 @@
       "notConnected": "连接 daemon 后可管理扩展。",
       "reinstall": "重新安装",
       "uninstall": "卸载",
-      "revealInFinder": "在 Finder 中显示"
+      "revealInFinder": "在 Finder 中显示",
+      "enabledToggle": "已启用",
+      "disabled": "已停用——文件保留；不再接收事件",
+      "refreshCatalog": "刷新目录",
+      "refreshed": "已刷新目录（{{count}} 个扩展可用）",
+      "refreshNotConfigured": "未配置远端目录（需设置 OTTIE_PLUGIN_CATALOG_URL + OTTIE_PLUGIN_CATALOG_PUBKEY）"
     }
   },
   "integrations": {
@@ -354,6 +359,14 @@
       "installHint": "安装："
     }
   },
+  "openclaw": {
+    "defaultAgent": "默认 agent",
+    "emptyTitle": "和 OpenClaw 对话",
+    "emptyHint": "在下方输入框打字——Ottie 会把消息发到本地 OpenClaw Gateway。",
+    "thinking": "OpenClaw 正在思考…",
+    "placeholder": "给 OpenClaw 发消息…",
+    "send": "发送"
+  },
   "usage": {
     "title": "用量",
     "subtitle": "本机 AI 编程代理已使用的 Token 数。",
@@ -407,7 +420,14 @@
     "nothingRecorded": "尚无记录 — 第一个 agent 轮次完成后会出现。",
     "reset": "清零",
     "resetConfirmTitle": "清零用量累计？",
-    "resetConfirmMessage": "将清空本地存储的 token 与费用累计，此操作不可撤销。"
+    "resetConfirmMessage": "将清空本地存储的 token 与费用累计，此操作不可撤销。",
+    "quotaTitle": "订阅额度",
+    "quotaFiveHour": "5 小时窗口",
+    "quotaWeekly": "每周窗口",
+    "quotaUsed": "已用 {{used}}",
+    "quotaRemaining": "剩余 {{remaining}}",
+    "quotaUnavailable": "无法获取实时额度：{{reason}}",
+    "quotaPlatformNote": "实时订阅额度通过 Anthropic 和 OpenAI 未公开的 OAuth 接口拉取。Claude 额度仅当 daemon 跑在 macOS 上时可用（OAuth token 从钥匙串读取），或者设置了环境变量 CLAUDE_CODE_OAUTH_TOKEN。Codex 额度通过 ~/.codex/auth.json 跨平台都能工作。"
   },
   "actions": {
     "agentCreate": "新建",
@@ -520,7 +540,52 @@
     "description": "发现并安装社区扩展，增强你的守护进程功能。",
     "installed": "已安装",
     "install": "安装",
-    "by": "作者：{{author}}"
+    "by": "作者：{{author}}",
+    "openReleasePage": "打开发布页",
+    "bridgeInstalledHint": "桥接已安装。请从 GitHub 获取 {{app}}：",
+    "companionAppFallback": "配套应用",
+    "action": {
+      "open": "打开",
+      "companionMissing": "缺少配套应用",
+      "uninstall": "卸载"
+    },
+    "badge": {
+      "platformsOnly": "仅 {{platforms}}",
+      "unsupported": "不支持"
+    },
+    "empty": {
+      "notConnected": "请先连接 daemon 以浏览扩展。",
+      "loadFailed": "加载扩展失败",
+      "none": "暂无可用扩展。"
+    },
+    "phase": {
+      "writingBridge": "写入桥接…",
+      "fetchingRelease": "获取发布信息…",
+      "downloading": "下载中…",
+      "extracting": "解压中…",
+      "installingApp": "安装应用…",
+      "done": "完成",
+      "bytesDownloaded": "已下载 {{size}}"
+    },
+    "toast": {
+      "installFailed": "安装 {{id}} 失败",
+      "bridgeInstalled": "{{id}} 桥接已安装。请从 GitHub 完成配套应用安装。",
+      "readyToLaunch": "{{id}} 就绪",
+      "installed": "{{id}} 已安装",
+      "uninstallFailed": "卸载失败",
+      "removed": "已移除 {{id}}",
+      "removedFull": "已完全移除 {{id}}（配套 app 已移到废纸篓）",
+      "launchFailed": "启动失败"
+    },
+    "uninstall": {
+      "confirmTitle": "卸载 {{name}}？",
+      "confirmBody": "桥接将被移除，此操作不可撤销。",
+      "confirmBodyWithCompanion": "Daemon 端的桥接将被移除。{{app}} 仍会保留在你的电脑上 — 接下来会单独询问是否一并移除它。",
+      "fullTitle": "也将 {{app}} 移到废纸篓？",
+      "fullBody": "将关闭运行中的 {{app}}，并把 {{path}} 移到废纸篓。可以从废纸篓恢复。\n\n如果其他地方仍在使用这个应用，请选\"保留应用\"，仅卸载桥接即可。",
+      "moveToTrash": "移到废纸篓",
+      "keepApp": "保留应用"
+    }
   },
   "rename": {
     "title": "重命名工作区",
@@ -545,6 +610,33 @@
     "connecting": "连接中…",
     "hostRequired": "请输入主机地址",
     "hostFormatError": "请只输入 host:port（不要带 ws:// 或 /ws）"
+  },
+  "addHostMethod": {
+    "title": "添加连接",
+    "direct": {
+      "label": "直接连接",
+      "sub": "局域网或 VPN。"
+    },
+    "scanQr": {
+      "label": "扫码",
+      "sub": "加密 relay 连接。"
+    },
+    "pasteLink": {
+      "label": "粘贴配对链接",
+      "sub": "加密 relay 连接。"
+    }
+  },
+  "pairDevice": {
+    "title": "配对设备",
+    "loading": "正在加载配对信息…",
+    "loadFailed": "加载配对信息失败。",
+    "relayDisabled": "Relay 未启用。请先启用 relay 才能配对设备。",
+    "unavailable": "暂无可用的配对信息。",
+    "retry": "重试",
+    "scanHint": "用手机端 Ottie 扫描下方二维码，或复制下方链接。",
+    "copy": "复制",
+    "copied": "已复制",
+    "qrUnavailable": "二维码不可用。"
   },
   "workspace": {
     "hostNotConnected": "未连接到主机",

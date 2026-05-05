@@ -1025,6 +1025,12 @@ export class Session {
     this.router.register("local-services/install", (m) =>
       this.handleLocalServicesInstallRequest(m as any),
     );
+    this.router.register("openclaw/agents/list", (m) =>
+      this.handleOpenclawListAgentsRequest(m as any),
+    );
+    this.router.register("openclaw/chat/send", (m) =>
+      this.handleOpenclawSendMessageRequest(m as any),
+    );
 
     void this.initializeAgentMcp();
     this.subscribeToAgentEvents();
@@ -2132,6 +2138,10 @@ export class Session {
         return this.handleLocalServicesListRequest(msg);
       case "local-services/install":
         return this.handleLocalServicesInstallRequest(msg);
+      case "openclaw/agents/list":
+        return this.handleOpenclawListAgentsRequest(msg);
+      case "openclaw/chat/send":
+        return this.handleOpenclawSendMessageRequest(msg);
       case "schedule/delete":
         return this.handleScheduleDeleteRequest(msg);
       case "loop/run":
@@ -9082,6 +9092,54 @@ export class Session {
           message: "",
           output: "",
           port: null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleOpenclawListAgentsRequest(
+    request: Extract<SessionInboundMessage, { type: "openclaw/agents/list" }>,
+  ): Promise<void> {
+    try {
+      const { listOpenclawAgents } = await import("./openclaw/openclaw-client.js");
+      const agents = await listOpenclawAgents();
+      this.emit({
+        type: "openclaw/agents/list/response",
+        payload: { requestId: request.requestId, agents, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "openclaw/agents/list/response",
+        payload: {
+          requestId: request.requestId,
+          agents: [],
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleOpenclawSendMessageRequest(
+    request: Extract<SessionInboundMessage, { type: "openclaw/chat/send" }>,
+  ): Promise<void> {
+    try {
+      const { sendOpenclawMessage } = await import("./openclaw/openclaw-client.js");
+      const result = await sendOpenclawMessage({
+        text: request.text,
+        agentId: request.agentId ?? undefined,
+        sessionId: request.sessionId ?? undefined,
+      });
+      this.emit({
+        type: "openclaw/chat/send/response",
+        payload: { requestId: request.requestId, reply: result.reply, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "openclaw/chat/send/response",
+        payload: {
+          requestId: request.requestId,
+          reply: "",
           error: error instanceof Error ? error.message : String(error),
         },
       });
