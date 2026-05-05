@@ -26,6 +26,7 @@ import { CodexAppServerAgentClient } from "./providers/codex-app-server-agent.js
 import { CopilotACPAgentClient } from "./providers/copilot-acp-agent.js";
 import { GenericACPAgentClient } from "./providers/generic-acp-agent.js";
 import { GeminiAgentClient } from "./providers/gemini-agent.js";
+import { GeminiCliACPAgentClient } from "./providers/gemini-cli-acp-agent.js";
 import { OpenCodeAgentClient, OpenCodeServerManager } from "./providers/opencode-agent.js";
 import { PiDirectAgentClient } from "./providers/pi-direct-agent.js";
 import { MockLoadTestAgentClient } from "./providers/mock-load-test-agent.js";
@@ -87,6 +88,11 @@ const PROVIDER_CLIENT_FACTORIES: Record<string, ProviderClientFactory> = {
   opencode: (logger, runtimeSettings) => new OpenCodeAgentClient(logger, runtimeSettings),
   gemini: (logger, runtimeSettings) =>
     new GeminiAgentClient({
+      logger,
+      runtimeSettings,
+    }),
+  "gemini-cli": (logger, runtimeSettings) =>
+    new GeminiCliACPAgentClient({
       logger,
       runtimeSettings,
     }),

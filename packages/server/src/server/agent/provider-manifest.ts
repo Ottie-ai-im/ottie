@@ -181,6 +181,14 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     },
   },
   {
+    id: "gemini-cli",
+    label: "Gemini CLI",
+    description:
+      "Google's official Gemini CLI in ACP mode — reuses your `gemini` login (no API key needed)",
+    defaultModeId: null,
+    modes: [],
+  },
+  {
     id: "pi",
     label: "Pi",
     description: "Minimal terminal-based coding agent with multi-provider LLM support",
