@@ -76,6 +76,7 @@ import {
   ScheduleInspectResponseSchema,
   ScheduleDeleteResponseSchema,
 } from "../server/schedule/rpc-schemas.js";
+import { UsageListResponseSchema, type UsageSummary } from "../server/usage/rpc-schemas.js";
 import type {
   CreateScheduleInput,
   ScheduleSummary,
@@ -4392,6 +4393,27 @@ export class DaemonClient {
     if (payload.error) throw new Error(payload.error);
     if (!payload.schedule) throw new Error("No schedule returned");
     return payload.schedule;
+  }
+
+  async getUsage(params?: { requestId?: string }): Promise<UsageSummary> {
+    const requestId = this.createRequestId(params?.requestId);
+    const payload = await this.sendRequest<any>({
+      requestId,
+      message: {
+        type: "usage/list",
+        requestId,
+      },
+      timeout: 30000,
+      select: (msg) => {
+        if (msg.type === "usage/list/response" && msg.payload.requestId === requestId) {
+          return UsageListResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+    if (payload.error) throw new Error(payload.error);
+    if (!payload.summary) throw new Error("usage_summary_unavailable");
+    return payload.summary;
   }
 
   async listSchedules(params?: { requestId?: string }): Promise<ScheduleSummary[]> {

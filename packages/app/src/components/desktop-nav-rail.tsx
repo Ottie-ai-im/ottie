@@ -5,7 +5,15 @@ import { router, usePathname } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { useHotkeys } from "react-hotkeys-hook";
-import { Bell, Blocks, MessagesSquare, Server, Settings, User } from "lucide-react-native";
+import {
+  Activity,
+  Bell,
+  Blocks,
+  MessagesSquare,
+  Server,
+  Settings,
+  User,
+} from "lucide-react-native";
 
 import { useHosts } from "@/runtime/host-runtime";
 import { useWindowControlsPadding } from "@/utils/desktop-window";
@@ -13,17 +21,18 @@ import {
   buildHostCommunityRoute,
   buildHostDevicesRoute,
   buildHostSessionsRoute,
+  buildHostUsageRoute,
 } from "@/utils/host-routes";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { isWeb } from "@/constants/platform";
 
 const RAIL_WIDTH = 60;
 
-type RailTabId = "chats" | "devices" | "extensions" | "settings";
+type RailTabId = "chats" | "devices" | "extensions" | "usage" | "settings";
 
 interface RailTabSpec {
   id: RailTabId;
-  labelKey: "tabs.chats" | "tabs.devices" | "tabs.extensions" | "tabs.settings";
+  labelKey: "tabs.chats" | "tabs.devices" | "tabs.extensions" | "tabs.usage" | "tabs.settings";
   icon: ComponentType<{ size?: number; color?: string }>;
 }
 
@@ -31,6 +40,7 @@ const PRIMARY_TABS: readonly RailTabSpec[] = [
   { id: "chats", labelKey: "tabs.chats", icon: MessagesSquare },
   { id: "devices", labelKey: "tabs.devices", icon: Server },
   { id: "extensions", labelKey: "tabs.extensions", icon: Blocks },
+  { id: "usage", labelKey: "tabs.usage", icon: Activity },
   { id: "settings", labelKey: "tabs.settings", icon: Settings },
 ];
 
@@ -38,6 +48,7 @@ function deriveActiveTab(pathname: string): RailTabId {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/devices")) return "devices";
   if (pathname.includes("/community")) return "extensions";
+  if (pathname.includes("/usage")) return "usage";
   return "chats";
 }
 
@@ -103,6 +114,11 @@ export function DesktopNavRail() {
             router.replace(buildHostCommunityRoute(activeServerId));
           }
           break;
+        case "usage":
+          if (activeServerId) {
+            router.replace(buildHostUsageRoute(activeServerId));
+          }
+          return;
         case "settings":
           router.replace("/settings");
           return;

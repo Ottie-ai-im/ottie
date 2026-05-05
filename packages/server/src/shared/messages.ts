@@ -43,6 +43,7 @@ import {
   ScheduleResumeResponseSchema,
   ScheduleDeleteResponseSchema,
 } from "../server/schedule/rpc-schemas.js";
+import { UsageListRequestSchema, UsageListResponseSchema } from "../server/usage/rpc-schemas.js";
 import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
@@ -1864,6 +1865,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SchedulePauseRequestSchema,
   ScheduleResumeRequestSchema,
   ScheduleDeleteRequestSchema,
+  UsageListRequestSchema,
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -3472,6 +3474,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SchedulePauseResponseSchema,
   ScheduleResumeResponseSchema,
   ScheduleDeleteResponseSchema,
+  UsageListResponseSchema,
   LoopRunResponseSchema,
   LoopListResponseSchema,
   LoopInspectResponseSchema,
@@ -3583,6 +3586,7 @@ export type ScheduleLogsResponse = z.infer<typeof ScheduleLogsResponseSchema>;
 export type SchedulePauseResponse = z.infer<typeof SchedulePauseResponseSchema>;
 export type ScheduleResumeResponse = z.infer<typeof ScheduleResumeResponseSchema>;
 export type ScheduleDeleteResponse = z.infer<typeof ScheduleDeleteResponseSchema>;
+export type UsageListResponse = z.infer<typeof UsageListResponseSchema>;
 export type LoopRunResponse = z.infer<typeof LoopRunResponseSchema>;
 export type LoopListResponse = z.infer<typeof LoopListResponseSchema>;
 export type LoopInspectResponse = z.infer<typeof LoopInspectResponseSchema>;
@@ -3639,6 +3643,7 @@ export type ScheduleLogsRequest = z.infer<typeof ScheduleLogsRequestSchema>;
 export type SchedulePauseRequest = z.infer<typeof SchedulePauseRequestSchema>;
 export type ScheduleResumeRequest = z.infer<typeof ScheduleResumeRequestSchema>;
 export type ScheduleDeleteRequest = z.infer<typeof ScheduleDeleteRequestSchema>;
+export type UsageListRequest = z.infer<typeof UsageListRequestSchema>;
 export type LoopRunRequest = z.infer<typeof LoopRunRequestSchema>;
 export type LoopListRequest = z.infer<typeof LoopListRequestSchema>;
 export type LoopInspectRequest = z.infer<typeof LoopInspectRequestSchema>;

@@ -363,6 +363,14 @@ export function buildHostDevicesRoute(serverId: string) {
   return `${base}/devices` as const;
 }
 
+export function buildHostUsageRoute(serverId: string) {
+  const base = buildHostRootRoute(serverId);
+  if (base === "/") {
+    return "/" as const;
+  }
+  return `${base}/usage` as const;
+}
+
 export function buildHostCommunityRoute(serverId: string) {
   const base = buildHostRootRoute(serverId);
   if (base === "/") {

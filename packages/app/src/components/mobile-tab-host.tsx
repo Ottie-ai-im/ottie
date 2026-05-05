@@ -9,6 +9,7 @@ import {
   buildHostCommunityRoute,
   buildHostDevicesRoute,
   buildHostSessionsRoute,
+  buildHostUsageRoute,
 } from "@/utils/host-routes";
 
 export interface MobileTabHostProps {
@@ -39,6 +40,9 @@ export function MobileTabHost({ serverId, activeTab, children }: MobileTabHostPr
           return;
         case "extensions":
           router.replace(buildHostCommunityRoute(serverId));
+          return;
+        case "usage":
+          router.replace(buildHostUsageRoute(serverId));
           return;
         case "settings":
           router.replace("/settings");

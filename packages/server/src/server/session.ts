@@ -1000,6 +1000,7 @@ export class Session {
     this.router.register("schedule/pause", (m) => this.handleSchedulePauseRequest(m as any));
     this.router.register("schedule/resume", (m) => this.handleScheduleResumeRequest(m as any));
     this.router.register("schedule/delete", (m) => this.handleScheduleDeleteRequest(m as any));
+    this.router.register("usage/list", (m) => this.handleUsageListRequest(m as any));
 
     void this.initializeAgentMcp();
     this.subscribeToAgentEvents();
@@ -2101,6 +2102,8 @@ export class Session {
         return this.handleSchedulePauseRequest(msg);
       case "schedule/resume":
         return this.handleScheduleResumeRequest(msg);
+      case "usage/list":
+        return this.handleUsageListRequest(msg);
       case "schedule/delete":
         return this.handleScheduleDeleteRequest(msg);
       case "loop/run":
@@ -8964,6 +8967,32 @@ export class Session {
       }
     } catch (error) {
       this.emitScheduleRpcError(request, error);
+    }
+  }
+
+  private async handleUsageListRequest(
+    request: Extract<SessionInboundMessage, { type: "usage/list" }>,
+  ): Promise<void> {
+    try {
+      const { getUsageSummary } = await import("./usage/usage-service.js");
+      const summary = await getUsageSummary();
+      this.emit({
+        type: "usage/list/response",
+        payload: {
+          requestId: request.requestId,
+          summary,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "usage/list/response",
+        payload: {
+          requestId: request.requestId,
+          summary: null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
   }
 
