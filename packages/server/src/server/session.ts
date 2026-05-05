@@ -9101,14 +9101,26 @@ export class Session {
   private async handleOpenclawListAgentsRequest(
     request: Extract<SessionInboundMessage, { type: "openclaw/agents/list" }>,
   ): Promise<void> {
+    this.sessionLogger.info(
+      { requestId: request.requestId },
+      "openclaw/agents/list — probing OpenClaw Gateway",
+    );
     try {
       const { listOpenclawAgents } = await import("./openclaw/openclaw-client.js");
       const agents = await listOpenclawAgents();
+      this.sessionLogger.info(
+        { requestId: request.requestId, count: agents.length },
+        "openclaw/agents/list — done",
+      );
       this.emit({
         type: "openclaw/agents/list/response",
         payload: { requestId: request.requestId, agents, error: null },
       });
     } catch (error) {
+      this.sessionLogger.error(
+        { requestId: request.requestId, err: error },
+        "openclaw/agents/list — failed",
+      );
       this.emit({
         type: "openclaw/agents/list/response",
         payload: {
@@ -9123,6 +9135,16 @@ export class Session {
   private async handleOpenclawSendMessageRequest(
     request: Extract<SessionInboundMessage, { type: "openclaw/chat/send" }>,
   ): Promise<void> {
+    this.sessionLogger.info(
+      {
+        requestId: request.requestId,
+        agentId: request.agentId,
+        sessionId: request.sessionId,
+        textPreview: request.text.slice(0, 80),
+        textLength: request.text.length,
+      },
+      "openclaw/chat/send — dispatching to OpenClaw Gateway",
+    );
     try {
       const { sendOpenclawMessage } = await import("./openclaw/openclaw-client.js");
       const result = await sendOpenclawMessage({
@@ -9130,11 +9152,23 @@ export class Session {
         agentId: request.agentId ?? undefined,
         sessionId: request.sessionId ?? undefined,
       });
+      this.sessionLogger.info(
+        {
+          requestId: request.requestId,
+          replyLength: result.reply.length,
+          replyPreview: result.reply.slice(0, 120),
+        },
+        "openclaw/chat/send — got reply",
+      );
       this.emit({
         type: "openclaw/chat/send/response",
         payload: { requestId: request.requestId, reply: result.reply, error: null },
       });
     } catch (error) {
+      this.sessionLogger.error(
+        { requestId: request.requestId, err: error },
+        "openclaw/chat/send — failed",
+      );
       this.emit({
         type: "openclaw/chat/send/response",
         payload: {

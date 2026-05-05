@@ -5,6 +5,16 @@ import os from "node:os";
 const DEFAULT_HOST = "http://127.0.0.1:18789";
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
+// Lightweight diagnostic logger. Pino isn't available without DI here, so we
+// fall back to console with a stable prefix the user can grep:
+//   $ tail -f $OTTIE_HOME/daemon.log | grep '\[openclaw\]'
+function diag(level: "info" | "warn" | "error", msg: string, fields?: Record<string, unknown>) {
+  const line = fields ? `[openclaw] ${msg} ${JSON.stringify(fields)}` : `[openclaw] ${msg}`;
+  if (level === "error") console.error(line);
+  else if (level === "warn") console.warn(line);
+  else console.log(line);
+}
+
 /**
  * Resolve the OpenClaw Gateway bearer token. Lookup order:
  *   1. `OPENCLAW_GATEWAY_TOKEN` env var
@@ -18,19 +28,26 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
  */
 export async function resolveOpenclawToken(): Promise<string | null> {
   if (process.env.OPENCLAW_GATEWAY_TOKEN) {
+    diag("info", "auth token resolved from OPENCLAW_GATEWAY_TOKEN env var");
     return process.env.OPENCLAW_GATEWAY_TOKEN.trim();
   }
   const home = os.homedir();
+  const tokenFile = path.join(home, ".openclaw", "gateway.token");
   try {
-    const tokenFile = path.join(home, ".openclaw", "gateway.token");
     const data = await fs.readFile(tokenFile, "utf8");
     const trimmed = data.trim();
-    if (trimmed) return trimmed;
-  } catch {
-    // not present, continue
+    if (trimmed) {
+      diag("info", "auth token resolved from gateway.token file", { path: tokenFile });
+      return trimmed;
+    }
+  } catch (err) {
+    diag("info", "no gateway.token file", {
+      path: tokenFile,
+      reason: err instanceof Error ? err.message : String(err),
+    });
   }
+  const configFile = path.join(home, ".openclaw", "openclaw.json");
   try {
-    const configFile = path.join(home, ".openclaw", "openclaw.json");
     const raw = await fs.readFile(configFile, "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const candidate =
@@ -38,11 +55,16 @@ export async function resolveOpenclawToken(): Promise<string | null> {
       (parsed.gateway_token as string | undefined) ??
       ((parsed.gateway as Record<string, unknown> | undefined)?.token as string | undefined);
     if (typeof candidate === "string" && candidate.trim().length > 0) {
+      diag("info", "auth token resolved from openclaw.json", { path: configFile });
       return candidate.trim();
     }
-  } catch {
-    // not present or unparsable, continue
+  } catch (err) {
+    diag("info", "no openclaw.json or no gatewayToken field", {
+      path: configFile,
+      reason: err instanceof Error ? err.message : String(err),
+    });
   }
+  diag("warn", "no auth token found — will try unauthenticated requests");
   return null;
 }
 
@@ -64,21 +86,54 @@ async function gatewayFetch<T>(opts: FetchOptions): Promise<T> {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  diag("info", `→ ${opts.method} ${opts.path}`, {
+    host,
+    hasToken: token !== null,
+    bodyBytes: opts.body !== undefined ? JSON.stringify(opts.body).length : 0,
+  });
+
+  const startedAt = Date.now();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, {
-      method: opts.method,
-      headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: opts.method,
+        headers,
+        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      // Distinguish the common failure shapes so the user knows which to fix:
+      //   - AbortError       → timeout (gateway is slow or hung)
+      //   - ECONNREFUSED     → gateway not running
+      //   - ENOTFOUND/EAI…   → host config issue
+      const cause =
+        err instanceof Error
+          ? `${err.name}: ${err.message}${err.cause ? ` (cause=${String(err.cause)})` : ""}`
+          : String(err);
+      diag("error", `✕ ${opts.method} ${opts.path} — network error`, {
+        url,
+        elapsedMs: Date.now() - startedAt,
+        timeoutMs,
+        cause,
+      });
+      throw new Error(`OpenClaw network error: ${cause}`);
+    }
+    const elapsedMs = Date.now() - startedAt;
     if (!response.ok) {
       const text = await response.text().catch(() => "");
+      diag("warn", `← ${opts.method} ${opts.path} ${response.status}`, {
+        elapsedMs,
+        bodyPreview: text.slice(0, 200),
+      });
       throw new Error(
         `OpenClaw ${opts.method} ${opts.path} → ${response.status}: ${text.slice(0, 500)}`,
       );
     }
+    diag("info", `← ${opts.method} ${opts.path} ${response.status}`, { elapsedMs });
     const contentType = response.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
       return (await response.json()) as T;

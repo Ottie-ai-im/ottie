@@ -70,12 +70,22 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
         },
       ]);
     } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      // Common failure: the daemon you're talking to predates the
+      // openclaw/chat/send schema. Surface a more actionable message
+      // alongside the raw daemon response so the user knows to update.
+      const friendly =
+        raw.toLowerCase().includes("unknown request schema") ||
+        raw.toLowerCase().includes("unknown_schema")
+          ? `${raw}\n\nTip: your Ottie daemon is older than this client and doesn't know about openclaw/chat/send. Restart the daemon (or run "pnpm build:daemon" if you're in a dev checkout) to pick up the new RPC.`
+          : raw;
+      console.error("[openclaw-chat-panel] send failed", err);
       setTurns((prev) => [
         ...prev,
         {
           id: `e-${Date.now()}`,
           role: "error",
-          text: err instanceof Error ? err.message : String(err),
+          text: friendly,
           ts: Date.now(),
         },
       ]);

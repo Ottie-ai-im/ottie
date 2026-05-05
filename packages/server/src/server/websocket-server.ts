@@ -1283,12 +1283,34 @@ export class VoiceAssistantWebSocketServer {
       "type" in parsed &&
       (parsed as { type?: unknown }).type === "session";
 
+    // Surface the *actual* zod issues — the default `error.message` is a
+    // truncated JSON dump that hides which field rejected. Splitting them
+    // out lets users grep daemon.log for the failing path (e.g. you'll see
+    // path=["message","type"] received="openclaw/chat/send" when the
+    // daemon binary predates this message type and the discriminated union
+    // hasn't been rebuilt — common when ottie was upgraded but the
+    // daemon-bundle wasn't restarted).
+    const zodIssues = (parsedMessage.error as { issues?: unknown }).issues;
     log.warn(
       {
         clientId: activeConnection?.clientId,
         requestId: requestInfo?.requestId,
         requestType: requestInfo?.requestType,
         error: parsedMessage.error.message,
+        issues: Array.isArray(zodIssues) ? zodIssues : undefined,
+        rawType:
+          parsed && typeof parsed === "object" && "type" in parsed
+            ? (parsed as { type?: unknown }).type
+            : undefined,
+        nestedType:
+          parsed &&
+          typeof parsed === "object" &&
+          "message" in parsed &&
+          parsed.message &&
+          typeof parsed.message === "object" &&
+          "type" in (parsed.message as Record<string, unknown>)
+            ? (parsed.message as { type?: unknown }).type
+            : undefined,
       },
       "WS inbound message validation failed",
     );
