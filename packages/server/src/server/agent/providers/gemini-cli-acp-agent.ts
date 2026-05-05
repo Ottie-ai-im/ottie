@@ -52,7 +52,7 @@ interface GeminiCliACPAgentClientOptions {
 export class GeminiCliACPAgentClient extends ACPAgentClient {
   constructor(options: GeminiCliACPAgentClientOptions) {
     super({
-      provider: "gemini-cli",
+      provider: "gemini",
       logger: options.logger,
       runtimeSettings: options.runtimeSettings,
       defaultCommand: ["gemini", "--experimental-acp"],
