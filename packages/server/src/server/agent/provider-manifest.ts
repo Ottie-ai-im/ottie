@@ -170,6 +170,17 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     },
   },
   {
+    id: "gemini",
+    label: "Gemini",
+    description: "Google's Gemini models with native tool calling and reasoning",
+    defaultModeId: null,
+    modes: [],
+    voice: {
+      enabled: true,
+      defaultModeId: "default",
+    },
+  },
+  {
     id: "pi",
     label: "Pi",
     description: "Minimal terminal-based coding agent with multi-provider LLM support",

@@ -55,7 +55,9 @@ import {
 } from "lucide-react-native";
 import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { DraggableList, type DraggableRenderItemInfo } from "./draggable-list";
+import { useDroppable, useDndContext } from "@dnd-kit/core";
 import { SidebarProjectDropZone } from "./sidebar-project-drop-zone";
+import { getProviderIcon } from "./provider-icons";
 import type { DraggableListDragHandleProps } from "./draggable-list.types";
 import { getHostRuntimeStore, isHostRuntimeConnected } from "@/runtime/host-runtime";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -1979,6 +1981,58 @@ interface WorkspaceRowItemProps {
   dragHandleProps?: DraggableListDragHandleProps;
 }
 
+function SidebarAgentRow({
+  agent,
+  serverId,
+  workspaceId,
+}: {
+  agent: { id: string; title: string; provider: string };
+  serverId: string | null;
+  workspaceId: string;
+}) {
+  const { theme } = useUnistyles();
+  const { active } = useDndContext();
+  const isDraggingProvider = active?.data.current?.type === "provider";
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: `agent-row-${serverId}:${agent.id}`,
+    data: {
+      type: "agent-change-provider",
+      serverId,
+      agentId: agent.id,
+      workspaceId,
+    },
+  });
+
+  return (
+    <View
+      ref={setNodeRef as any}
+      style={[
+        styles.agentRow,
+        isOver &&
+          isDraggingProvider && {
+            backgroundColor: theme.colors.palette.blue[500] + "1A",
+            borderRadius: 6,
+          },
+      ]}
+    >
+      <View style={styles.agentRowContent}>
+        {agent.provider ? (
+          <View style={{ width: 14, height: 14, alignItems: "center", justifyContent: "center" }}>
+            {(() => {
+              const Icon = getProviderIcon(agent.provider);
+              return Icon ? <Icon size={12} color={theme.colors.foregroundMuted} /> : null;
+            })()}
+          </View>
+        ) : null}
+        <Text style={styles.agentRowText} numberOfLines={1}>
+          {agent.title}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function WorkspaceRowItem({
   workspace,
   shortcutNumber,
@@ -2019,7 +2073,7 @@ function WorkspaceRowItem({
 
   return (
     <View
-      ref={setNodeRef}
+      ref={setNodeRef as any}
       style={
         isOver && isDraggingProvider && !hasRunningScripts
           ? {
@@ -2280,8 +2334,30 @@ function ProjectBlock({
     onToggleCollapsed(project.projectKey);
   }, [onToggleCollapsed, project.projectKey]);
 
+  const { active } = useDndContext();
+  const isDraggingProvider = active?.data.current?.type === "provider";
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: `project-header-${project.projectKey}`,
+    data: {
+      type: "project-header-hover",
+    },
+  });
+
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    if (isOver && isDraggingProvider && collapsed) {
+      timeout = setTimeout(() => {
+        onToggleCollapsed(project.projectKey);
+      }, 600);
+    }
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [isOver, isDraggingProvider, collapsed, onToggleCollapsed, project.projectKey]);
+
   return (
-    <View style={styles.projectBlock}>
+    <View ref={setNodeRef as any} style={styles.projectBlock}>
       {rowModel.kind === "workspace_link" ? (
         <FlattenedProjectRow
           project={project}
@@ -3028,6 +3104,26 @@ const styles = StyleSheet.create((theme) => ({
   },
   kebabButtonHovered: {
     backgroundColor: theme.colors.surface2,
+  },
+  agentRow: {
+    paddingVertical: 6,
+    paddingLeft: 34,
+    paddingRight: 8,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  agentRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  agentRowText: {
+    fontSize: 13,
+    color: theme.colors.foregroundMuted,
+  },
+  agentListContainer: {
+    marginTop: 2,
+    marginBottom: 6,
   },
   shortcutBadge: {
     minWidth: 18,

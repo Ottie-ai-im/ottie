@@ -34,7 +34,9 @@ export function SidebarWorkspaceAiProviderLogo({
   });
 
   const ProviderIcon = provider ? getProviderIcon(provider) : null;
-  const brandColor = provider ? getProviderAccent(provider).background : theme.colors.foregroundMuted;
+  const brandColor = provider
+    ? getProviderAccent(provider).background
+    : theme.colors.foregroundMuted;
 
   const spinStyle = useAnimatedStyle(() => {
     return {

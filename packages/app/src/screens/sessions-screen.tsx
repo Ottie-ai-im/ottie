@@ -67,12 +67,13 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
   // Pinned rows sort first (by pinnedAt desc, returned by the store helper),
   // then unpinned rows by lastActivityAt desc. Pinned set rebuilds when the
   // store changes — subscribe via a selector for re-renders.
-  const pinnedRowKeys = useChatRowStateStore((s) =>
-    Object.entries(s.rows)
+  const rows = useChatRowStateStore((s) => s.rows);
+  const pinnedRowKeys = useMemo(() => {
+    return Object.entries(rows)
       .filter(([, value]) => value.pinned)
       .sort(([, a], [, b]) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0))
-      .map(([key]) => key),
-  );
+      .map(([key]) => key);
+  }, [rows]);
 
   const sortedAgents = useMemo(() => {
     const pinnedSet = new Set(pinnedRowKeys);

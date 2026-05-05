@@ -144,6 +144,7 @@ import { ScriptHealthMonitor } from "./script-health-monitor.js";
 import { createScriptStatusEmitter } from "./script-status-projection.js";
 import { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-store.js";
 import { isHostnameAllowed, type HostnamesConfig } from "./hostnames.js";
+import { PluginManager } from "./plugins/plugin-manager.js";
 
 type AgentMcpTransportMap = Map<string, StreamableHTTPServerTransport>;
 
@@ -784,6 +785,9 @@ export async function createOttieDaemon(
   const localTokenMode: LocalTokenMode = await resolveLocalTokenMode();
   logger.info({ mode: localTokenMode.kind, elapsed: elapsed() }, "Local-daemon auth mode resolved");
 
+  const pluginManager = new PluginManager(config.ottieHome, logger);
+  await pluginManager.initialize();
+
   const start = async () => {
     // Start main HTTP server
     await new Promise<void>((resolve, reject) => {
@@ -865,6 +869,7 @@ export async function createOttieDaemon(
             github,
             chatSubscriptionManager,
             localTokenMode,
+            pluginManager,
           );
 
           if (typeof process.send === "function" && process.env.OTTIE_SUPERVISED === "1") {
@@ -959,6 +964,7 @@ export async function createOttieDaemon(
         "failed to close timeline sqlite handle on shutdown",
       );
     }
+    await pluginManager.destroy();
   };
 
   return {

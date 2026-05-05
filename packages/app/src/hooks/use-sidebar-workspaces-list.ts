@@ -46,6 +46,8 @@ export interface SidebarWorkspaceEntry {
    * "Tue 14:32" / "5m" subtitles in the sidebar.
    */
   activityAt: string | null;
+  /** Agents executing within or tied to this workspace. */
+  agents: { id: string; title: string; provider: string }[];
 }
 
 export interface SidebarProjectEntry {
@@ -90,6 +92,7 @@ function createStructuralWorkspaceEntry(input: {
     scripts: [],
     hasRunningScripts: false,
     activityAt: null,
+    agents: [],
   };
 }
 
@@ -113,6 +116,7 @@ export function createSidebarWorkspaceEntry(input: {
     scripts: input.workspace.scripts,
     hasRunningScripts: input.workspace.scripts.some((script) => script.lifecycle === "running"),
     activityAt: input.workspace.activityAt ?? null,
+    agents: [],
   };
 }
 
@@ -235,6 +239,9 @@ export function useSidebarWorkspacesList(options?: {
     isActive && serverId ? (state.sessions[serverId]?.hasHydratedWorkspaces ?? false) : false,
   );
   const workspaceStructure = useWorkspaceStructure(isActive ? serverId : null);
+  const sessionAgents = useSessionStore((state) =>
+    isActive && serverId ? state.sessions[serverId]?.agents : undefined,
+  );
 
   const connectionStatus = useSyncExternalStore(
     (onStoreChange) =>
@@ -259,11 +266,49 @@ export function useSidebarWorkspacesList(options?: {
     if (!serverId || workspaceStructure.projects.length === 0) {
       return EMPTY_PROJECTS;
     }
-    return buildSidebarProjectsFromStructure({
+    const projectsWithAgents = buildSidebarProjectsFromStructure({
       serverId,
       projects: workspaceStructure.projects,
     });
-  }, [serverId, workspaceStructure]);
+
+    if (sessionAgents && sessionAgents.size > 0) {
+      // Group agents by workspaceId (or cwd if workspaceId isn't on the agent, though Agent uses `cwd` to derive workspace placement usually)
+      for (const project of projectsWithAgents) {
+        for (const workspace of project.workspaces) {
+          const workspaceAgents: { id: string; title: string; provider: string }[] = [];
+          for (const agent of sessionAgents.values()) {
+            // For now we map based on agent.cwd matching workspace.workspaceDirectory or fallback to project placement.
+            // Agents in session store have `cwd`. Workspaces have `workspaceDirectory`.
+            if (
+              agent.cwd &&
+              workspace.workspaceDirectory &&
+              agent.cwd.startsWith(workspace.workspaceDirectory)
+            ) {
+              workspaceAgents.push({
+                id: agent.id,
+                title: agent.title || "Untitled",
+                provider: agent.provider,
+              });
+            } else if (
+              agent.cwd &&
+              workspace.projectRootPath &&
+              agent.cwd.startsWith(workspace.projectRootPath) &&
+              workspace.workspaceKind === "checkout"
+            ) {
+              // Fallback for default workspaces
+              workspaceAgents.push({
+                id: agent.id,
+                title: agent.title || "Untitled",
+                provider: agent.provider,
+              });
+            }
+          }
+          workspace.agents = workspaceAgents;
+        }
+      }
+    }
+    return projectsWithAgents;
+  }, [serverId, workspaceStructure, sessionAgents]);
 
   useEffect(() => {
     if (!serverId) {

@@ -24,6 +24,7 @@ function workspace(overrides: Partial<SidebarWorkspaceEntry> = {}): SidebarWorks
     scripts: [],
     hasRunningScripts: false,
     activityAt: null,
+    agents: [],
     ...overrides,
   };
 }

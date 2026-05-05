@@ -81,8 +81,8 @@ function DraggableProviderIcon({ providerId, label }: { providerId: string; labe
 const styles = StyleSheet.create((theme) => ({
   container: {
     width: 60,
-    borderLeftWidth: 1,
-    borderLeftColor: theme.colors.surface2,
+    borderRightWidth: 1,
+    borderRightColor: theme.colors.surface2,
     backgroundColor: theme.colors.surface0,
     alignItems: "center",
     paddingTop: theme.spacing[4],

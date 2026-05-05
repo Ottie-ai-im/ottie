@@ -27,6 +27,7 @@ function workspace(input: {
     scripts: [],
     hasRunningScripts: false,
     activityAt: null,
+    agents: [],
   };
 }
 

@@ -68,6 +68,7 @@ import {
   buildSettingsRoute,
   mapPathnameToServer,
 } from "@/utils/host-routes";
+import { useSessionStore } from "@/stores/session-store";
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
 import { SidebarWorkspaceList } from "./sidebar-workspace-list";
@@ -314,6 +315,19 @@ export const LeftSidebar = memo(function LeftSidebar({
           const workspaceId = over.data.current.workspaceId as string;
 
           router.navigate(buildHostWorkspaceOpenRoute(serverId, workspaceId, "draft:new"));
+        } else if (over.data.current?.type === "agent-change-provider") {
+          const serverId = over.data.current.serverId as string;
+          const agentId = over.data.current.agentId as string;
+
+          // Currently, the daemon `updateAgent` API only supports `name` and `labels`.
+          // We navigate to the agent and optionally we could drop into an edit mode if supported.
+          router.navigate(
+            buildHostWorkspaceOpenRoute(
+              serverId,
+              over.data.current.workspaceId as string,
+              `agent:${agentId}`,
+            ),
+          );
         }
       }
     },
@@ -338,6 +352,7 @@ export const LeftSidebar = memo(function LeftSidebar({
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <View style={{ flexDirection: "row", height: "100%", zIndex: 10 }}>
+        <SidebarProvidersPanel serverId={activeServerId ?? ""} />
         <DesktopSidebar
           {...sharedProps}
           insetsTop={insets.top}
@@ -346,7 +361,6 @@ export const LeftSidebar = memo(function LeftSidebar({
           handleSettings={handleSettingsDesktop}
           handleViewMore={handleViewMoreNavigate}
         />
-        <SidebarProvidersPanel />
       </View>
     </DndContext>
   );

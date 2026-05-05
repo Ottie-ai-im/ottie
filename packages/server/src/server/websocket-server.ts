@@ -53,6 +53,7 @@ import {
 } from "../shared/agent-attention-notification.js";
 import { createGitHubService, type GitHubService } from "../services/github-service.js";
 import { type LocalTokenMode, verifyBearerToken } from "./auth/local-token.js";
+import { PluginManager } from "./plugins/plugin-manager.js";
 
 export interface ExternalSocketMetadata {
   transport: "relay";
@@ -416,6 +417,7 @@ export class VoiceAssistantWebSocketServer {
   private runtimeMetricsInterval: ReturnType<typeof setInterval> | null = null;
   private unsubscribeSpeechReadiness: (() => void) | null = null;
   private unsubscribeDaemonConfigChange: (() => void) | null = null;
+  private readonly pluginManager?: PluginManager;
 
   constructor(
     server: HTTPServer,
@@ -458,6 +460,7 @@ export class VoiceAssistantWebSocketServer {
     github?: GitHubService,
     chatSubscriptionManager?: ChatSubscriptionManager,
     localTokenMode: LocalTokenMode = { kind: "loopback-trust" },
+    pluginManager?: PluginManager,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.serverId = serverId;
@@ -488,6 +491,7 @@ export class VoiceAssistantWebSocketServer {
     this.daemonConfigStore = daemonConfigStore;
     this.mcpBaseUrl = mcpBaseUrl;
     this.localTokenMode = localTokenMode;
+    this.pluginManager = pluginManager;
     this.assignOptionalServices({
       speech,
       terminalManager,
@@ -888,6 +892,7 @@ export class VoiceAssistantWebSocketServer {
         if (!connection) {
           return;
         }
+        this.pluginManager?.dispatchMessage(msg);
         this.sendToConnection(connection, wrapSessionMessage(msg));
       },
       onBinaryMessage: (frame) => {
