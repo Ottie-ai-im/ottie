@@ -961,6 +961,7 @@ export class VoiceAssistantWebSocketServer {
       providerOverrides: this.providerOverrides,
       isDev: this.isDev,
       localTokenMode: this.localTokenMode,
+      pluginManager: this.pluginManager,
     });
 
     connection = {

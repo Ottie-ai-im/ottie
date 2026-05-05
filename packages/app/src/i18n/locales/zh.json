@@ -305,6 +305,17 @@
     "resetDefault": "恢复默认",
     "invalidUrl": "地址无效——点击齿轮图标设置一个有效的 http:// 地址。",
     "openInBrowser": "在浏览器中打开",
+    "openDocs": "查看安装文档",
+    "running": "运行中",
+    "stopped": "未运行",
+    "notRunning": "在 {{url}} 没检测到 Open WebUI",
+    "installPrompt": "安装 Open WebUI 才能使用本页",
+    "installPromptHint": "Open WebUI 是开源的多 agent 聊天界面，可对接 OpenClaw、Hermes Agent、MCP 工具，以及任何 OpenAI 兼容模型。从下方任一方式安装即可——一旦它启动，Ottie 会自动识别。",
+    "install": {
+      "docker": "Docker（推荐）",
+      "pipx": "pipx（Python）",
+      "npm": "npm（Node）"
+    },
     "poweredBy": "由 Open WebUI 提供支持——开源多 agent 聊天",
     "openWebUi": {
       "label": "Open WebUI",
@@ -406,6 +417,20 @@
     "settingsOpenLabs": "打开 Labs 设置"
   },
   "chat": {
+    "title": "聊天",
+    "searchPlaceholder": "搜索…",
+    "loadMore": "加载更多",
+    "section": {
+      "online": "在线",
+      "offline": "离线"
+    },
+    "scope": {
+      "active": "活跃",
+      "archived": "已归档"
+    },
+    "search": {
+      "empty": "无结果"
+    },
     "menu": {
       "pin": "置顶",
       "unpin": "取消置顶",
@@ -437,7 +462,11 @@
         "body": "点击右上角 + 新建一个 chat — 支持 Claude、Codex、OpenCode。"
       },
       "heading": "暂无 chat",
-      "body": "点击 + 开始新对话。"
+      "body": "点击 + 开始新对话。",
+      "archived": {
+        "heading": "暂无归档对话",
+        "body": "归档的对话会出现在这里。"
+      }
     },
     "deleted": {
       "toast": "已删除",
@@ -460,13 +489,17 @@
     "pairDeviceHint": "在手机端 Ottie 扫码，把这台 Mac 配对到你的设备。",
     "online": "在线",
     "connecting": "连接中",
+    "offline": "离线",
     "settings": "设置",
     "extensions": "扩展"
   },
   "extensions": {
     "title": "扩展",
     "market": "扩展商店",
-    "description": "发现并安装社区扩展，增强你的守护进程功能。"
+    "description": "发现并安装社区扩展，增强你的守护进程功能。",
+    "installed": "已安装",
+    "install": "安装",
+    "by": "作者：{{author}}"
   },
   "rename": {
     "title": "重命名工作区",

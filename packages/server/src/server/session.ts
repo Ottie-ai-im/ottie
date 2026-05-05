@@ -46,6 +46,8 @@ import { InflightCounter } from "./session/inflight-counter.js";
 import { PermissionHandler } from "./session/permission-handler.js";
 import { MessageRouter } from "./session/router.js";
 import { LocalTokenService, registerLocalTokenHandlers } from "./auth/local-token-service.js";
+import { PluginInstaller } from "./plugins/plugin-installer.js";
+import { registerPluginHandlers } from "./plugins/plugin-rpc.js";
 import type { LocalTokenMode } from "./auth/local-token.js";
 import type { TerminalManager, TerminalsChangedEvent } from "../terminal/terminal-manager.js";
 import { captureTerminalLines, type TerminalSession } from "../terminal/terminal.js";
@@ -674,6 +676,12 @@ export interface SessionOptions {
    * to {kind:"loopback-trust"} (Mode A, today's behavior).
    */
   localTokenMode?: LocalTokenMode;
+  /**
+   * v1.12: shared PluginManager for the Extensions store. When omitted the
+   * plugin RPCs return an "unavailable" error so old daemons can keep
+   * compiling without a plugin runtime.
+   */
+  pluginManager?: import("./plugins/plugin-manager.js").PluginManager;
 }
 
 export type SessionLifecycleIntent =
@@ -926,6 +934,7 @@ export class Session {
       providerOverrides,
       isDev,
       localTokenMode,
+      pluginManager,
     } = options;
     this.clientId = clientId;
     this.appVersion = appVersion ?? null;
@@ -993,6 +1002,15 @@ export class Session {
     this.localTokenService = new LocalTokenService(localTokenMode ?? { kind: "loopback-trust" });
     registerLocalTokenHandlers(this.router, this.localTokenService, (msg) => this.emit(msg));
 
+    if (pluginManager) {
+      const pluginInstaller = new PluginInstaller(
+        ottieHome,
+        this.sessionLogger.child({ module: "plugin-installer" }),
+        pluginManager,
+      );
+      registerPluginHandlers(this.router, pluginInstaller, (msg) => this.emit(msg));
+    }
+
     this.router.register("schedule/create", (m) => this.handleScheduleCreateRequest(m as any));
     this.router.register("schedule/list", (m) => this.handleScheduleListRequest(m as any));
     this.router.register("schedule/inspect", (m) => this.handleScheduleInspectRequest(m as any));
@@ -1001,6 +1019,9 @@ export class Session {
     this.router.register("schedule/resume", (m) => this.handleScheduleResumeRequest(m as any));
     this.router.register("schedule/delete", (m) => this.handleScheduleDeleteRequest(m as any));
     this.router.register("usage/list", (m) => this.handleUsageListRequest(m as any));
+    this.router.register("local-services/list", (m) =>
+      this.handleLocalServicesListRequest(m as any),
+    );
 
     void this.initializeAgentMcp();
     this.subscribeToAgentEvents();
@@ -2104,6 +2125,8 @@ export class Session {
         return this.handleScheduleResumeRequest(msg);
       case "usage/list":
         return this.handleUsageListRequest(msg);
+      case "local-services/list":
+        return this.handleLocalServicesListRequest(msg);
       case "schedule/delete":
         return this.handleScheduleDeleteRequest(msg);
       case "loop/run":
@@ -8990,6 +9013,32 @@ export class Session {
         payload: {
           requestId: request.requestId,
           summary: null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleLocalServicesListRequest(
+    request: Extract<SessionInboundMessage, { type: "local-services/list" }>,
+  ): Promise<void> {
+    try {
+      const { listLocalServices } = await import("./local-services/local-services-detector.js");
+      const services = await listLocalServices();
+      this.emit({
+        type: "local-services/list/response",
+        payload: {
+          requestId: request.requestId,
+          services,
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "local-services/list/response",
+        payload: {
+          requestId: request.requestId,
+          services: [],
           error: error instanceof Error ? error.message : String(error),
         },
       });

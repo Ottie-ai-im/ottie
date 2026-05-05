@@ -27,6 +27,7 @@ import {
   createAgentLastActivityCoalescer,
   type AgentLastActivityCommitter,
 } from "@/runtime/activity";
+import { useAgentDirectoryCacheStore } from "./agent-directory-cache-store";
 
 // Re-export types that were in session-context
 export type MessageEntry =
@@ -538,11 +539,21 @@ export const useSessionStore = create<SessionStore>()(
           if (prev.sessions[serverId]) {
             return prev;
           }
+          // Seed the agent map from the persistent directory cache so the chat
+          // list renders immediately on app launch, before the daemon has had a
+          // chance to stream agent_directory_snapshot. The daemon-driven update
+          // will overwrite this seed when it arrives. If the cache hasn't
+          // hydrated from storage yet, the rehydrate hook below will retro-seed.
+          const initial = createInitialSessionState(serverId, client);
+          const cached = useAgentDirectoryCacheStore.getState().getAgents(serverId);
+          if (cached && cached.length > 0) {
+            initial.agents = new Map(cached.map((agent) => [agent.id, agent]));
+          }
           return {
             ...prev,
             sessions: {
               ...prev.sessions,
-              [serverId]: createInitialSessionState(serverId, client),
+              [serverId]: initial,
             },
           };
         });
@@ -1259,3 +1270,45 @@ export const useSessionStore = create<SessionStore>()(
     };
   }),
 );
+
+// Mirror the live agent map of every session into the persistent directory
+// cache whenever it changes. The cache is read back on the next app launch
+// (and on `initializeSession` for new sessions) so the chat list renders
+// immediately instead of waiting for the daemon's WebSocket handshake.
+useSessionStore.subscribe(
+  (state) => state.sessions,
+  (sessions, prevSessions) => {
+    const cache = useAgentDirectoryCacheStore.getState();
+    for (const [serverId, session] of Object.entries(sessions)) {
+      const prev = prevSessions[serverId];
+      if (prev && prev.agents === session.agents) {
+        continue;
+      }
+      cache.setAgents(serverId, [...session.agents.values()]);
+    }
+  },
+);
+
+// AsyncStorage hydration is async, so a session may be created before the
+// cache finishes loading. When that happens, retro-seed any session whose
+// agent map is still empty and that the daemon hasn't populated yet.
+useAgentDirectoryCacheStore.persist.onFinishHydration((cacheState) => {
+  if (!cacheState) {
+    return;
+  }
+  const { sessions } = useSessionStore.getState();
+  const setAgents = useSessionStore.getState().setAgents;
+  for (const [serverId, session] of Object.entries(sessions)) {
+    if (session.hasHydratedAgents) {
+      continue;
+    }
+    if (session.agents.size > 0) {
+      continue;
+    }
+    const cached = useAgentDirectoryCacheStore.getState().getAgents(serverId);
+    if (!cached || cached.length === 0) {
+      continue;
+    }
+    setAgents(serverId, new Map(cached.map((agent) => [agent.id, agent])));
+  }
+});

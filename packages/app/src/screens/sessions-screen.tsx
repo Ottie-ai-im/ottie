@@ -189,7 +189,7 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
       hasMore ? (
         <View style={styles.footer}>
           <Button variant="ghost" onPress={loadMore} disabled={isLoadingMore}>
-            {isLoadingMore ? "Loading..." : "Load more"}
+            {isLoadingMore ? t("common.loading") : t("chat.loadMore")}
           </Button>
         </View>
       ) : null,
@@ -285,7 +285,7 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
 
   return (
     <View style={styles.container}>
-      <MenuHeader title="Chats" rightContent={headerRight} />
+      <MenuHeader title={t("chat.title")} rightContent={headerRight} />
       <View style={styles.searchBar}>
         <SearchInput
           placeholder={t("chat.searchPlaceholder", { defaultValue: "Search..." })}

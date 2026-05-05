@@ -7,6 +7,8 @@ import { ExternalLink, Settings as SettingsIcon, Sparkles } from "lucide-react-n
 import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
 import { isWeb } from "@/constants/platform";
 import { openExternalUrl } from "@/utils/open-external-url";
+import { useHosts } from "@/runtime/host-runtime";
+import { useLocalServices } from "@/hooks/use-local-services";
 import { DEFAULT_OPEN_WEBUI_URL, useAssistantsConfigStore } from "@/stores/assistants-config-store";
 
 interface KnownDashboard {
@@ -51,6 +53,12 @@ export function AssistantsScreen() {
   const openWebUiUrl = useAssistantsConfigStore((s) => s.openWebUiUrl);
   const setOpenWebUiUrl = useAssistantsConfigStore((s) => s.setOpenWebUiUrl);
   const resetOpenWebUiUrl = useAssistantsConfigStore((s) => s.resetOpenWebUiUrl);
+  const hosts = useHosts();
+  const serverId = hosts[0]?.serverId ?? null;
+  const { services } = useLocalServices(serverId);
+  const openWebUiStatus = services.find((s) => s.id === "open-webui");
+  const openWebUiRunning = Boolean(openWebUiStatus?.running);
+  const detectedOpenWebUiUrl = openWebUiStatus?.url ?? null;
 
   const [showSettings, setShowSettings] = useState(false);
   const [draftUrl, setDraftUrl] = useState(openWebUiUrl);
@@ -112,11 +120,59 @@ export function AssistantsScreen() {
       ) : null}
 
       {isWeb ? (
-        <EmbeddedWebUi url={openWebUiUrl} />
+        openWebUiRunning ? (
+          <EmbeddedWebUi url={detectedOpenWebUiUrl ?? openWebUiUrl} />
+        ) : (
+          <NotRunningCard configuredUrl={openWebUiUrl} onOpen={handleOpenInBrowser} />
+        )
       ) : (
-        <NativeFallback url={openWebUiUrl} onOpen={handleOpenInBrowser} />
+        <NativeFallback url={openWebUiUrl} onOpen={handleOpenInBrowser} services={services} />
       )}
     </View>
+  );
+}
+
+function NotRunningCard({
+  configuredUrl,
+  onOpen,
+}: {
+  configuredUrl: string;
+  onOpen: (url: string) => void;
+}) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  return (
+    <ScrollView contentContainerStyle={styles.scrollContent}>
+      <View style={styles.notRunningCard}>
+        <View style={styles.statusRow}>
+          <View style={[styles.statusDot, { backgroundColor: theme.colors.destructive }]} />
+          <Text style={styles.statusText}>
+            {t("assistants.notRunning", { url: configuredUrl })}
+          </Text>
+        </View>
+        <Text style={styles.notRunningTitle}>{t("assistants.installPrompt")}</Text>
+        <Text style={styles.notRunningHint}>{t("assistants.installPromptHint")}</Text>
+        <View style={styles.installOption}>
+          <Text style={styles.installOptionLabel}>{t("assistants.install.docker")}</Text>
+          <Text style={styles.installCommand} selectable>
+            docker run -d --name open-webui -p 3000:8080 ghcr.io/open-webui/open-webui:main
+          </Text>
+        </View>
+        <View style={styles.installOption}>
+          <Text style={styles.installOptionLabel}>{t("assistants.install.pipx")}</Text>
+          <Text style={styles.installCommand} selectable>
+            pipx install open-webui && open-webui serve
+          </Text>
+        </View>
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => onOpen("https://docs.openwebui.com/getting-started/")}
+        >
+          <ExternalLink size={14} color={theme.colors.foreground} />
+          <Text style={styles.secondaryButtonText}>{t("assistants.openDocs")}</Text>
+        </Pressable>
+      </View>
+    </ScrollView>
   );
 }
 
@@ -152,7 +208,15 @@ function EmbeddedWebUi({ url }: { url: string }) {
   );
 }
 
-function NativeFallback({ url, onOpen }: { url: string; onOpen: (url: string) => void }) {
+function NativeFallback({
+  url,
+  onOpen,
+  services,
+}: {
+  url: string;
+  onOpen: (url: string) => void;
+  services: Array<{ id: string; running: boolean; url: string | null }>;
+}) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   return (
@@ -161,12 +225,22 @@ function NativeFallback({ url, onOpen }: { url: string; onOpen: (url: string) =>
         <Text style={styles.subtitle}>{t("assistants.subtitle")}</Text>
       </View>
       {KNOWN_DASHBOARDS.map((dashboard) => {
-        const dashboardUrl = dashboard.id === "open-webui" ? url : dashboard.defaultUrl;
+        const liveStatus = services.find((s) => s.id === dashboard.id);
+        const isRunning = liveStatus?.running ?? false;
+        const dashboardUrl =
+          liveStatus?.url ?? (dashboard.id === "open-webui" ? url : dashboard.defaultUrl);
+        const statusColor = isRunning
+          ? theme.colors.palette.green[400]
+          : theme.colors.foregroundMuted;
         return (
           <View key={dashboard.id} style={styles.dashboardCard}>
             <View style={styles.dashboardHeader}>
+              <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
               <Sparkles size={20} color={theme.colors.foreground} />
               <Text style={styles.dashboardName}>{t(dashboard.labelKey)}</Text>
+              <Text style={styles.dashboardStatus}>
+                {isRunning ? t("assistants.running") : t("assistants.stopped")}
+              </Text>
             </View>
             <Text style={styles.dashboardDescription}>{t(dashboard.descriptionKey)}</Text>
             <Text style={styles.dashboardUrl}>{dashboardUrl}</Text>
@@ -180,8 +254,14 @@ function NativeFallback({ url, onOpen }: { url: string; onOpen: (url: string) =>
                 <Text style={styles.primaryButtonText}>{t("assistants.openInBrowser")}</Text>
               </Pressable>
             </View>
-            <Text style={styles.dashboardHint}>{t(dashboard.installHintKey)}</Text>
-            <Text style={styles.dashboardCommand}>{dashboard.installCommand}</Text>
+            {!isRunning ? (
+              <>
+                <Text style={styles.dashboardHint}>{t(dashboard.installHintKey)}</Text>
+                <Text style={styles.dashboardCommand} selectable>
+                  {dashboard.installCommand}
+                </Text>
+              </>
+            ) : null}
           </View>
         );
       })}
@@ -284,10 +364,15 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.accentForeground,
   },
   secondaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[3],
     borderRadius: theme.borderRadius.button,
     borderCurve: "continuous",
+    backgroundColor: theme.colors.surface2,
+    alignSelf: "flex-start",
   },
   secondaryButtonText: {
     fontFamily: theme.fontFamily.system,
@@ -369,5 +454,67 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.xs,
     color: theme.colors.foregroundMuted,
     textAlign: "center",
+  },
+  notRunningCard: {
+    marginHorizontal: theme.spacing[4],
+    marginTop: theme.spacing[2],
+    marginBottom: theme.spacing[3],
+    padding: theme.spacing[4],
+    backgroundColor: theme.colors.surfaceGlass,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+    gap: theme.spacing[3],
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: theme.borderRadius.full,
+  },
+  statusText: {
+    fontFamily: theme.fontFamily.mono,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+  },
+  notRunningTitle: {
+    fontFamily: theme.fontFamily.rounded,
+    fontSize: theme.fontSize.lg,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+  },
+  notRunningHint: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+    lineHeight: 20,
+  },
+  installOption: {
+    gap: theme.spacing[1],
+  },
+  installOptionLabel: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+    fontWeight: theme.fontWeight.medium,
+  },
+  installCommand: {
+    fontFamily: theme.fontFamily.mono,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foreground,
+    backgroundColor: theme.colors.surface2,
+    padding: theme.spacing[2],
+    borderRadius: theme.borderRadius.sm,
+  },
+  dashboardStatus: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+    marginLeft: "auto",
   },
 }));

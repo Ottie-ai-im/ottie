@@ -45,6 +45,10 @@ import {
 } from "../server/schedule/rpc-schemas.js";
 import { UsageListRequestSchema, UsageListResponseSchema } from "../server/usage/rpc-schemas.js";
 import {
+  LocalServicesListRequestSchema,
+  LocalServicesListResponseSchema,
+} from "../server/local-services/rpc-schemas.js";
+import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -1760,6 +1764,107 @@ export const LocalTokenRegenerateResponseSchema = z.object({
   }),
 });
 
+// ============================================================================
+// Plugin RPCs (v1.12)
+// ----------------------------------------------------------------------------
+// One-click install / uninstall / launch for the curated catalog. Every
+// payload field is `.optional()` so old daemons that don't speak these RPCs
+// can safely ignore them, and old clients can keep parsing future
+// extensions of the schema without breaking.
+// ============================================================================
+
+const PluginInstallStatusSchema = z.enum(["installed", "not_installed", "incompatible"]);
+const PluginCompanionStateSchema = z.enum(["installed", "manual", "skipped", "not_installed"]);
+
+const PluginCompanionAppListSchema = z.object({
+  bundleName: z.string().optional(),
+  state: PluginCompanionStateSchema.optional(),
+  path: z.string().optional(),
+  releaseBrowserUrl: z.string().optional(),
+});
+
+const PluginListEntrySchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  author: z.string().optional(),
+  platforms: z.array(z.string()).optional(),
+  status: PluginInstallStatusSchema.optional(),
+  companionApp: PluginCompanionAppListSchema.optional(),
+});
+
+export const PluginListRequestSchema = z.object({
+  type: z.literal("plugin_list_request"),
+  requestId: z.string(),
+});
+
+export const PluginListResponseSchema = z.object({
+  type: z.literal("plugin_list_response"),
+  payload: z.object({
+    requestId: z.string(),
+    plugins: z.array(PluginListEntrySchema).optional(),
+    error: z.string().optional(),
+  }),
+});
+
+export const PluginInstallRequestSchema = z.object({
+  type: z.literal("plugin_install_request"),
+  requestId: z.string(),
+  pluginId: z.string(),
+});
+
+const PluginInstallCompanionResultSchema = z.object({
+  bundleName: z.string().optional(),
+  state: z.enum(["installed", "manual", "skipped"]).optional(),
+  path: z.string().optional(),
+  releaseBrowserUrl: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export const PluginInstallResponseSchema = z.object({
+  type: z.literal("plugin_install_response"),
+  payload: z.object({
+    requestId: z.string(),
+    pluginId: z.string().optional(),
+    success: z.boolean().optional(),
+    bridgeInstalled: z.boolean().optional(),
+    companionApp: PluginInstallCompanionResultSchema.optional(),
+    error: z.string().optional(),
+  }),
+});
+
+export const PluginUninstallRequestSchema = z.object({
+  type: z.literal("plugin_uninstall_request"),
+  requestId: z.string(),
+  pluginId: z.string(),
+});
+
+export const PluginUninstallResponseSchema = z.object({
+  type: z.literal("plugin_uninstall_response"),
+  payload: z.object({
+    requestId: z.string(),
+    pluginId: z.string().optional(),
+    success: z.boolean().optional(),
+    error: z.string().optional(),
+  }),
+});
+
+export const PluginLaunchRequestSchema = z.object({
+  type: z.literal("plugin_launch_request"),
+  requestId: z.string(),
+  pluginId: z.string(),
+});
+
+export const PluginLaunchResponseSchema = z.object({
+  type: z.literal("plugin_launch_response"),
+  payload: z.object({
+    requestId: z.string(),
+    pluginId: z.string().optional(),
+    success: z.boolean().optional(),
+    error: z.string().optional(),
+  }),
+});
+
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   VoiceAudioChunkMessageSchema,
   AbortRequestMessageSchema,
@@ -1866,6 +1971,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ScheduleResumeRequestSchema,
   ScheduleDeleteRequestSchema,
   UsageListRequestSchema,
+  LocalServicesListRequestSchema,
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -1874,6 +1980,11 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   // ARCH-03 / Plan 01-05 (v1.11): local-daemon auth RPCs.
   LocalTokenStatusRequestSchema,
   LocalTokenRegenerateRequestSchema,
+  // v1.12: Extension store RPCs (plugin install / uninstall / launch).
+  PluginListRequestSchema,
+  PluginInstallRequestSchema,
+  PluginUninstallRequestSchema,
+  PluginLaunchRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3475,6 +3586,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ScheduleResumeResponseSchema,
   ScheduleDeleteResponseSchema,
   UsageListResponseSchema,
+  LocalServicesListResponseSchema,
   LoopRunResponseSchema,
   LoopListResponseSchema,
   LoopInspectResponseSchema,
@@ -3483,6 +3595,11 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   // ARCH-03 / Plan 01-05 (v1.11): local-daemon auth RPCs.
   LocalTokenStatusResponseSchema,
   LocalTokenRegenerateResponseSchema,
+  // v1.12: Extension store RPCs.
+  PluginListResponseSchema,
+  PluginInstallResponseSchema,
+  PluginUninstallResponseSchema,
+  PluginLaunchResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;
@@ -3644,6 +3761,8 @@ export type SchedulePauseRequest = z.infer<typeof SchedulePauseRequestSchema>;
 export type ScheduleResumeRequest = z.infer<typeof ScheduleResumeRequestSchema>;
 export type ScheduleDeleteRequest = z.infer<typeof ScheduleDeleteRequestSchema>;
 export type UsageListRequest = z.infer<typeof UsageListRequestSchema>;
+export type LocalServicesListRequest = z.infer<typeof LocalServicesListRequestSchema>;
+export type LocalServicesListResponse = z.infer<typeof LocalServicesListResponseSchema>;
 export type LoopRunRequest = z.infer<typeof LoopRunRequestSchema>;
 export type LoopListRequest = z.infer<typeof LoopListRequestSchema>;
 export type LoopInspectRequest = z.infer<typeof LoopInspectRequestSchema>;

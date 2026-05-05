@@ -77,6 +77,10 @@ import {
   ScheduleDeleteResponseSchema,
 } from "../server/schedule/rpc-schemas.js";
 import { UsageListResponseSchema, type UsageSummary } from "../server/usage/rpc-schemas.js";
+import {
+  LocalServicesListResponseSchema,
+  type LocalServiceStatusPayload,
+} from "../server/local-services/rpc-schemas.js";
 import type {
   CreateScheduleInput,
   ScheduleSummary,
@@ -3120,6 +3124,54 @@ export class DaemonClient {
     });
   }
 
+  /**
+   * v1.12: List the curated Extension catalog with each entry's install
+   * status on the current host (compatible / installed / companion-app
+   * present, etc.). Used by the Extensions screen.
+   */
+  async listPlugins(options?: { requestId?: string }) {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "plugin_list_request" },
+      responseType: "plugin_list_response",
+      timeout: 15_000,
+    });
+  }
+
+  /**
+   * v1.12: One-click install. Writes the daemon-side bridge to
+   * $OTTIE_HOME/plugins/<id>/ and (when applicable on macOS) downloads +
+   * installs the companion .app. Returns success even if the companion app
+   * step had to fall back to manual — the bridge itself is what enables
+   * runtime functionality.
+   */
+  async installPlugin(pluginId: string, options?: { requestId?: string }) {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "plugin_install_request", pluginId },
+      responseType: "plugin_install_response",
+      timeout: 120_000,
+    });
+  }
+
+  async uninstallPlugin(pluginId: string, options?: { requestId?: string }) {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "plugin_uninstall_request", pluginId },
+      responseType: "plugin_uninstall_response",
+      timeout: 30_000,
+    });
+  }
+
+  async launchPlugin(pluginId: string, options?: { requestId?: string }) {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "plugin_launch_request", pluginId },
+      responseType: "plugin_launch_response",
+      timeout: 20_000,
+    });
+  }
+
   async refreshProvidersSnapshot(options?: {
     cwd?: string;
     providers?: AgentProvider[];
@@ -4393,6 +4445,26 @@ export class DaemonClient {
     if (payload.error) throw new Error(payload.error);
     if (!payload.schedule) throw new Error("No schedule returned");
     return payload.schedule;
+  }
+
+  async listLocalServices(params?: { requestId?: string }): Promise<LocalServiceStatusPayload[]> {
+    const requestId = this.createRequestId(params?.requestId);
+    const payload = await this.sendRequest<any>({
+      requestId,
+      message: {
+        type: "local-services/list",
+        requestId,
+      },
+      timeout: 10000,
+      select: (msg) => {
+        if (msg.type === "local-services/list/response" && msg.payload.requestId === requestId) {
+          return LocalServicesListResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.services;
   }
 
   async getUsage(params?: { requestId?: string }): Promise<UsageSummary> {

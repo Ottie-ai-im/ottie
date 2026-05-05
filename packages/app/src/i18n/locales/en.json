@@ -305,6 +305,17 @@
     "resetDefault": "Reset to default",
     "invalidUrl": "Invalid URL — open the gear icon to set a valid http:// address.",
     "openInBrowser": "Open in browser",
+    "openDocs": "Open install docs",
+    "running": "Running",
+    "stopped": "Not running",
+    "notRunning": "Open WebUI not detected at {{url}}",
+    "installPrompt": "Install Open WebUI to use this tab",
+    "installPromptHint": "Open WebUI is the open-source UI that connects OpenClaw, Hermes Agent, MCP tools, and any OpenAI-compatible model. Pick one of the install options below — Ottie will detect it automatically once it's running.",
+    "install": {
+      "docker": "Docker (recommended)",
+      "pipx": "pipx (Python)",
+      "npm": "npm (Node)"
+    },
     "poweredBy": "Powered by Open WebUI — open-source multi-agent chat",
     "openWebUi": {
       "label": "Open WebUI",
@@ -406,6 +417,20 @@
     "settingsOpenLabs": "Open Labs settings"
   },
   "chat": {
+    "title": "Chats",
+    "searchPlaceholder": "Search…",
+    "loadMore": "Load more",
+    "section": {
+      "online": "ONLINE",
+      "offline": "OFFLINE"
+    },
+    "scope": {
+      "active": "Active",
+      "archived": "Archived"
+    },
+    "search": {
+      "empty": "No results"
+    },
     "menu": {
       "pin": "Pin to top",
       "unpin": "Unpin",
@@ -437,7 +462,11 @@
         "body": "Tap + above to start a new chat with Claude, Codex, or OpenCode."
       },
       "heading": "No chats yet",
-      "body": "Tap + to start a new conversation."
+      "body": "Tap + to start a new conversation.",
+      "archived": {
+        "heading": "No archived chats",
+        "body": "Archived conversations will appear here."
+      }
     },
     "deleted": {
       "toast": "Chat deleted",
@@ -460,13 +489,17 @@
     "pairDeviceHint": "Scan a QR from the Ottie mobile app to pair this Mac to your phone.",
     "online": "Online",
     "connecting": "Connecting",
+    "offline": "Offline",
     "settings": "Settings",
     "extensions": "Extensions"
   },
   "extensions": {
     "title": "Extensions",
-    "market": "Extension Store",
-    "description": "Discover and install community extensions to power up your daemon."
+    "market": "Plugin Store",
+    "description": "Discover and install community extensions to power up your daemon.",
+    "installed": "Installed",
+    "install": "Install",
+    "by": "by {{author}}"
   },
   "rename": {
     "title": "Rename workspace",
