@@ -6,6 +6,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { MobileTabBar, type MobileTab } from "@/components/mobile-tab-bar";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import {
+  buildHostAssistantsRoute,
   buildHostCommunityRoute,
   buildHostDevicesRoute,
   buildHostSessionsRoute,
@@ -40,6 +41,9 @@ export function MobileTabHost({ serverId, activeTab, children }: MobileTabHostPr
           return;
         case "extensions":
           router.replace(buildHostCommunityRoute(serverId));
+          return;
+        case "assistants":
+          router.replace(buildHostAssistantsRoute(serverId));
           return;
         case "usage":
           router.replace(buildHostUsageRoute(serverId));

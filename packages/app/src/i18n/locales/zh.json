@@ -250,29 +250,6 @@
       }
     }
   },
-  "usage": {
-    "totalTitle": "总计",
-    "byProvider": "按提供商",
-    "manage": "管理",
-    "totalCost": "总花费",
-    "totalCostHint": "各轮次上报费用之和",
-    "inputTokens": "输入 tokens",
-    "inputTokensHint": "包含缓存输入",
-    "cachedInput": "缓存输入",
-    "outputTokens": "输出 tokens",
-    "turns": "轮次",
-    "disclaimer": "在本设备本地累计，数据来源于各 agent 上报的每轮用量。费用为提供商上报的估算，可能与实际账单存在差异。",
-    "trackingSince": "起自 {{since}}",
-    "trackingSinceWithLast": "起自 {{since}} · 最近一轮 {{last}}",
-    "providerSummary_one": "{{count}} 个 agent · {{tokens}} tokens",
-    "providerSummary_other": "{{count}} 个 agent · {{tokens}} tokens",
-    "resetTotals": "清零累计",
-    "resetClearHint": "清空已存储的 token 与费用累计。",
-    "nothingRecorded": "尚无记录 — 第一个 agent 轮次完成后会出现。",
-    "reset": "清零",
-    "resetConfirmTitle": "清零用量累计？",
-    "resetConfirmMessage": "将清空本地存储的 token 与费用累计，此操作不可撤销。"
-  },
   "integrations": {
     "title": "集成",
     "cliDocs": "CLI 文档",
@@ -316,8 +293,34 @@
     "chats": "聊天",
     "devices": "设备",
     "extensions": "扩展",
+    "assistants": "助理",
     "usage": "用量",
     "settings": "设置"
+  },
+  "assistants": {
+    "title": "助理",
+    "subtitle": "接入本地的 AI 助理，比如 Open WebUI、OpenClaw、Hermes Agent。点击在浏览器中打开。",
+    "configure": "配置",
+    "openWebUiUrl": "Open WebUI 地址",
+    "resetDefault": "恢复默认",
+    "invalidUrl": "地址无效——点击齿轮图标设置一个有效的 http:// 地址。",
+    "openInBrowser": "在浏览器中打开",
+    "poweredBy": "由 Open WebUI 提供支持——开源多 agent 聊天",
+    "openWebUi": {
+      "label": "Open WebUI",
+      "description": "自托管的多 agent 聊天界面。可对接 OpenClaw、Hermes Agent、MCP 工具服务，以及任何 OpenAI 兼容模型。",
+      "installHint": "安装："
+    },
+    "openclaw": {
+      "label": "OpenClaw",
+      "description": "可通过消息应用控制的个人 AI 助理。本地 Gateway 控制面板。",
+      "installHint": "安装："
+    },
+    "hermes": {
+      "label": "Hermes Agent",
+      "description": "Nous Research 出品的自学习开源 AI agent，具备持久化记忆。",
+      "installHint": "安装："
+    }
   },
   "usage": {
     "title": "用量",
@@ -340,6 +343,8 @@
     "blockTokens": "本窗口已用 {{tokens}} Token",
     "lastUsed": "最近使用 {{time}}",
     "sessionsCount": "{{n}} 个会话",
+    "sessionsLabel": "会话数",
+    "providersLabel": "提供商",
     "providers": {
       "claudeCode": "Claude Code",
       "codex": "Codex"
@@ -349,7 +354,28 @@
     "inHoursMinutes": "{{h}} 小时 {{m}} 分钟后",
     "minutesAgo": "{{n}} 分钟前",
     "hoursAgo": "{{n}} 小时前",
-    "daysAgo": "{{n}} 天前"
+    "daysAgo": "{{n}} 天前",
+    "totalTitle": "总计",
+    "byProvider": "按提供商",
+    "manage": "管理",
+    "totalCost": "总花费",
+    "totalCostHint": "各轮次上报费用之和",
+    "inputTokens": "输入 tokens",
+    "inputTokensHint": "包含缓存输入",
+    "cachedInput": "缓存输入",
+    "outputTokens": "输出 tokens",
+    "turns": "轮次",
+    "disclaimer": "在本设备本地累计，数据来源于各 agent 上报的每轮用量。费用为提供商上报的估算，可能与实际账单存在差异。",
+    "trackingSince": "起自 {{since}}",
+    "trackingSinceWithLast": "起自 {{since}} · 最近一轮 {{last}}",
+    "providerSummary_one": "{{count}} 个 agent · {{tokens}} tokens",
+    "providerSummary_other": "{{count}} 个 agent · {{tokens}} tokens",
+    "resetTotals": "清零累计",
+    "resetClearHint": "清空已存储的 token 与费用累计。",
+    "nothingRecorded": "尚无记录 — 第一个 agent 轮次完成后会出现。",
+    "reset": "清零",
+    "resetConfirmTitle": "清零用量累计？",
+    "resetConfirmMessage": "将清空本地存储的 token 与费用累计，此操作不可撤销。"
   },
   "actions": {
     "agentCreate": "新建",
@@ -429,7 +455,9 @@
     "emptyTitle": "还没有设备",
     "emptyHint": "添加一个 Ottie daemon 主机，或者用手机扫码配对一台 Mac。",
     "addHost": "添加主机",
+    "addHostHint": "手动输入 daemon 地址，连接到另一台机器上的 Ottie。",
     "pairDevice": "扫码配对",
+    "pairDeviceHint": "在手机端 Ottie 扫码，把这台 Mac 配对到你的设备。",
     "online": "在线",
     "connecting": "连接中",
     "settings": "设置",

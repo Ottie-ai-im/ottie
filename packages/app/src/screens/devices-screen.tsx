@@ -1,11 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { type ComponentType, useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { Plus, Server, Smartphone } from "lucide-react-native";
+import { PlusCircle, QrCode, Server } from "lucide-react-native";
 
 import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
-import { Button } from "@/components/ui/button";
 import { AddHostModal } from "@/components/add-host-modal";
 import { PairDeviceModal } from "@/desktop/components/pair-device-modal";
 import { useHosts, useHostRuntimeSnapshot } from "@/runtime/host-runtime";
@@ -22,15 +21,6 @@ export function DevicesScreen() {
   const handleCloseAddHost = useCallback(() => setIsAddHostOpen(false), []);
   const handleOpenPairDevice = useCallback(() => setIsPairDeviceOpen(true), []);
   const handleClosePairDevice = useCallback(() => setIsPairDeviceOpen(false), []);
-
-  const plusIcon = useMemo(
-    () => <Plus size={16} color={theme.colors.foreground} />,
-    [theme.colors.foreground],
-  );
-  const phoneIcon = useMemo(
-    () => <Smartphone size={16} color={theme.colors.foreground} />,
-    [theme.colors.foreground],
-  );
 
   return (
     <View style={styles.container}>
@@ -53,24 +43,22 @@ export function DevicesScreen() {
         </View>
 
         <View style={styles.actions}>
-          <Button
-            style={styles.actionButton}
-            variant="default"
-            leftIcon={plusIcon}
+          <ActionCard
+            icon={PlusCircle}
+            title={t("devices.addHost")}
+            description={t("devices.addHostHint")}
             onPress={handleOpenAddHost}
             testID="devices-add-host"
-          >
-            {t("devices.addHost")}
-          </Button>
-          <Button
-            style={styles.actionButton}
-            variant="outline"
-            leftIcon={phoneIcon}
+            tint="primary"
+          />
+          <ActionCard
+            icon={QrCode}
+            title={t("devices.pairDevice")}
+            description={t("devices.pairDeviceHint")}
             onPress={handleOpenPairDevice}
             testID="devices-pair-device"
-          >
-            {t("devices.pairDevice")}
-          </Button>
+            tint="muted"
+          />
         </View>
       </ScrollView>
 
@@ -81,6 +69,44 @@ export function DevicesScreen() {
         testID="devices-pair-device-modal"
       />
     </View>
+  );
+}
+
+interface ActionCardProps {
+  icon: ComponentType<{ size?: number; color?: string }>;
+  title: string;
+  description: string;
+  onPress: () => void;
+  testID: string;
+  tint: "primary" | "muted";
+}
+
+function ActionCard({ icon: Icon, title, description, onPress, testID, tint }: ActionCardProps) {
+  const { theme } = useUnistyles();
+  const accentBg = tint === "primary" ? theme.colors.accent : theme.colors.surface2;
+  const accentFg = tint === "primary" ? theme.colors.accentForeground : theme.colors.foreground;
+  return (
+    <Pressable
+      style={({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
+        styles.actionCard,
+        hovered ? styles.actionCardHovered : null,
+        pressed ? styles.actionCardPressed : null,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      onPress={onPress}
+      testID={testID}
+    >
+      <View style={[styles.actionIconWrap, { backgroundColor: accentBg }]}>
+        <Icon size={22} color={accentFg} />
+      </View>
+      <View style={styles.actionTextWrap}>
+        <Text style={styles.actionTitle}>{title}</Text>
+        <Text style={styles.actionDescription} numberOfLines={2}>
+          {description}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -214,12 +240,54 @@ const styles = StyleSheet.create((theme) => ({
     flexWrap: "wrap",
     alignSelf: "center",
     width: "100%",
-    maxWidth: 520,
+    maxWidth: 640,
     paddingHorizontal: theme.spacing[4],
     gap: theme.spacing[3],
   },
-  actionButton: {
+  actionCard: {
     flex: 1,
-    minWidth: 160,
+    minWidth: 220,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    padding: theme.spacing[4],
+    backgroundColor: theme.colors.surfaceGlass,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+  },
+  actionCardHovered: {
+    backgroundColor: theme.colors.surfaceSidebarHover,
+  },
+  actionCardPressed: {
+    opacity: 0.85,
+  },
+  actionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.lg,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  actionTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  actionTitle: {
+    fontFamily: theme.fontFamily.rounded,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+    letterSpacing: -0.2,
+  },
+  actionDescription: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+    lineHeight: 16,
   },
 }));

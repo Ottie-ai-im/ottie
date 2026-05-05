@@ -4,11 +4,11 @@ import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { Activity, MessagesSquare, Server, Settings, Blocks } from "lucide-react-native";
+import { Activity, MessagesSquare, Server, Settings, Blocks, Sparkles } from "lucide-react-native";
 import { isNative } from "@/constants/platform";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 
-export type MobileTab = "chats" | "devices" | "extensions" | "usage" | "settings";
+export type MobileTab = "chats" | "devices" | "extensions" | "assistants" | "usage" | "settings";
 
 export interface MobileTabBarProps {
   activeTab: MobileTab;
@@ -17,7 +17,13 @@ export interface MobileTabBarProps {
 
 interface TabSpec {
   id: MobileTab;
-  labelKey: "tabs.chats" | "tabs.devices" | "tabs.extensions" | "tabs.usage" | "tabs.settings";
+  labelKey:
+    | "tabs.chats"
+    | "tabs.devices"
+    | "tabs.extensions"
+    | "tabs.assistants"
+    | "tabs.usage"
+    | "tabs.settings";
   icon: ComponentType<{ size?: number; color?: string }>;
 }
 
@@ -25,6 +31,7 @@ const TABS: readonly TabSpec[] = [
   { id: "chats", labelKey: "tabs.chats", icon: MessagesSquare },
   { id: "devices", labelKey: "tabs.devices", icon: Server },
   { id: "extensions", labelKey: "tabs.extensions", icon: Blocks },
+  { id: "assistants", labelKey: "tabs.assistants", icon: Sparkles },
   { id: "usage", labelKey: "tabs.usage", icon: Activity },
   { id: "settings", labelKey: "tabs.settings", icon: Settings },
 ];

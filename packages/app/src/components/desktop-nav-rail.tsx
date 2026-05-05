@@ -12,12 +12,14 @@ import {
   MessagesSquare,
   Server,
   Settings,
+  Sparkles,
   User,
 } from "lucide-react-native";
 
 import { useHosts } from "@/runtime/host-runtime";
 import { useWindowControlsPadding } from "@/utils/desktop-window";
 import {
+  buildHostAssistantsRoute,
   buildHostCommunityRoute,
   buildHostDevicesRoute,
   buildHostSessionsRoute,
@@ -26,13 +28,24 @@ import {
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { isWeb } from "@/constants/platform";
 
-const RAIL_WIDTH = 60;
+// Nav rail must be at least as wide as the macOS traffic-light cluster
+// (DESKTOP_TRAFFIC_LIGHT_WIDTH = 78) plus a small breathing margin, so the
+// rail's right border doesn't slice through the red/yellow/green buttons.
+// 88 keeps the 40×40 icon buttons visually centered with comfortable
+// horizontal padding.
+const RAIL_WIDTH = 88;
 
-type RailTabId = "chats" | "devices" | "extensions" | "usage" | "settings";
+type RailTabId = "chats" | "devices" | "extensions" | "assistants" | "usage" | "settings";
 
 interface RailTabSpec {
   id: RailTabId;
-  labelKey: "tabs.chats" | "tabs.devices" | "tabs.extensions" | "tabs.usage" | "tabs.settings";
+  labelKey:
+    | "tabs.chats"
+    | "tabs.devices"
+    | "tabs.extensions"
+    | "tabs.assistants"
+    | "tabs.usage"
+    | "tabs.settings";
   icon: ComponentType<{ size?: number; color?: string }>;
 }
 
@@ -40,6 +53,7 @@ const PRIMARY_TABS: readonly RailTabSpec[] = [
   { id: "chats", labelKey: "tabs.chats", icon: MessagesSquare },
   { id: "devices", labelKey: "tabs.devices", icon: Server },
   { id: "extensions", labelKey: "tabs.extensions", icon: Blocks },
+  { id: "assistants", labelKey: "tabs.assistants", icon: Sparkles },
   { id: "usage", labelKey: "tabs.usage", icon: Activity },
   { id: "settings", labelKey: "tabs.settings", icon: Settings },
 ];
@@ -48,6 +62,7 @@ function deriveActiveTab(pathname: string): RailTabId {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/devices")) return "devices";
   if (pathname.includes("/community")) return "extensions";
+  if (pathname.includes("/assistants")) return "assistants";
   if (pathname.includes("/usage")) return "usage";
   return "chats";
 }
@@ -114,6 +129,11 @@ export function DesktopNavRail() {
             router.replace(buildHostCommunityRoute(activeServerId));
           }
           break;
+        case "assistants":
+          if (activeServerId) {
+            router.replace(buildHostAssistantsRoute(activeServerId));
+          }
+          return;
         case "usage":
           if (activeServerId) {
             router.replace(buildHostUsageRoute(activeServerId));
@@ -259,8 +279,13 @@ function ProfileButton() {
 
 const styles = StyleSheet.create((theme) => ({
   container: {
+    // Pin the rail to a fixed width. The parent in `_layout.tsx` is a flex
+    // row, so omitting `flex: 1` keeps the rail at exactly RAIL_WIDTH
+    // (otherwise `flex: 1` makes it grow horizontally and produces a huge
+    // empty band between the rail and the next column). The rail will still
+    // stretch vertically to fill the row's cross-axis automatically.
     width: RAIL_WIDTH,
-    flex: 1,
+    alignSelf: "stretch",
     backgroundColor: "transparent",
     paddingHorizontal: theme.spacing[2],
     alignItems: "center",

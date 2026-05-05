@@ -134,29 +134,31 @@ export const semanticLight = {
   },
 
   terminal: {
-    background: palette.white,
-    foreground: "#1a1a1e",
-    cursor: "#1a1a1e",
-    cursorAccent: palette.white,
-    selectionBackground: "rgba(0, 0, 0, 0.15)",
-    selectionForeground: "#1a1a1e",
+    // Always black so the terminal stands apart from chat surfaces,
+    // even when the rest of the app is in light mode.
+    background: "#1a1a1e",
+    foreground: palette.zinc[50],
+    cursor: palette.zinc[50],
+    cursorAccent: "#1a1a1e",
+    selectionBackground: "rgba(255, 255, 255, 0.2)",
+    selectionForeground: palette.zinc[50],
 
     black: "#1a1a1e",
-    red: palette.red[600], // (#dc2626)
-    green: "#1FA855", // = accent.base
-    yellow: "#ca8a04", // inline: not in palette
-    blue: palette.blue[600], // (#2563eb)
-    magenta: "#475569", // inline: slate-600 not in primitives
-    cyan: "#0891b2", // inline: cyan not in primitives
-    white: palette.white,
+    red: palette.red[500], // (#ef4444) — brighter for dark bg
+    green: palette.green[500], // (#22c55e)
+    yellow: palette.amber[500], // (#f59e0b)
+    blue: palette.blue[500], // (#3b82f6)
+    magenta: "#94a3b8", // slate-400 — readable on dark bg
+    cyan: "#06b6d4",
+    white: palette.zinc[200],
 
     brightBlack: palette.zinc[700], // (#3f3f46)
-    brightRed: palette.red[500], // (#ef4444)
-    brightGreen: palette.green[500], // (#22c55e)
-    brightYellow: palette.amber[500], // (#f59e0b)
-    brightBlue: palette.blue[500], // (#3b82f6)
-    brightMagenta: "#64748b", // inline
-    brightCyan: "#06b6d4", // inline
+    brightRed: "#f87171", // red-400 inline (light palette has no red[400])
+    brightGreen: palette.green[400], // (#4ade80)
+    brightYellow: "#fbbf24", // amber-400 inline (light palette has no amber[400])
+    brightBlue: palette.blue[400], // (#60a5fa)
+    brightMagenta: "#cbd5e1", // slate-300
+    brightCyan: "#22d3ee",
     brightWhite: palette.zinc[50], // (#fafafa)
   },
 } as const;

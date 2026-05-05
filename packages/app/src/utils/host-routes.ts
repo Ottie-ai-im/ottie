@@ -371,6 +371,14 @@ export function buildHostUsageRoute(serverId: string) {
   return `${base}/usage` as const;
 }
 
+export function buildHostAssistantsRoute(serverId: string) {
+  const base = buildHostRootRoute(serverId);
+  if (base === "/") {
+    return "/" as const;
+  }
+  return `${base}/assistants` as const;
+}
+
 export function buildHostCommunityRoute(serverId: string) {
   const base = buildHostRootRoute(serverId);
   if (base === "/") {
@@ -401,7 +409,6 @@ export const SETTINGS_SECTION_SLUGS = [
   "shortcuts",
   "integrations",
   "permissions",
-  "usage",
   "labs",
   "localDaemon",
   "diagnostics",
@@ -471,7 +478,6 @@ export const SLUG_TO_BUCKET: Record<SettingsSectionSlug, SettingsBucket> = {
   shortcuts: "appearance",
   integrations: "agents",
   permissions: "agents",
-  usage: "advanced",
   labs: "advanced",
   localDaemon: "advanced",
   diagnostics: "advanced",

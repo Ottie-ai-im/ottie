@@ -44,8 +44,8 @@ export function ScreenHeader({
   const baseHorizontalPadding = theme.spacing[2];
 
   const innerStyle = useMemo(
-    () => [styles.inner, { paddingTop: insets.top + topPadding }],
-    [insets.top, topPadding],
+    () => [styles.inner, { paddingTop: insets.top + topPadding + padding.top }],
+    [insets.top, topPadding, padding.top],
   );
   const rowStyle = useMemo(
     () => [

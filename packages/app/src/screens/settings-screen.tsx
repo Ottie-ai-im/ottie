@@ -30,7 +30,6 @@ import {
   Shield,
   Puzzle,
   Plus,
-  Gauge,
   FlaskConical,
   Lock,
 } from "lucide-react-native";
@@ -59,7 +58,6 @@ import { PairLinkModal } from "@/components/pair-link-modal";
 import { KeyboardShortcutsSection } from "@/screens/settings/keyboard-shortcuts-section";
 import { LabsSection } from "@/screens/settings/labs-section";
 import { LocalDaemonPanel } from "@/screens/settings/local-daemon-panel";
-import { UsageSection } from "@/screens/settings/usage-section";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -115,7 +113,6 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "shortcuts", labelKey: "settings.shortcuts", icon: Keyboard, desktopOnly: true },
   { id: "integrations", labelKey: "settings.integrations", icon: Puzzle, desktopOnly: true },
   { id: "permissions", labelKey: "settings.permissions", icon: Shield },
-  { id: "usage", labelKey: "settings.usage", icon: Gauge },
   { id: "labs", labelKey: "settings.labs.title", icon: FlaskConical },
   { id: "localDaemon", labelKey: "settings.localDaemon.title", icon: Lock },
   { id: "diagnostics", labelKey: "settings.diagnostics", icon: Stethoscope },
@@ -1173,8 +1170,6 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
           return isDesktopApp ? <IntegrationsSection /> : null;
         case "permissions":
           return isDesktopApp ? <DesktopPermissionsSection /> : null;
-        case "usage":
-          return <UsageSection />;
         case "labs":
           return <LabsSection />;
         case "localDaemon":

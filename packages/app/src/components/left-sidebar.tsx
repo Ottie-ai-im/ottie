@@ -42,7 +42,6 @@ import { HEADER_TOP_PADDING_MOBILE, useIsCompactFormFactor } from "@/constants/l
 import { isNative, isWeb } from "@/constants/platform";
 import { BlurView } from "expo-blur";
 import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { SidebarProvidersPanel } from "./sidebar/sidebar-providers-panel";
 import { useGlobalDragStore } from "@/stores/global-drag-store";
 import { buildHostWorkspaceOpenRoute, buildHostNewWorkspaceRoute } from "@/utils/host-routes";
 import { useSidebarAnimation } from "@/contexts/sidebar-animation-context";
@@ -352,7 +351,6 @@ export const LeftSidebar = memo(function LeftSidebar({
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <View style={{ flexDirection: "row", height: "100%", zIndex: 10 }}>
-        <SidebarProvidersPanel serverId={activeServerId ?? ""} />
         <DesktopSidebar
           {...sharedProps}
           insetsTop={insets.top}
@@ -752,6 +750,9 @@ function DesktopSidebar({
   const pathname = usePathname();
   const { t } = useTranslation();
   const isSessionsActive = pathname.includes("/sessions");
+  // Hide the chat sessions panel on top-level non-chat destinations
+  // (extensions / activity / devices / settings) so the page gets full width.
+  const isNonChatRoute = /\/(community|devices|usage|settings)(\/|$)/.test(pathname);
   const newAgentKeys = useShortcutKeys("new-agent");
   const padding = useWindowControlsPadding("sidebar");
   const desktopChatsTrailing = useMemo(
@@ -827,7 +828,7 @@ function DesktopSidebar({
     [],
   );
 
-  if (!isOpen) {
+  if (!isOpen || isNonChatRoute) {
     return null;
   }
 

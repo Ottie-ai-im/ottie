@@ -48,6 +48,18 @@ const LONG_PRESS_DELAY_MS = 350; // UI-SPEC line 315
 const SELECTED_BG = "rgba(59, 130, 246, 0.10)";
 const SELECTED_BAR = "#3b82f6";
 
+// Stable default for rows that haven't been touched yet. Hoisted out of the
+// selector so the reference is identical across renders — otherwise
+// useSyncExternalStore sees a new object every time and infinite-loops.
+const DEFAULT_ROW_STATE = {
+  pinned: false,
+  pinnedAt: null,
+  muted: false,
+  unread: 0,
+  completedCount: 0,
+  archived: false,
+} as const;
+
 export interface ChatRowProps {
   agent: AggregatedAgent;
   selected?: boolean;
@@ -58,17 +70,7 @@ export function ChatRow({ agent, selected = false }: ChatRowProps) {
   const haptic = useHaptic({ enabled: true, isLowPowerMode: false });
 
   const rowKey = useMemo(() => makeRowKey(agent.serverId, agent.id), [agent.serverId, agent.id]);
-  const rowState = useChatRowStateStore(
-    (s) =>
-      s.rows[rowKey] ?? {
-        pinned: false,
-        pinnedAt: null,
-        muted: false,
-        unread: 0,
-        completedCount: 0,
-        archived: false,
-      },
-  );
+  const rowState = useChatRowStateStore((s) => s.rows[rowKey] ?? DEFAULT_ROW_STATE);
 
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
 

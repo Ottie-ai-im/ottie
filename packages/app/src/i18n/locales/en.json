@@ -250,29 +250,6 @@
       }
     }
   },
-  "usage": {
-    "totalTitle": "Total",
-    "byProvider": "By provider",
-    "manage": "Manage",
-    "totalCost": "Total cost",
-    "totalCostHint": "Sum of reported per-turn cost",
-    "inputTokens": "Input tokens",
-    "inputTokensHint": "Includes cached input",
-    "cachedInput": "Cached input",
-    "outputTokens": "Output tokens",
-    "turns": "Turns",
-    "disclaimer": "Tracked locally on this device from per-turn usage reported by each agent. Costs are provider-reported estimates and may not match your actual bill.",
-    "trackingSince": "Tracking since {{since}}",
-    "trackingSinceWithLast": "Tracking since {{since}} · last turn {{last}}",
-    "providerSummary_one": "{{count}} agent · {{tokens}} tokens",
-    "providerSummary_other": "{{count}} agents · {{tokens}} tokens",
-    "resetTotals": "Reset totals",
-    "resetClearHint": "Clear the stored token and cost counters.",
-    "nothingRecorded": "Nothing recorded yet — totals will appear after the first agent turn.",
-    "reset": "Reset",
-    "resetConfirmTitle": "Reset usage totals?",
-    "resetConfirmMessage": "This clears the locally stored token and cost totals. This cannot be undone."
-  },
   "integrations": {
     "title": "Integrations",
     "cliDocs": "CLI docs",
@@ -316,8 +293,34 @@
     "chats": "Chats",
     "devices": "Devices",
     "extensions": "Extensions",
+    "assistants": "Assistants",
     "usage": "Usage",
     "settings": "Settings"
+  },
+  "assistants": {
+    "title": "Assistants",
+    "subtitle": "Connect to self-hosted AI assistants like Open WebUI, OpenClaw, and Hermes Agent. Tap to open in your browser.",
+    "configure": "Configure",
+    "openWebUiUrl": "Open WebUI URL",
+    "resetDefault": "Reset to default",
+    "invalidUrl": "Invalid URL — open the gear icon to set a valid http:// address.",
+    "openInBrowser": "Open in browser",
+    "poweredBy": "Powered by Open WebUI — open-source multi-agent chat",
+    "openWebUi": {
+      "label": "Open WebUI",
+      "description": "Self-hosted multi-agent chat UI. Connects to OpenClaw, Hermes Agent, MCP tool servers, and any OpenAI-compatible model.",
+      "installHint": "Install:"
+    },
+    "openclaw": {
+      "label": "OpenClaw",
+      "description": "Personal AI assistant controllable from messaging apps. Local Gateway dashboard.",
+      "installHint": "Install:"
+    },
+    "hermes": {
+      "label": "Hermes Agent",
+      "description": "Self-improving open-source AI agent with persistent memory. Built by Nous Research.",
+      "installHint": "Install:"
+    }
   },
   "usage": {
     "title": "Usage",
@@ -340,6 +343,8 @@
     "blockTokens": "{{tokens}} tokens this block",
     "lastUsed": "Last used {{time}}",
     "sessionsCount": "{{n}} sessions",
+    "sessionsLabel": "Sessions",
+    "providersLabel": "Providers",
     "providers": {
       "claudeCode": "Claude Code",
       "codex": "Codex"
@@ -349,7 +354,28 @@
     "inHoursMinutes": "in {{h}}h {{m}}m",
     "minutesAgo": "{{n}}m ago",
     "hoursAgo": "{{n}}h ago",
-    "daysAgo": "{{n}}d ago"
+    "daysAgo": "{{n}}d ago",
+    "totalTitle": "Total",
+    "byProvider": "By provider",
+    "manage": "Manage",
+    "totalCost": "Total cost",
+    "totalCostHint": "Sum of reported per-turn cost",
+    "inputTokens": "Input tokens",
+    "inputTokensHint": "Includes cached input",
+    "cachedInput": "Cached input",
+    "outputTokens": "Output tokens",
+    "turns": "Turns",
+    "disclaimer": "Tracked locally on this device from per-turn usage reported by each agent. Costs are provider-reported estimates and may not match your actual bill.",
+    "trackingSince": "Tracking since {{since}}",
+    "trackingSinceWithLast": "Tracking since {{since}} · last turn {{last}}",
+    "providerSummary_one": "{{count}} agent · {{tokens}} tokens",
+    "providerSummary_other": "{{count}} agents · {{tokens}} tokens",
+    "resetTotals": "Reset totals",
+    "resetClearHint": "Clear the stored token and cost counters.",
+    "nothingRecorded": "Nothing recorded yet — totals will appear after the first agent turn.",
+    "reset": "Reset",
+    "resetConfirmTitle": "Reset usage totals?",
+    "resetConfirmMessage": "This clears the locally stored token and cost totals. This cannot be undone."
   },
   "actions": {
     "agentCreate": "New chat",
@@ -429,7 +455,9 @@
     "emptyTitle": "No devices yet",
     "emptyHint": "Add an Ottie daemon host, or scan a QR code to pair from your phone.",
     "addHost": "Add host",
+    "addHostHint": "Manually enter a daemon address to connect to Ottie on another machine.",
     "pairDevice": "Scan to pair",
+    "pairDeviceHint": "Scan a QR from the Ottie mobile app to pair this Mac to your phone.",
     "online": "Online",
     "connecting": "Connecting",
     "settings": "Settings",

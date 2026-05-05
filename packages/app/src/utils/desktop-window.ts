@@ -88,8 +88,16 @@ function useRawWindowControlsPadding(): RawWindowControlsPadding {
   }, []);
 
   return useMemo((): RawWindowControlsPadding => {
-    if (!getIsElectronRuntime() || isFullscreen) {
+    if (isFullscreen) {
       return { left: 0, right: 0, top: 0 };
+    }
+
+    if (!getIsElectronRuntime()) {
+      // Web / dev-server: no real OS window controls in our chrome, but headers
+      // still need breathing room from the browser/window edge so titles
+      // don't crowd the top. Native iOS/Android handle this via safe-area
+      // insets, so only apply on non-native web.
+      return { left: 0, right: 0, top: isNative ? 0 : DESKTOP_TOP_SAFE_FALLBACK };
     }
 
     if (getIsElectronRuntimeMac()) {
@@ -107,6 +115,12 @@ function useRawWindowControlsPadding(): RawWindowControlsPadding {
     };
   }, [isFullscreen]);
 }
+
+// Minimum top padding to keep app headers from crowding the window edge in
+// web / dev-server contexts where there are no real OS window controls
+// reporting through our Electron bridge. Tuned to mirror the macOS traffic
+// light height so layout stays stable when switching between Tauri and web.
+const DESKTOP_TOP_SAFE_FALLBACK = 32;
 
 export function useWindowControlsPadding(role: WindowControlsPaddingRole): {
   left: number;
@@ -145,11 +159,16 @@ export function resolveWindowControlsPadding(input: {
     };
   }
 
+  // In Electron/Tauri the sidebar already absorbs the traffic-light top
+  // padding, so right-side headers don't need it again. In web/dev-server we
+  // surface the fallback top so headers don't crowd the window edge there.
+  const headerTop = getIsElectronRuntime() ? 0 : input.rawPadding.top;
+
   if (input.role === "header") {
     return {
       left: input.sidebarClosed ? input.rawPadding.left : 0,
       right: input.explorerOpen ? 0 : input.rawPadding.right,
-      top: 0,
+      top: headerTop,
     };
   }
 
@@ -157,7 +176,7 @@ export function resolveWindowControlsPadding(input: {
     return {
       left: 0,
       right: input.rawPadding.right,
-      top: 0,
+      top: headerTop,
     };
   }
 

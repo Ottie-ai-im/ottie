@@ -1,18 +1,43 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { Activity, RefreshCw } from "lucide-react-native";
+import { Activity, RefreshCw, Trash2 } from "lucide-react-native";
 
 import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
 import { useHosts } from "@/runtime/host-runtime";
 import { useUsageSummary } from "@/hooks/use-usage-summary";
+import { getProviderAccent, getProviderIcon } from "@/components/provider-icons";
+import { confirmDialog } from "@/utils/confirm-dialog";
+import { computeGrandTotal, computeProviderBreakdown, useUsageStore } from "@/stores/usage-store";
 import type { UsageProviderSummary } from "@server/server/usage/rpc-schemas";
 
+// Daemon emits "claude-code" / "codex". The local store and provider-icons
+// catalog use the shorter "claude" / "codex" / "opencode" form. Map daemon
+// provider IDs to the shared icon catalog so per-card branding stays consistent
+// across both data sources.
+const DAEMON_TO_ICON_PROVIDER: Record<string, string> = {
+  "claude-code": "claude",
+  codex: "codex",
+  opencode: "opencode",
+};
+
+function iconProviderId(daemonProvider: string): string {
+  return DAEMON_TO_ICON_PROVIDER[daemonProvider] ?? daemonProvider;
+}
+
 function formatTokens(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
+  return n.toLocaleString();
+}
+
+function formatCost(usd: number | null | undefined): string {
+  if (usd === null || usd === undefined || !Number.isFinite(usd)) return "—";
+  if (usd <= 0) return "$0.00";
+  if (usd < 0.01) return "<$0.01";
+  return `$${usd.toFixed(2)}`;
 }
 
 function formatRelativeTime(iso: string | null, now: number, t: (k: string, v?: any) => string) {
@@ -34,12 +59,6 @@ function formatRelativeTime(iso: string | null, now: number, t: (k: string, v?: 
   return t("usage.daysAgo", { n: days });
 }
 
-function formatCost(usd: number | null): string {
-  if (usd === null) return "—";
-  if (usd < 0.01) return "$0.00";
-  return `$${usd.toFixed(2)}`;
-}
-
 export function UsageScreen() {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -48,11 +67,44 @@ export function UsageScreen() {
   const { data, isLoading, isFetching, error, refetch } = useUsageSummary(serverId);
   const now = Date.now();
 
+  const records = useUsageStore((s) => s.records);
+  const localGrandTotal = useMemo(() => computeGrandTotal(records), [records]);
+  const localBreakdown = useMemo(() => computeProviderBreakdown(records), [records]);
+  const localResetStore = useUsageStore((s) => s.reset);
+  const hasLocalData = localGrandTotal.turnCount > 0;
+
+  const handleResetLocal = useCallback(() => {
+    void confirmDialog({
+      title: t("usage.resetConfirmTitle"),
+      message: t("usage.resetConfirmMessage"),
+      confirmLabel: t("usage.reset"),
+      cancelLabel: t("common.cancel"),
+    }).then((confirmed) => {
+      if (confirmed) localResetStore();
+    });
+  }, [localResetStore, t]);
+
   const providers = data?.providers ?? [];
   const generatedAt = useMemo(
     () => formatRelativeTime(data?.generatedAt ?? null, now, t),
     [data?.generatedAt, now, t],
   );
+  const aggregate = useMemo(() => {
+    let totalTokens = 0;
+    let estimatedCostUsd = 0;
+    let sessionsCount = 0;
+    let messagesCount = 0;
+    for (const p of providers) {
+      totalTokens += p.totalTokens;
+      estimatedCostUsd += p.estimatedCostUsd ?? 0;
+      sessionsCount += p.sessionsCount;
+      messagesCount += p.messagesCount;
+    }
+    return { totalTokens, estimatedCostUsd, sessionsCount, messagesCount };
+  }, [providers]);
+
+  const isEmpty =
+    !isLoading && providers.every((p) => p.totalTokens === 0) && localGrandTotal.turnCount === 0;
 
   return (
     <View style={styles.container}>
@@ -95,7 +147,7 @@ export function UsageScreen() {
           </View>
         ) : null}
 
-        {data && providers.every((p) => p.totalTokens === 0) ? (
+        {isEmpty ? (
           <View style={styles.emptyCard}>
             <Activity size={28} color={theme.colors.foregroundMuted} />
             <Text style={styles.emptyTitle}>{t("usage.emptyTitle")}</Text>
@@ -103,10 +155,97 @@ export function UsageScreen() {
           </View>
         ) : null}
 
+        {!isEmpty && (data || hasLocalData) ? (
+          <SummaryBanner
+            totalTokens={Math.max(
+              aggregate.totalTokens,
+              localGrandTotal.inputTokens +
+                localGrandTotal.cachedInputTokens +
+                localGrandTotal.outputTokens,
+            )}
+            estimatedCostUsd={Math.max(aggregate.estimatedCostUsd, localGrandTotal.totalCostUsd)}
+            sessionsCount={aggregate.sessionsCount}
+            providersCount={
+              new Set([
+                ...providers.filter((p) => p.totalTokens > 0).map((p) => p.provider),
+                ...localBreakdown.map((b) => b.provider),
+              ]).size
+            }
+            turnsCount={localGrandTotal.turnCount}
+          />
+        ) : null}
+
         {providers.map((p) =>
           p.totalTokens > 0 ? <ProviderCard key={p.provider} provider={p} now={now} /> : null,
         )}
+
+        {hasLocalData ? (
+          <View style={styles.manageCard}>
+            <View style={styles.manageHeader}>
+              <Text style={styles.manageTitle}>{t("usage.manage")}</Text>
+            </View>
+            <View style={styles.manageRow}>
+              <View style={styles.manageRowText}>
+                <Text style={styles.manageRowTitle}>{t("usage.resetTotals")}</Text>
+                <Text style={styles.manageRowHint}>{t("usage.resetClearHint")}</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("usage.reset")}
+                onPress={handleResetLocal}
+                style={styles.resetButton}
+                testID="usage-reset-local"
+              >
+                <Trash2 size={14} color={theme.colors.destructive} />
+                <Text style={styles.resetButtonLabel}>{t("usage.reset")}</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
+    </View>
+  );
+}
+
+interface SummaryBannerProps {
+  totalTokens: number;
+  estimatedCostUsd: number;
+  sessionsCount: number;
+  providersCount: number;
+  turnsCount: number;
+}
+
+function SummaryBanner({
+  totalTokens,
+  estimatedCostUsd,
+  sessionsCount,
+  providersCount,
+  turnsCount,
+}: SummaryBannerProps) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.summaryCard}>
+      <View style={styles.summaryPrimary}>
+        <Text style={styles.summaryEyebrow}>{t("usage.totalCost")}</Text>
+        <Text style={styles.summaryValue}>{formatCost(estimatedCostUsd)}</Text>
+      </View>
+      <View style={styles.summaryStatRow}>
+        <SummaryStat label={t("usage.totalTokens")} value={formatTokens(totalTokens)} />
+        <SummaryStat label={t("usage.sessionsLabel")} value={sessionsCount.toLocaleString()} />
+        <SummaryStat label={t("usage.providersLabel")} value={providersCount.toLocaleString()} />
+        {turnsCount > 0 ? (
+          <SummaryStat label={t("usage.turns")} value={turnsCount.toLocaleString()} />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function SummaryStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryStat}>
+      <Text style={styles.summaryStatValue}>{value}</Text>
+      <Text style={styles.summaryStatLabel}>{label}</Text>
     </View>
   );
 }
@@ -131,24 +270,38 @@ function ProviderCard({ provider, now }: { provider: UsageProviderSummary; now: 
     return Math.max(0, Math.min(1, (now - start) / span));
   }, [provider.currentBlockStartedAt, provider.currentBlockResetsAt, now]);
 
+  const iconProvider = iconProviderId(provider.provider);
+  const ProviderIcon = getProviderIcon(iconProvider);
+  const accent = getProviderAccent(iconProvider);
+
   const providerLabel =
     provider.provider === "claude-code"
       ? t("usage.providers.claudeCode")
-      : t("usage.providers.codex");
+      : provider.provider === "codex"
+        ? t("usage.providers.codex")
+        : provider.provider;
 
   return (
     <View style={styles.providerCard}>
       <View style={styles.providerHeader}>
-        <Text style={styles.providerName}>{providerLabel}</Text>
-        <Text style={styles.providerMeta}>
-          {t("usage.sessionsCount", { n: provider.sessionsCount })}
-        </Text>
+        <View style={[styles.providerAvatar, { backgroundColor: accent.background }]}>
+          <ProviderIcon size={20} color={accent.foreground} />
+        </View>
+        <View style={styles.providerHeaderText}>
+          <Text style={styles.providerName}>{providerLabel}</Text>
+          <Text style={styles.providerMeta}>
+            {t("usage.sessionsCount", { n: provider.sessionsCount })}
+          </Text>
+        </View>
+        <View style={styles.providerCostBlock}>
+          <Text style={styles.providerCost}>{formatCost(provider.estimatedCostUsd)}</Text>
+          <Text style={styles.providerCostLabel}>{t("usage.estimatedCost")}</Text>
+        </View>
       </View>
 
       <View style={styles.statRow}>
         <Stat label={t("usage.totalTokens")} value={formatTokens(provider.totalTokens)} />
         <Stat label={t("usage.weekTokens")} value={formatTokens(provider.weekTokens)} />
-        <Stat label={t("usage.estimatedCost")} value={formatCost(provider.estimatedCostUsd)} />
       </View>
 
       <View style={styles.breakdownRow}>
@@ -174,7 +327,10 @@ function ProviderCard({ provider, now }: { provider: UsageProviderSummary; now: 
             <View
               style={[
                 styles.blockBarFill,
-                { width: `${(blockProgress * 100).toFixed(1)}%` as unknown as number },
+                {
+                  width: `${(blockProgress * 100).toFixed(1)}%` as unknown as number,
+                  backgroundColor: accent.background,
+                },
               ]}
             />
           </View>
@@ -293,6 +449,61 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.xs,
     color: theme.colors.foregroundMuted,
   },
+  summaryCard: {
+    marginHorizontal: theme.spacing[4],
+    marginBottom: theme.spacing[3],
+    padding: theme.spacing[4],
+    backgroundColor: theme.colors.surfaceGlass,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+    gap: theme.spacing[4],
+  },
+  summaryPrimary: {
+    gap: 4,
+  },
+  summaryEyebrow: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  summaryValue: {
+    fontFamily: theme.fontFamily.rounded,
+    fontSize: 32,
+    lineHeight: 36,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.foreground,
+    letterSpacing: -0.6,
+    fontVariant: ["tabular-nums"],
+  },
+  summaryStatRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing[4],
+    paddingTop: theme.spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderGlass,
+  },
+  summaryStat: {
+    minWidth: 80,
+    gap: 2,
+  },
+  summaryStatValue: {
+    fontFamily: theme.fontFamily.rounded,
+    fontSize: theme.fontSize.lg,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+    letterSpacing: -0.2,
+    fontVariant: ["tabular-nums"],
+  },
+  summaryStatLabel: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+  },
   providerCard: {
     marginHorizontal: theme.spacing[4],
     marginBottom: theme.spacing[3],
@@ -306,8 +517,20 @@ const styles = StyleSheet.create((theme) => ({
   },
   providerHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: theme.spacing[3],
+  },
+  providerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.lg,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  providerHeaderText: {
+    flex: 1,
+    gap: 2,
   },
   providerName: {
     fontFamily: theme.fontFamily.rounded,
@@ -317,6 +540,23 @@ const styles = StyleSheet.create((theme) => ({
     letterSpacing: -0.2,
   },
   providerMeta: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+  },
+  providerCostBlock: {
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  providerCost: {
+    fontFamily: theme.fontFamily.rounded,
+    fontSize: theme.fontSize.lg,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+    letterSpacing: -0.2,
+    fontVariant: ["tabular-nums"],
+  },
+  providerCostLabel: {
     fontFamily: theme.fontFamily.system,
     fontSize: theme.fontSize.xs,
     color: theme.colors.foregroundMuted,
@@ -354,12 +594,14 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.semibold,
     color: theme.colors.foreground,
     letterSpacing: -0.2,
+    fontVariant: ["tabular-nums"],
   },
   statValueSmall: {
     fontFamily: theme.fontFamily.system,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.foreground,
+    fontVariant: ["tabular-nums"],
   },
   block: {
     paddingTop: theme.spacing[2],
@@ -403,5 +645,64 @@ const styles = StyleSheet.create((theme) => ({
     fontFamily: theme.fontFamily.system,
     fontSize: theme.fontSize.xs,
     color: theme.colors.foregroundMuted,
+  },
+  manageCard: {
+    marginHorizontal: theme.spacing[4],
+    marginTop: theme.spacing[2],
+    padding: theme.spacing[4],
+    backgroundColor: theme.colors.surfaceGlass,
+    borderRadius: theme.borderRadius.glassCard,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+    gap: theme.spacing[3],
+  },
+  manageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  manageTitle: {
+    fontFamily: theme.fontFamily.rounded,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+    letterSpacing: -0.2,
+  },
+  manageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+  },
+  manageRowText: {
+    flex: 1,
+    gap: 2,
+  },
+  manageRowTitle: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.foreground,
+  },
+  manageRowHint: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+  },
+  resetButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[3],
+    borderRadius: theme.borderRadius.button,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderColor: theme.colors.destructive,
+  },
+  resetButtonLabel: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+    color: theme.colors.destructive,
   },
 }));
