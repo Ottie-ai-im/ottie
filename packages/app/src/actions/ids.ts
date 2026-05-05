@@ -26,6 +26,7 @@ export type ActionId =
   | "chat.menu.delete"
   | "chat.menu.rename"
   | "chat.menu.archive"
+  | "chat.menu.unarchive"
   // Top-right add menu (D-04 — registered by Plan 02c)
   | "chat.add.newChat"
   | "chat.add.scanToPair"
@@ -60,6 +61,7 @@ export const ALL_ACTION_IDS: readonly ActionId[] = [
   "chat.menu.delete",
   "chat.menu.rename",
   "chat.menu.archive",
+  "chat.menu.unarchive",
   "chat.add.newChat",
   "chat.add.scanToPair",
   "chat.add.joinHost",

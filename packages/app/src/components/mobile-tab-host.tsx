@@ -37,7 +37,7 @@ export function MobileTabHost({ serverId, activeTab, children }: MobileTabHostPr
         case "devices":
           router.replace(buildHostDevicesRoute(serverId));
           return;
-        case "community":
+        case "extensions":
           router.replace(buildHostCommunityRoute(serverId));
           return;
         case "settings":

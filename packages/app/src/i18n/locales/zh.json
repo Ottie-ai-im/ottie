@@ -80,7 +80,16 @@
     "cancelHint": "上滑 取消",
     "tooltipInterrupt": "打断",
     "tooltipVoiceMode": "语音模式",
-    "enableVoiceMode": "启用语音模式"
+    "enableVoiceMode": "启用语音模式",
+    "scheduledToast": "消息已定时发送！",
+    "scheduleTitle": "定时发送",
+    "scheduleIn1Hour": "1 小时后",
+    "scheduleIn4Hours": "4 小时后",
+    "scheduleTonight": "今晚 (20:00)",
+    "scheduleTomorrowMorning": "明天早晨 (09:00)",
+    "today": "今天",
+    "tomorrow": "明天",
+    "nextMonday": "下周一"
   },
   "agent": {
     "selectModel": "选择模型",
@@ -306,7 +315,7 @@
   "tabs": {
     "chats": "聊天",
     "devices": "设备",
-    "community": "社群",
+    "extensions": "扩展",
     "settings": "设置"
   },
   "actions": {
@@ -325,6 +334,7 @@
     "chatMenuDelete": "删除对话",
     "chatMenuRename": "重命名",
     "chatMenuArchive": "归档对话",
+    "chatMenuUnarchive": "恢复对话",
     "chatAddNewChat": "新建",
     "chatAddScanToPair": "扫一扫配对",
     "chatAddJoinHost": "加入 host",
@@ -389,12 +399,13 @@
     "pairDevice": "扫码配对",
     "online": "在线",
     "connecting": "连接中",
-    "offline": "离线"
+    "settings": "设置",
+    "extensions": "扩展"
   },
-  "community": {
-    "title": "社群",
-    "comingSoon": "即将上线",
-    "body": "这里之后能让你连上别人的 agent，一起协作或借用别人公开出来的工作流。"
+  "extensions": {
+    "title": "扩展",
+    "market": "扩展商店",
+    "description": "发现并安装社区扩展，增强你的守护进程功能。"
   },
   "rename": {
     "title": "重命名工作区",

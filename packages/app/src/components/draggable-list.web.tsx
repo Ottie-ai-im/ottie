@@ -195,24 +195,6 @@ export function DraggableList<T>({
     [items, keyExtractor],
   );
 
-  useDndMonitor({
-    onDragStart(event) {
-      if (skipDndContextWrapper && ids.includes(String(event.active.id))) {
-        handleDragStart(event);
-      }
-    },
-    onDragCancel() {
-      if (skipDndContextWrapper && activeId) {
-        clearDragState();
-      }
-    },
-    onDragEnd(event) {
-      if (skipDndContextWrapper && ids.includes(String(event.active.id))) {
-        handleDragEnd(event);
-      }
-    },
-  });
-
   const wrapperStyle = useMemo(
     () => [
       { position: "relative" as const },
@@ -240,6 +222,13 @@ export function DraggableList<T>({
           {items.length === 0 && ListEmptyComponent}
           {skipDndContextWrapper ? (
             <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              <ExternalDndMonitor
+                ids={ids}
+                activeId={activeId}
+                onStart={handleDragStart}
+                onCancel={clearDragState}
+                onEnd={handleDragEnd}
+              />
               {items.map((item, index) => {
                 const id = keyExtractor(item, index);
                 return (
@@ -290,6 +279,13 @@ export function DraggableList<T>({
           {items.length === 0 && ListEmptyComponent}
           {skipDndContextWrapper ? (
             <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              <ExternalDndMonitor
+                ids={ids}
+                activeId={activeId}
+                onStart={handleDragStart}
+                onCancel={clearDragState}
+                onEnd={handleDragEnd}
+              />
               {items.map((item, index) => {
                 const id = keyExtractor(item, index);
                 return (
@@ -338,4 +334,42 @@ export function DraggableList<T>({
       {scrollbar.overlay}
     </View>
   );
+}
+
+// Subscribes to the parent <DndContext> via useDndMonitor. Only mounted when
+// skipDndContextWrapper === true (i.e., an ancestor owns the DndContext).
+// Mounting unconditionally would crash any DraggableList that renders without
+// an external DndContext, since useDndMonitor throws when no parent provider
+// is present.
+function ExternalDndMonitor({
+  ids,
+  activeId,
+  onStart,
+  onCancel,
+  onEnd,
+}: {
+  ids: string[];
+  activeId: string | null;
+  onStart: (event: DragStartEvent) => void;
+  onCancel: () => void;
+  onEnd: (event: DragEndEvent) => void;
+}) {
+  useDndMonitor({
+    onDragStart(event) {
+      if (ids.includes(String(event.active.id))) {
+        onStart(event);
+      }
+    },
+    onDragCancel() {
+      if (activeId) {
+        onCancel();
+      }
+    },
+    onDragEnd(event) {
+      if (ids.includes(String(event.active.id))) {
+        onEnd(event);
+      }
+    },
+  });
+  return null;
 }

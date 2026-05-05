@@ -139,6 +139,9 @@ export function useFileDropZone({
       try {
         const unlisten = await desktopWindow.onDragDropEvent((event: DesktopDragDropEvent) => {
           const payload = event.payload;
+          if (!payload || typeof payload.type !== "string") {
+            return;
+          }
           if (payload.type === "leave") {
             setIsDragging(false);
             return;

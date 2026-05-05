@@ -139,6 +139,9 @@ export function pathToFileUri(path: string): string {
 }
 
 export function fileUriToPath(uri: string): string {
+  if (typeof uri !== "string" || uri.length === 0) {
+    return "";
+  }
   if (!uri.startsWith("file://")) {
     return uri;
   }

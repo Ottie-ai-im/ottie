@@ -54,5 +54,6 @@ export function normalizeAgentSnapshot(snapshot: AgentSnapshotPayload, serverId:
     attentionTimestamp,
     archivedAt,
     labels: snapshot.labels,
+    pendingSchedules: snapshot.pendingSchedules ?? [],
   };
 }

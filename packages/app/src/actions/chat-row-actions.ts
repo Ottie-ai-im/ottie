@@ -164,6 +164,32 @@ export function registerChatRowActions(): void {
     }),
   );
 
+  actionRegistry.register(
+    defineAction("chat.menu.unarchive", {
+      description: "Restore an archived chat — resumes the agent from persistence",
+      modalities: ["menu", "cmdk"],
+      schema: RowKeyPayload,
+      handler: async ({ serverId, agentId }) => {
+        const { getHostRuntimeStore } = await import("@/runtime/host-runtime");
+        const client = getHostRuntimeStore().getClient(serverId);
+        if (!client) {
+          // Daemon not connected — clear the local archive flag so the row
+          // resurfaces; the agent will fully reload on the next connection.
+          const { useChatRowStateStore, makeRowKey } =
+            await import("@/stores/chat-row-state-store");
+          useChatRowStateStore.getState().setArchived(makeRowKey(serverId, agentId), false);
+          return;
+        }
+        // refreshAgent: unarchive on daemon, resume from persistence,
+        // hydrate timeline. See packages/server/src/server/session.ts:3172
+        // (handleRefreshAgentRequest) for the server-side flow.
+        await client.refreshAgent(agentId);
+        const { useChatRowStateStore, makeRowKey } = await import("@/stores/chat-row-state-store");
+        useChatRowStateStore.getState().setArchived(makeRowKey(serverId, agentId), false);
+      },
+    }),
+  );
+
   // ---------------------------------------------------------------------------
   // chat.add.* — top-right "+ menu" actions (4 items). Most delegate to
   // existing flows — registry entry keeps cmdk / voice / NAT-01 in parity.

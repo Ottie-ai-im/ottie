@@ -40,7 +40,7 @@ export function SidebarProjectDropZone({
   if (!isDraggingProvider || !isWeb) return null;
 
   return (
-    <View ref={setNodeRef} style={style}>
+    <View ref={setNodeRef as any} style={style}>
       <Plus
         size={16}
         color={isOver ? theme.colors.palette.blue[500] : theme.colors.foregroundMuted}

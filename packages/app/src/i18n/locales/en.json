@@ -80,7 +80,16 @@
     "cancelHint": "Slide up to cancel",
     "tooltipInterrupt": "Interrupt",
     "tooltipVoiceMode": "Voice mode",
-    "enableVoiceMode": "Enable Voice mode"
+    "enableVoiceMode": "Enable Voice mode",
+    "scheduledToast": "Message scheduled!",
+    "scheduleTitle": "Schedule send",
+    "scheduleIn1Hour": "In 1 hour",
+    "scheduleIn4Hours": "In 4 hours",
+    "scheduleTonight": "Tonight (20:00)",
+    "scheduleTomorrowMorning": "Tomorrow morning (09:00)",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "nextMonday": "Next Monday"
   },
   "agent": {
     "selectModel": "Select a model",
@@ -306,7 +315,7 @@
   "tabs": {
     "chats": "Chats",
     "devices": "Devices",
-    "community": "Community",
+    "extensions": "Extensions",
     "settings": "Settings"
   },
   "actions": {
@@ -325,6 +334,7 @@
     "chatMenuDelete": "Delete chat",
     "chatMenuRename": "Rename chat",
     "chatMenuArchive": "Archive chat",
+    "chatMenuUnarchive": "Unarchive chat",
     "chatAddNewChat": "New chat",
     "chatAddScanToPair": "Scan to pair",
     "chatAddJoinHost": "Join host",
@@ -389,12 +399,13 @@
     "pairDevice": "Scan to pair",
     "online": "Online",
     "connecting": "Connecting",
-    "offline": "Offline"
+    "settings": "Settings",
+    "extensions": "Extensions"
   },
-  "community": {
-    "title": "Community",
-    "comingSoon": "Coming soon",
-    "body": "Soon you'll be able to connect to other people's agents — collaborate or borrow workflows others have shared."
+  "extensions": {
+    "title": "Extensions",
+    "market": "Extension Store",
+    "description": "Discover and install community extensions to power up your daemon."
   },
   "rename": {
     "title": "Rename workspace",

@@ -1274,6 +1274,7 @@ export class VoiceAssistantWebSocketServer {
     }
 
     const requestInfo = extractRequestInfoFromUnknownWsInbound(parsed);
+
     const isUnknownSchema =
       requestInfo?.requestId != null &&
       typeof parsed === "object" &&

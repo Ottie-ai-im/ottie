@@ -70,6 +70,17 @@ import type {
   SendAgentMessageRequest,
   EditorTargetId,
 } from "../shared/messages.js";
+import {
+  ScheduleCreateResponseSchema,
+  ScheduleListResponseSchema,
+  ScheduleInspectResponseSchema,
+  ScheduleDeleteResponseSchema,
+} from "../server/schedule/rpc-schemas.js";
+import type {
+  CreateScheduleInput,
+  ScheduleSummary,
+  StoredSchedule,
+} from "../server/schedule/types.js";
 import type {
   AgentPermissionRequest,
   AgentPermissionResponse,
@@ -4353,6 +4364,102 @@ export class DaemonClient {
     };
 
     return { promise, cancel };
+  }
+
+  async createSchedule(
+    input: CreateScheduleInput & { requestId?: string },
+  ): Promise<ScheduleSummary> {
+    const requestId = this.createRequestId(input.requestId);
+    const payload = await this.sendRequest<any>({
+      requestId,
+      message: {
+        type: "schedule/create",
+        requestId,
+        ...input,
+        name: input.name ?? undefined,
+        maxRuns: input.maxRuns ?? undefined,
+        expiresAt: input.expiresAt ?? undefined,
+      },
+      timeout: 30000,
+      select: (msg) => {
+        if (msg.type === "schedule/create/response" && msg.payload.requestId === requestId) {
+          return ScheduleCreateResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+
+    if (payload.error) throw new Error(payload.error);
+    if (!payload.schedule) throw new Error("No schedule returned");
+    return payload.schedule;
+  }
+
+  async listSchedules(params?: { requestId?: string }): Promise<ScheduleSummary[]> {
+    const requestId = this.createRequestId(params?.requestId);
+    const payload = await this.sendRequest<any>({
+      requestId,
+      message: {
+        type: "schedule/list",
+        requestId,
+      },
+      timeout: 30000,
+      select: (msg) => {
+        if (msg.type === "schedule/list/response" && msg.payload.requestId === requestId) {
+          return ScheduleListResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+
+    if (payload.error) throw new Error(payload.error);
+    return payload.schedules;
+  }
+
+  async inspectSchedule(
+    scheduleId: string,
+    params?: { requestId?: string },
+  ): Promise<StoredSchedule> {
+    const requestId = this.createRequestId(params?.requestId);
+    const payload = await this.sendRequest<any>({
+      requestId,
+      message: {
+        type: "schedule/inspect",
+        requestId,
+        scheduleId,
+      },
+      timeout: 30000,
+      select: (msg) => {
+        if (msg.type === "schedule/inspect/response" && msg.payload.requestId === requestId) {
+          return ScheduleInspectResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+
+    if (payload.error) throw new Error(payload.error);
+    if (!payload.schedule) throw new Error("Schedule not found");
+    return payload.schedule;
+  }
+
+  async deleteSchedule(scheduleId: string, params?: { requestId?: string }): Promise<void> {
+    const requestId = this.createRequestId(params?.requestId);
+    const payload = await this.sendRequest<any>({
+      requestId,
+      message: {
+        type: "schedule/delete",
+        requestId,
+        scheduleId,
+      },
+      timeout: 30000,
+      select: (msg) => {
+        if (msg.type === "schedule/delete/response" && msg.payload.requestId === requestId) {
+          return ScheduleDeleteResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+
+    if (payload.error) throw new Error(payload.error);
   }
 }
 

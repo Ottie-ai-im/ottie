@@ -103,11 +103,11 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface1,
     alignItems: "center",
     justifyContent: "center",
-    cursor: "grab",
+    ...((isWeb ? { cursor: "grab" } : {}) as any),
   },
   iconWrapperDragging: {
     opacity: 0.8,
-    cursor: "grabbing",
+    ...((isWeb ? { cursor: "grabbing" } : {}) as any),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,

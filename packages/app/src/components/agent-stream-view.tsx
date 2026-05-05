@@ -23,7 +23,9 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import Animated, { FadeIn, FadeInUp, FadeOut, useReducedMotion } from "react-native-reanimated";
-import { Check, ChevronDown, X } from "lucide-react-native";
+import { Check, ChevronDown, X, Clock, Trash2 } from "lucide-react-native";
+import { format } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { usePanelStore } from "@/stores/panel-store";
 import {
   AssistantMessage,
@@ -660,6 +662,19 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         ) : null,
       [showWorkingIndicator],
     );
+    const scheduledMessagesNode = useMemo(() => {
+      const schedules = agent.pendingSchedules;
+      if (!schedules || schedules.length === 0) return null;
+
+      return (
+        <View style={stylesheet.scheduledContainer}>
+          {schedules.map((s: { id: string; prompt: string; runAt: string }) => (
+            <ScheduledMessageItem key={s.id} schedule={s} client={client} />
+          ))}
+        </View>
+      );
+    }, [agent.pendingSchedules, client]);
+
     const renderModel = useMemo<AgentStreamRenderModel>(() => {
       return {
         ...baseRenderModel,
@@ -673,9 +688,16 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         auxiliary: {
           pendingPermissions: pendingPermissionsNode,
           workingIndicator: workingIndicatorNode,
+          scheduledMessages: scheduledMessagesNode,
         },
       };
-    }, [baseRenderModel, getGapBetween, pendingPermissionsNode, workingIndicatorNode]);
+    }, [
+      baseRenderModel,
+      getGapBetween,
+      pendingPermissionsNode,
+      workingIndicatorNode,
+      scheduledMessagesNode,
+    ]);
 
     const emptyStateStyle = useMemo(() => [stylesheet.emptyState, stylesheet.contentWrapper], []);
     const listEmptyComponent = useMemo(() => {
@@ -684,7 +706,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         renderModel.boundary.hasMountedHistory ||
         renderModel.boundary.hasLiveHead ||
         renderModel.auxiliary.pendingPermissions ||
-        renderModel.auxiliary.workingIndicator
+        renderModel.auxiliary.workingIndicator ||
+        renderModel.auxiliary.scheduledMessages
       ) {
         return null;
       }
@@ -741,18 +764,28 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       return [stylesheet.listHeaderContent, headerPadding];
     }, [boundary.hasLiveHead, streamRenderStrategy, looseGap]);
     const renderLiveAuxiliary = useCallback<StreamSegmentRenderers["renderLiveAuxiliary"]>(() => {
-      if (!auxiliary.pendingPermissions && !auxiliary.workingIndicator) {
+      if (
+        !auxiliary.pendingPermissions &&
+        !auxiliary.workingIndicator &&
+        !auxiliary.scheduledMessages
+      ) {
         return null;
       }
       return (
         <View style={stylesheet.contentWrapper}>
           <View style={liveAuxiliaryHeaderStyle}>
             {auxiliary.pendingPermissions}
+            {auxiliary.scheduledMessages}
             {auxiliary.workingIndicator}
           </View>
         </View>
       );
-    }, [auxiliary.pendingPermissions, auxiliary.workingIndicator, liveAuxiliaryHeaderStyle]);
+    }, [
+      auxiliary.pendingPermissions,
+      auxiliary.workingIndicator,
+      auxiliary.scheduledMessages,
+      liveAuxiliaryHeaderStyle,
+    ]);
 
     const renderers = useMemo<StreamSegmentRenderers>(
       () => ({
@@ -908,6 +941,67 @@ interface PermissionActionButtonProps {
   testID: string;
   theme: ReturnType<typeof useUnistyles>["theme"];
   onPress: (action: AgentPermissionAction) => void;
+}
+
+function ScheduledMessageItem({
+  schedule,
+  client,
+}: {
+  schedule: { id: string; prompt: string; runAt: string };
+  client: DaemonClient | null;
+}) {
+  const { theme } = useUnistyles();
+  const { t, i18n } = useTranslation();
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleCancel = useCallback(async () => {
+    if (!client || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await client.deleteSchedule(schedule.id);
+    } catch (error) {
+      // Toast error if needed, but the next snapshot should clear it if successful
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [client, schedule.id, isDeleting]);
+
+  const isZh = i18n.language.startsWith("zh");
+  const timeLabel = format(new Date(schedule.runAt), isZh ? "M月d日 HH:mm" : "MMM d, HH:mm");
+
+  return (
+    <Animated.View
+      entering={FadeInUp.duration(200)}
+      exiting={FadeOut.duration(200)}
+      style={stylesheet.scheduledItem}
+    >
+      <View style={stylesheet.scheduledItemHeader}>
+        <View style={stylesheet.scheduledItemTimeTag}>
+          <Clock size={12} color={theme.colors.foreground} />
+          <Text style={stylesheet.scheduledItemTimeText}>
+            {t("composer.scheduledFor", { defaultValue: "Scheduled for", time: timeLabel })}{" "}
+            {timeLabel}
+          </Text>
+        </View>
+        <Pressable
+          onPress={handleCancel}
+          disabled={isDeleting}
+          style={({ hovered, pressed }) => [
+            stylesheet.scheduledItemCancel,
+            hovered && { backgroundColor: theme.colors.surface2 },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color={theme.colors.foregroundMuted} />
+          ) : (
+            <Trash2 size={14} color={theme.colors.foregroundMuted} />
+          )}
+        </Pressable>
+      </View>
+      <Text style={stylesheet.scheduledItemText}>{schedule.prompt}</Text>
+    </Animated.View>
+  );
 }
 
 function PermissionActionButton({
@@ -1236,6 +1330,49 @@ const stylesheet = StyleSheet.create((theme) => ({
   },
   permissionsContainer: {
     gap: theme.spacing[2],
+  },
+  scheduledContainer: {
+    gap: theme.spacing[2],
+  },
+  scheduledItem: {
+    backgroundColor: theme.colors.surface1,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing[3],
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    opacity: 0.8,
+  },
+  scheduledItemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  scheduledItemTimeTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: theme.colors.surface2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: theme.borderRadius.full,
+  },
+  scheduledItemTimeText: {
+    fontSize: 11,
+    color: theme.colors.foreground,
+    fontWeight: theme.fontWeight.medium,
+  },
+  scheduledItemCancel: {
+    width: 24,
+    height: 24,
+    borderRadius: theme.borderRadius.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scheduledItemText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+    lineHeight: 18,
   },
   listHeaderContent: {
     gap: theme.spacing[3],

@@ -20,7 +20,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 export const CHAT_ROW_STATE_STORAGE_KEY = "@ottie:chat-row-state";
-const CHAT_ROW_STORE_VERSION = 1;
+const CHAT_ROW_STORE_VERSION = 2;
 
 export interface ChatRowState {
   pinned: boolean;
@@ -29,6 +29,14 @@ export interface ChatRowState {
   muted: boolean;
   /** Unread message count. Clamped to 0 — never negative. */
   unread: number;
+  /**
+   * Tasks completed since the user last opened this chat. Bumped each time the
+   * agent transitions from `running` to a terminal state with
+   * `attentionReason === "finished"`. Cleared when the agent detail mounts or
+   * an explicit "mark seen" action fires. Surfaced as a blue badge in the chat
+   * list (alongside the red unread badge). Clamped to 0 — never negative.
+   */
+  completedCount: number;
   archived: boolean;
 }
 
@@ -44,6 +52,10 @@ interface ChatRowStoreActions {
   setUnread: (rowKey: string, count: number) => void;
   incrementUnread: (rowKey: string) => void;
   markRead: (rowKey: string) => void;
+  /** Bump completedCount by one. Called on agent `running → finished` transitions. */
+  incrementCompleted: (rowKey: string) => void;
+  /** Reset completedCount to 0. Called when the user opens the agent detail. */
+  clearCompleted: (rowKey: string) => void;
   setArchived: (rowKey: string, archived: boolean) => void;
   remove: (rowKey: string) => void;
   /** Returns row keys that are currently pinned, sorted by pinnedAt desc. */
@@ -55,6 +67,7 @@ const DEFAULT: ChatRowState = {
   pinnedAt: null,
   muted: false,
   unread: 0,
+  completedCount: 0,
   archived: false,
 };
 
@@ -132,6 +145,35 @@ export const useChatRowStateStore = create<ChatRowStoreState & ChatRowStoreActio
           },
         })),
 
+      incrementCompleted: (rowKey) =>
+        set((state) => {
+          const previous = state.rows[rowKey] ?? DEFAULT;
+          return {
+            rows: {
+              ...state.rows,
+              [rowKey]: {
+                ...previous,
+                completedCount: previous.completedCount + 1,
+              },
+            },
+          };
+        }),
+
+      clearCompleted: (rowKey) =>
+        set((state) => {
+          const previous = state.rows[rowKey];
+          if (!previous || previous.completedCount === 0) return state;
+          return {
+            rows: {
+              ...state.rows,
+              [rowKey]: {
+                ...previous,
+                completedCount: 0,
+              },
+            },
+          };
+        }),
+
       setArchived: (rowKey, archived) =>
         set((state) => ({
           rows: {
@@ -163,6 +205,20 @@ export const useChatRowStateStore = create<ChatRowStoreState & ChatRowStoreActio
       name: CHAT_ROW_STATE_STORAGE_KEY,
       storage: createJSONStorage(() => AsyncStorage),
       version: CHAT_ROW_STORE_VERSION,
+      migrate: (persistedState, version) => {
+        // v1 → v2: add `completedCount: 0` to every row.
+        if (version < 2 && persistedState && typeof persistedState === "object") {
+          const state = persistedState as { rows?: Record<string, Partial<ChatRowState>> };
+          if (state.rows) {
+            const upgraded: Record<string, ChatRowState> = {};
+            for (const [key, row] of Object.entries(state.rows)) {
+              upgraded[key] = { ...DEFAULT, ...row, completedCount: 0 };
+            }
+            return { ...state, rows: upgraded } as ChatRowStoreState & ChatRowStoreActions;
+          }
+        }
+        return persistedState as ChatRowStoreState & ChatRowStoreActions;
+      },
     },
   ),
 );

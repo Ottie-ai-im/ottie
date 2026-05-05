@@ -13,13 +13,17 @@ export const ScheduleCadenceSchema = z.discriminatedUnion("type", [
     type: z.literal("cron"),
     expression: z.string().trim().min(1),
   }),
+  z.object({
+    type: z.literal("once"),
+    runAt: z.string(), // ISO timestamp
+  }),
 ]);
 export type ScheduleCadence = z.infer<typeof ScheduleCadenceSchema>;
 
 export const ScheduleTargetSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("agent"),
-    agentId: z.string().uuid(),
+    agentId: z.string(),
   }),
   z.object({
     type: z.literal("new-agent"),

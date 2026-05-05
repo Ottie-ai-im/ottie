@@ -1,11 +1,11 @@
 import { useCallback, useMemo, type ComponentType } from "react";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import { Pressable, View, type PressableStateCallbackType } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, usePathname } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { useHotkeys } from "react-hotkeys-hook";
-import { MessagesSquare, Settings, Server, Users } from "lucide-react-native";
+import { Bell, Blocks, MessagesSquare, Server, Settings, User } from "lucide-react-native";
 
 import { useHosts } from "@/runtime/host-runtime";
 import { useWindowControlsPadding } from "@/utils/desktop-window";
@@ -17,34 +17,36 @@ import {
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { isWeb } from "@/constants/platform";
 
-const RAIL_WIDTH = 68;
+const RAIL_WIDTH = 60;
 
-type RailTabId = "chats" | "devices" | "community" | "settings";
+type RailTabId = "chats" | "devices" | "extensions" | "settings";
 
 interface RailTabSpec {
   id: RailTabId;
-  labelKey: "tabs.chats" | "tabs.devices" | "tabs.community" | "tabs.settings";
+  labelKey: "tabs.chats" | "tabs.devices" | "tabs.extensions" | "tabs.settings";
   icon: ComponentType<{ size?: number; color?: string }>;
 }
 
-const TABS: readonly RailTabSpec[] = [
+const PRIMARY_TABS: readonly RailTabSpec[] = [
   { id: "chats", labelKey: "tabs.chats", icon: MessagesSquare },
   { id: "devices", labelKey: "tabs.devices", icon: Server },
-  { id: "community", labelKey: "tabs.community", icon: Users },
+  { id: "extensions", labelKey: "tabs.extensions", icon: Blocks },
   { id: "settings", labelKey: "tabs.settings", icon: Settings },
 ];
 
 function deriveActiveTab(pathname: string): RailTabId {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/devices")) return "devices";
-  if (pathname.includes("/community")) return "community";
+  if (pathname.includes("/community")) return "extensions";
   return "chats";
 }
 
 /**
- * macOS-26-style vertical navigation rail for desktop. Sits at the very left
- * edge of the window (inside the Tauri vibrancy backdrop) and holds the four
- * top-level destinations: chats / devices / community / settings.
+ * Vertical icon-only nav rail for desktop. Sits at the very left edge of the
+ * window (inside the Tauri vibrancy backdrop) and holds:
+ *   - Top: 4 primary destinations (chats / devices / community / settings).
+ *   - Bottom: notification bell (red dot when there are pending alerts) and a
+ *     profile avatar placeholder.
  *
  * Mobile uses `MobileTabBar` at the bottom; desktop uses this rail. They
  * share the same target routes so navigation logic stays consistent.
@@ -75,10 +77,11 @@ export function DesktopNavRail() {
   const activeServerId = hosts[0]?.serverId ?? "";
   const activeTab = deriveActiveTab(pathname);
 
-  const topPadding = insets.top + windowControlsPadding.top + 12;
+  const topPadding = insets.top + windowControlsPadding.top + 16;
+  const bottomPadding = Math.max(insets.bottom, 8) + 8;
   const containerStyle = useMemo(
-    () => [styles.container, { paddingTop: topPadding }],
-    [topPadding],
+    () => [styles.container, { paddingTop: topPadding, paddingBottom: bottomPadding }],
+    [topPadding, bottomPadding],
   );
 
   const handleSelect = useCallback(
@@ -95,11 +98,11 @@ export function DesktopNavRail() {
             router.replace(buildHostDevicesRoute(activeServerId));
           }
           return;
-        case "community":
+        case "extensions":
           if (activeServerId) {
             router.replace(buildHostCommunityRoute(activeServerId));
           }
-          return;
+          break;
         case "settings":
           router.replace("/settings");
           return;
@@ -108,11 +111,28 @@ export function DesktopNavRail() {
     [activeServerId, activeTab],
   );
 
+  // Notification + profile aren't wired to live data yet. The bell is rendered
+  // with `hasUnread = false` for now; once friend-request / system alerts
+  // surface a count, swap this to read from the store.
+  const notificationCount = 0;
+
   return (
     <View style={containerStyle} accessibilityRole="tablist" data-vibrancy-pass-through="true">
-      {TABS.map((tab) => (
-        <RailButton key={tab.id} tab={tab} active={tab.id === activeTab} onSelect={handleSelect} />
-      ))}
+      <View style={styles.group}>
+        {PRIMARY_TABS.map((tab) => (
+          <RailButton
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeTab}
+            onSelect={handleSelect}
+          />
+        ))}
+      </View>
+      <View style={styles.spacer} />
+      <View style={styles.group}>
+        <NotificationButton count={notificationCount} />
+        <ProfileButton />
+      </View>
     </View>
   );
 }
@@ -132,18 +152,14 @@ function RailButton({
   const handlePress = useCallback(() => onSelect(tab.id), [onSelect, tab.id]);
   const buttonStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
-      styles.button,
-      active ? styles.buttonActive : null,
-      Boolean(hovered) && !active ? styles.buttonHovered : null,
-      pressed ? styles.buttonPressed : null,
+      styles.iconButton,
+      active ? styles.iconButtonActive : null,
+      Boolean(hovered) && !active ? styles.iconButtonHovered : null,
+      pressed ? styles.iconButtonPressed : null,
     ],
     [active],
   );
-  const iconColor = active ? theme.colors.accent : theme.colors.foregroundMuted;
-  const labelStyle = useMemo(
-    () => [styles.label, { color: iconColor }, active ? styles.labelActive : null],
-    [iconColor, active],
-  );
+  const iconColor = active ? theme.colors.foreground : theme.colors.foregroundMuted;
   const Icon = tab.icon;
   return (
     <Pressable
@@ -153,8 +169,74 @@ function RailButton({
       testID={`desktop-nav-${tab.id}`}
       style={buttonStyle}
     >
-      <Icon size={20} color={iconColor} />
-      <Text style={labelStyle}>{label}</Text>
+      <Icon size={22} color={iconColor} />
+    </Pressable>
+  );
+}
+
+// Notification panel isn't wired yet — pressing is a no-op for now so the
+// icon doesn't navigate users into a 404. Replace with the real panel
+// handler once friend-request / system-alert UX lands. Hoisted out of the
+// component so JSX `onPress={NOOP}` doesn't allocate a new closure per render.
+const NOOP = () => {};
+
+function NotificationButton({ count }: { count: number }) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const buttonStyle = useCallback(
+    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.iconButton,
+      hovered ? styles.iconButtonHovered : null,
+      pressed ? styles.iconButtonPressed : null,
+    ],
+    [],
+  );
+  const accessibilityLabel =
+    count > 0
+      ? t("nav.notifications.withCount", {
+          count,
+          defaultValue: `Notifications, ${count} unread`,
+        })
+      : t("nav.notifications.empty", { defaultValue: "Notifications" });
+  return (
+    <Pressable
+      onPress={NOOP}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      testID="desktop-nav-notifications"
+      style={buttonStyle}
+    >
+      <Bell size={22} color={theme.colors.foregroundMuted} />
+      {count > 0 ? <View style={styles.notificationDot} /> : null}
+    </Pressable>
+  );
+}
+
+function ProfileButton() {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const buttonStyle = useCallback(
+    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.profileButton,
+      hovered ? styles.iconButtonHovered : null,
+      pressed ? styles.iconButtonPressed : null,
+    ],
+    [],
+  );
+  return (
+    <Pressable
+      // Profile/account panel isn't wired yet — placeholder per spec. Will
+      // open an account sheet (avatar, sign-in, profile shortcuts) once that
+      // surface ships.
+      onPress={NOOP}
+      accessibilityRole="button"
+      accessibilityLabel={t("nav.profile", { defaultValue: "Profile" })}
+      testID="desktop-nav-profile"
+      style={buttonStyle}
+    >
+      <View style={styles.profileAvatar}>
+        <User size={18} color={theme.colors.foregroundMuted} />
+      </View>
     </Pressable>
   );
 }
@@ -162,41 +244,65 @@ function RailButton({
 const styles = StyleSheet.create((theme) => ({
   container: {
     width: RAIL_WIDTH,
+    flex: 1,
     backgroundColor: "transparent",
     paddingHorizontal: theme.spacing[2],
-    paddingBottom: theme.spacing[2],
-    gap: theme.spacing[1],
     alignItems: "center",
     borderRightWidth: 1,
     borderRightColor: theme.colors.borderGlass,
   },
-  button: {
+  group: {
     width: "100%",
-    paddingVertical: theme.spacing[2],
-    gap: 4,
-    borderRadius: theme.borderRadius.button,
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  spacer: {
+    flex: 1,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.lg,
     borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "transparent",
+    position: "relative",
   },
-  buttonHovered: {
+  iconButtonHovered: {
     backgroundColor: theme.colors.surfaceGlass,
   },
-  buttonActive: {
-    backgroundColor: theme.colors.surfaceGlassStrong,
-    borderColor: theme.colors.borderGlass,
+  iconButtonActive: {
+    // Light tinted square highlight (matches the design mock — selected nav
+    // item gets a soft fill, not a brand-color outline).
+    backgroundColor: theme.colors.surface2,
   },
-  buttonPressed: {
+  iconButtonPressed: {
     opacity: 0.85,
   },
-  label: {
-    fontFamily: theme.fontFamily.system,
-    fontSize: 11,
-    letterSpacing: -0.1,
+  notificationDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.destructive,
+    borderWidth: 1.5,
+    borderColor: theme.colors.surface0,
   },
-  labelActive: {
-    fontWeight: theme.fontWeight.semibold,
+  profileButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.full,
+  },
+  profileAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
   },
 }));

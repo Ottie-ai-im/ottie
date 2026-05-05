@@ -17,7 +17,11 @@ import {
 import { useHaptic } from "@/hooks/use-haptic";
 import { useTranslation } from "react-i18next";
 import { useQueries } from "@tanstack/react-query";
-import { useProjectLastActivityAt, useProjectUnreadCount } from "@/hooks/use-project-last-activity";
+import {
+  useProjectLastActivityAt,
+  useProjectUnreadCount,
+  useProjectCompletedCount,
+} from "@/hooks/use-project-last-activity";
 import { formatRelativeIM } from "@/utils/relative-time";
 import {
   useCallback,
@@ -42,6 +46,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  Folder,
   FolderPlus,
   FolderGit2,
   GitPullRequest,
@@ -73,6 +78,7 @@ import {
 } from "@/hooks/use-sidebar-workspaces-list";
 import { useSidebarOrderStore } from "@/stores/sidebar-order-store";
 import { useShowShortcutBadges } from "@/hooks/use-show-shortcut-badges";
+import { SearchInput } from "@/components/ui/combobox";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -371,6 +377,18 @@ function StatusDotOverlay({
   return <View style={overlayStyle} />;
 }
 
+function StatusSpinnerOverlay({ borderColor, color }: { borderColor: string; color: string }) {
+  const overlayStyle = useMemo(
+    () => [styles.statusSpinnerOverlay, { borderColor, backgroundColor: borderColor }],
+    [borderColor],
+  );
+  return (
+    <View style={overlayStyle}>
+      <UnicodeSpinner animation="dots" size={9} color={color} />
+    </View>
+  );
+}
+
 function ProjectLeadingVisual({
   displayName,
   iconDataUri,
@@ -405,9 +423,18 @@ function ProjectLeadingVisual({
   }
 
   if (!shouldShowWorkspaceStatus || !activeWorkspace) {
+    // "Online and controllable" — daemon is reachable, project has data, but
+    // no workspace is currently mid-flight. Surface a green dot so the row
+    // mirrors the design mock's idle indicator.
     return (
       <View style={styles.projectLeadingVisualSlot}>
         <ProjectIcon iconDataUri={iconDataUri} placeholderInitial={placeholderInitial} />
+        <StatusDotOverlay
+          dotColor={theme.colors.palette.green[500]}
+          borderColor={theme.colors.surface0}
+          size={DEFAULT_STATUS_DOT_SIZE}
+          offset={DEFAULT_STATUS_DOT_OFFSET}
+        />
       </View>
     );
   }
@@ -730,18 +757,19 @@ function WorkspaceKebabMenu({
 
 function ProjectIcon({
   iconDataUri,
-  placeholderInitial,
+  placeholderInitial: _placeholderInitial,
 }: {
   iconDataUri: string | null;
   placeholderInitial: string;
 }) {
+  const { theme } = useUnistyles();
   const imageSource = useMemo(() => ({ uri: iconDataUri ?? "" }), [iconDataUri]);
   if (iconDataUri) {
     return <Image source={imageSource} style={styles.projectIcon} />;
   }
   return (
     <View style={styles.projectIconFallback}>
-      <Text style={styles.projectIconFallbackText}>{placeholderInitial}</Text>
+      <Folder size={20} color={theme.colors.foregroundMuted} strokeWidth={1.75} />
     </View>
   );
 }
@@ -761,34 +789,20 @@ function ProjectLeadingVisualStatus({
   activeWorkspace: SidebarWorkspaceEntry;
   theme: ReturnType<typeof useUnistyles>["theme"];
 }) {
-  if (isArchiving) {
-    return (
-      <View style={styles.projectLeadingVisualSlot}>
-        <ActivityIndicator size={8} color={theme.colors.foregroundMuted} />
-      </View>
-    );
-  }
+  // Always render the project icon; the status (spinner / dot) is overlaid at
+  // bottom-right so the row matches the mobile ChatRow avatar treatment and
+  // the design mock.
+  const showSpinner = isArchiving || shouldShowSyncedLoader;
+  const spinnerColor =
+    theme.colorScheme === "light"
+      ? theme.colors.palette.amber[700]
+      : theme.colors.palette.amber[500];
 
-  if (shouldShowSyncedLoader) {
+  if (showSpinner) {
     return (
       <View style={styles.projectLeadingVisualSlot}>
-        <UnicodeSpinner
-          animation="dots"
-          size={12}
-          color={
-            theme.colorScheme === "light"
-              ? theme.colors.palette.amber[700]
-              : theme.colors.palette.amber[500]
-          }
-        />
-      </View>
-    );
-  }
-
-  if (activeWorkspace.statusBucket === "needs_input") {
-    return (
-      <View style={styles.projectLeadingVisualSlot}>
-        <CircleAlert size={14} color={theme.colors.palette.amber[500]} />
+        <ProjectIcon iconDataUri={iconDataUri} placeholderInitial={placeholderInitial} />
+        <StatusSpinnerOverlay borderColor={theme.colors.surface0} color={spinnerColor} />
       </View>
     );
   }
@@ -1147,24 +1161,37 @@ function stripDragHandleButtonRole(
 function ProjectRowMetaColumn({
   subtitleText,
   unreadCount,
+  completedCount,
 }: {
   subtitleText: string;
   unreadCount: number;
+  completedCount: number;
 }): ReactElement | null {
-  if (!subtitleText && unreadCount <= 0) {
+  if (!subtitleText && unreadCount <= 0 && completedCount <= 0) {
     return null;
   }
   const unreadLabel = unreadCount > 99 ? "99+" : `${unreadCount}`;
+  const completedLabel = completedCount > 99 ? "99+" : `${completedCount}`;
+  const showBadgeStack = unreadCount > 0 || completedCount > 0;
   return (
     <View style={styles.projectMetaColumn}>
-      {subtitleText ? (
+      {subtitleText && !showBadgeStack ? (
         <Text style={styles.projectMetaTime} numberOfLines={1}>
           {subtitleText}
         </Text>
       ) : null}
-      {unreadCount > 0 ? (
-        <View style={styles.unreadBadge}>
-          <Text style={styles.unreadBadgeText}>{unreadLabel}</Text>
+      {showBadgeStack ? (
+        <View style={styles.projectBadgeStack}>
+          {unreadCount > 0 ? (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{unreadLabel}</Text>
+            </View>
+          ) : null}
+          {completedCount > 0 ? (
+            <View style={styles.completedBadge}>
+              <Text style={styles.completedBadgeText}>{completedLabel}</Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -1244,6 +1271,16 @@ function ProjectHeaderRow({
   );
   const lastActivityAt = useProjectLastActivityAt(serverId ?? null, workspaceIdsForActivity);
   const unreadCount = useProjectUnreadCount(serverId ?? null, workspaceIdsForActivity);
+  const projectAgentIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const workspace of project.workspaces) {
+      for (const agent of workspace.agents) {
+        ids.push(agent.id);
+      }
+    }
+    return ids;
+  }, [project.workspaces]);
+  const completedCount = useProjectCompletedCount(serverId ?? null, projectAgentIds);
   const subtitleText = useMemo(() => {
     const lang = i18nLanguage === "zh" ? "zh" : "en";
     return formatRelativeIM(lastActivityAt, lang);
@@ -1267,7 +1304,11 @@ function ProjectHeaderRow({
           </Text>
         </View>
       </View>
-      <ProjectRowMetaColumn subtitleText={subtitleText} unreadCount={unreadCount} />
+      <ProjectRowMetaColumn
+        subtitleText={subtitleText}
+        unreadCount={unreadCount}
+        completedCount={completedCount}
+      />
       <ProjectRowTrailingActions
         project={project}
         displayName={displayName}
@@ -2464,6 +2505,51 @@ export function SidebarWorkspaceList({
   const selectionEnabled = isWorkspaceRoute;
   const { t } = useTranslation();
 
+  // Search filter — matches project name, workspace name/alias, and any agent
+  // title within the project. A project is kept whenever any of its rows
+  // matches, so the existing project → workspace nesting is preserved.
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredProjects = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((project) => {
+      if (project.projectName.toLowerCase().includes(q)) return true;
+      for (const workspace of project.workspaces) {
+        const workspaceHaystack = [workspace.name, workspace.alias ?? "", workspace.displayLabel]
+          .join(" ")
+          .toLowerCase();
+        if (workspaceHaystack.includes(q)) return true;
+        for (const agent of workspace.agents) {
+          if (agent.title.toLowerCase().includes(q)) return true;
+        }
+      }
+      return false;
+    });
+  }, [projects, searchQuery]);
+
+  // ONLINE / OFFLINE grouping — a project is "online" (controllable right now)
+  // when any of its workspaces is mid-flight (statusBucket !== "done") or had
+  // activity within the last 7 days. Otherwise it's archived to the offline
+  // section. Drag-reordering is preserved within each group.
+  const { onlineProjects, offlineProjects } = useMemo(() => {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const online: SidebarProjectEntry[] = [];
+    const offline: SidebarProjectEntry[] = [];
+    for (const project of filteredProjects) {
+      const hasActiveWorkspace = project.workspaces.some(
+        (workspace) => workspace.statusBucket !== "done",
+      );
+      const recent =
+        project.lastActivityAt !== null && Date.parse(project.lastActivityAt) >= cutoff;
+      if (hasActiveWorkspace || recent) {
+        online.push(project);
+      } else {
+        offline.push(project);
+      }
+    }
+    return { onlineProjects: online, offlineProjects: offline };
+  }, [filteredProjects]);
+
   const projectIconRequests = useMemo(() => {
     if (!serverId) {
       return [];
@@ -2604,6 +2690,22 @@ export function SidebarWorkspaceList({
     [getProjectOrder, serverId, setProjectOrder],
   );
 
+  // When a single section (online / offline) is reordered, recompose the full
+  // visible project order by concatenating the two groups so the existing
+  // merge-with-remainder logic doesn't lose the unmoved group's positions.
+  const handleOnlineDragEnd = useCallback(
+    (reordered: SidebarProjectEntry[]) => {
+      handleProjectDragEnd([...reordered, ...offlineProjects]);
+    },
+    [handleProjectDragEnd, offlineProjects],
+  );
+  const handleOfflineDragEnd = useCallback(
+    (reordered: SidebarProjectEntry[]) => {
+      handleProjectDragEnd([...onlineProjects, ...reordered]);
+    },
+    [handleProjectDragEnd, onlineProjects],
+  );
+
   const handleWorkspaceReorder = useCallback(
     (projectKey: string, reorderedWorkspaces: SidebarWorkspaceEntry[]) => {
       if (!serverId) {
@@ -2702,37 +2804,95 @@ export function SidebarWorkspaceList({
     ],
   );
 
+  const showSearchEmpty = projects.length > 0 && filteredProjects.length === 0;
+  let mainContent: ReactElement;
+  if (projects.length === 0) {
+    mainContent = (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>{t("sidebar.noProjectsYet")}</Text>
+        <Text style={styles.emptyText}>{t("sidebar.noProjectsHint")}</Text>
+        <Button variant="ghost" size="sm" leftIcon={Plus} onPress={onAddProject}>
+          {t("sidebar.addProject")}
+        </Button>
+      </View>
+    );
+  } else if (showSearchEmpty) {
+    mainContent = (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>
+          {t("sidebar.searchEmpty", { defaultValue: "No results" })}
+        </Text>
+      </View>
+    );
+  } else {
+    mainContent = (
+      <>
+        {onlineProjects.length > 0 ? (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionHeaderText}>
+                {t("sidebar.section.online", { defaultValue: "ONLINE" })} · {onlineProjects.length}
+              </Text>
+            </View>
+            <DraggableList
+              testID="sidebar-project-list-online"
+              data={onlineProjects}
+              keyExtractor={projectKeyExtractor}
+              renderItem={renderProject}
+              onDragEnd={handleOnlineDragEnd}
+              scrollEnabled={false}
+              useDragHandle
+              nestable={platformIsNative}
+              skipDndContextWrapper={isWeb}
+              simultaneousGestureRef={parentGestureRef}
+              containerStyle={styles.projectListContainer}
+            />
+          </>
+        ) : null}
+        {offlineProjects.length > 0 ? (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionHeaderText}>
+                {t("sidebar.section.offline", { defaultValue: "OFFLINE" })} ·{" "}
+                {offlineProjects.length}
+              </Text>
+            </View>
+            <DraggableList
+              testID="sidebar-project-list-offline"
+              data={offlineProjects}
+              keyExtractor={projectKeyExtractor}
+              renderItem={renderProject}
+              onDragEnd={handleOfflineDragEnd}
+              scrollEnabled={false}
+              useDragHandle
+              nestable={platformIsNative}
+              skipDndContextWrapper={isWeb}
+              simultaneousGestureRef={parentGestureRef}
+              containerStyle={styles.projectListContainer}
+            />
+          </>
+        ) : null}
+      </>
+    );
+  }
   const content = (
     <>
-      {projects.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>{t("sidebar.noProjectsYet")}</Text>
-          <Text style={styles.emptyText}>{t("sidebar.noProjectsHint")}</Text>
-          <Button variant="ghost" size="sm" leftIcon={Plus} onPress={onAddProject}>
-            {t("sidebar.addProject")}
-          </Button>
-        </View>
-      ) : (
-        <DraggableList
-          testID="sidebar-project-list"
-          data={projects}
-          keyExtractor={projectKeyExtractor}
-          renderItem={renderProject}
-          onDragEnd={handleProjectDragEnd}
-          scrollEnabled={false}
-          useDragHandle
-          nestable={platformIsNative}
-          skipDndContextWrapper={isWeb}
-          simultaneousGestureRef={parentGestureRef}
-          containerStyle={styles.projectListContainer}
-        />
-      )}
+      {mainContent}
       {listFooterComponent}
     </>
   );
 
   return (
     <View style={styles.container}>
+      {projects.length > 0 ? (
+        <View style={styles.searchBar}>
+          <SearchInput
+            placeholder={t("sidebar.searchPlaceholder", { defaultValue: "Search..." })}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+      ) : null}
       {platformIsNative ? (
         <NestableScrollContainer
           style={styles.list}
@@ -2762,6 +2922,22 @@ const styles = StyleSheet.create((theme) => ({
   },
   list: {
     flex: 1,
+  },
+  searchBar: {
+    paddingHorizontal: theme.spacing[3],
+    paddingTop: theme.spacing[2],
+    paddingBottom: theme.spacing[2],
+  },
+  sectionHeader: {
+    paddingHorizontal: theme.spacing[3],
+    paddingTop: theme.spacing[3],
+    paddingBottom: theme.spacing[1],
+  },
+  sectionHeaderText: {
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.semibold,
+    letterSpacing: 0.6,
+    color: theme.colors.foregroundMuted,
   },
   listContent: {
     paddingHorizontal: theme.spacing[2],
@@ -3027,11 +3203,11 @@ const styles = StyleSheet.create((theme) => ({
     ...theme.shadow.md,
   },
   sidebarRowSelected: {
-    // WhatsApp / IM style: tinted brand background + left accent rail so the
-    // active conversation pops without dominating the sidebar.
+    // Light blue tint + blue left rail (matches the design mock and the
+    // mobile SessionsScreen selection treatment).
     backgroundColor:
-      theme.colorScheme === "light" ? "rgba(31, 168, 85, 0.10)" : "rgba(37, 211, 102, 0.16)",
-    borderLeftColor: theme.colors.accent,
+      theme.colorScheme === "light" ? "rgba(59, 130, 246, 0.10)" : "rgba(96, 165, 250, 0.16)",
+    borderLeftColor: "#3b82f6",
   },
   workspaceRowContainer: {
     position: "relative",
@@ -3053,6 +3229,17 @@ const styles = StyleSheet.create((theme) => ({
     height: DEFAULT_STATUS_DOT_SIZE,
     borderRadius: theme.borderRadius.full,
     borderWidth: 1,
+  },
+  statusSpinnerOverlay: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 14,
+    height: 14,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
   },
   workspaceArchivingOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -3152,12 +3339,33 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: 9,
     backgroundColor: theme.colors.destructive,
     flexShrink: 0,
-    marginRight: theme.spacing[1],
   },
   unreadBadgeText: {
     color: "#FFFFFF",
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.bold,
     lineHeight: 14,
+  },
+  completedBadge: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9,
+    backgroundColor: theme.colors.palette.blue[500],
+    flexShrink: 0,
+  },
+  completedBadgeText: {
+    color: "#FFFFFF",
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 14,
+  },
+  projectBadgeStack: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    marginRight: theme.spacing[1],
   },
 }));

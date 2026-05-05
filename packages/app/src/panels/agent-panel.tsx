@@ -51,6 +51,7 @@ import { getInitDeferred, getInitKey } from "@/utils/agent-initialization";
 import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { mergePendingCreateImages } from "@/utils/pending-create-images";
 import { deriveSidebarStateBucket } from "@/utils/sidebar-agent-state";
+import { makeRowKey, useChatRowStateStore } from "@/stores/chat-row-state-store";
 
 interface ChatAgentStateShape {
   serverId: string | null;
@@ -58,6 +59,7 @@ interface ChatAgentStateShape {
   status: Agent["status"] | null;
   cwd: string | null;
   lastError?: Agent["lastError"] | null;
+  pendingSchedules?: Agent["pendingSchedules"] | null;
 }
 
 interface ChatAgentSelectedState extends ChatAgentStateShape {
@@ -85,6 +87,7 @@ const EMPTY_CHAT_AGENT_STATE: ChatAgentSelectedState = {
   archivedAt: null,
   requiresAttention: false,
   attentionReason: null,
+  pendingSchedules: null,
 };
 
 function selectChatAgentState(
@@ -103,6 +106,7 @@ function selectChatAgentState(
     archivedAt: agent.archivedAt ?? null,
     requiresAttention: agent.requiresAttention ?? false,
     attentionReason: agent.attentionReason ?? null,
+    pendingSchedules: agent.pendingSchedules ?? [],
   };
 }
 
@@ -120,6 +124,7 @@ function buildChatAgentFromState(
     cwd: state.cwd,
     lastError: state.lastError ?? null,
     projectPlacement,
+    pendingSchedules: state.pendingSchedules ?? [],
   };
 }
 
@@ -602,6 +607,14 @@ function ChatAgentContent({
   const handleFilesDropped = useCallback((files: ImageAttachment[]) => {
     addImagesRef.current?.(files);
   }, []);
+
+  // Reset the "completed tasks" badge when the user opens this agent — the
+  // count represents tasks that completed since they last looked, so opening
+  // the panel is the natural acknowledgement event.
+  useEffect(() => {
+    if (!agentId) return;
+    useChatRowStateStore.getState().clearCompleted(makeRowKey(serverId, agentId));
+  }, [serverId, agentId]);
 
   const handleAddImagesCallback = useCallback((addImages: (images: ImageAttachment[]) => void) => {
     addImagesRef.current = addImages;

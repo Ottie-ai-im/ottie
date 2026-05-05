@@ -47,6 +47,7 @@ import { useFileAttachmentPicker } from "@/hooks/use-file-attachment-picker";
 import { useLocationShare } from "@/hooks/use-location-share";
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
 import { useTranslation } from "react-i18next";
+import { MathCurveLoader } from "@/components/math-curve-loader";
 import { useSessionStore } from "@/stores/session-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useMobileQuickActionStore } from "@/stores/mobile-quick-action-store";
@@ -942,7 +943,14 @@ function ComposerVoiceModeButton({
   const renderTriggerContent = useCallback(
     ({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => {
       if (isVoiceSwitching) {
-        return <MathCurveLoader curve="rose-three" size={voiceLoaderSize} color="white" />;
+        return (
+          <MathCurveLoader
+            brandContext="chats"
+            curve="rose-three"
+            size={voiceLoaderSize}
+            color="white"
+          />
+        );
       }
       const color = hovered ? theme.colors.foreground : theme.colors.foregroundMuted;
       return <AudioLines size={buttonIconSize} color={color} />;
@@ -1746,6 +1754,31 @@ export function Composer({
     [onAttentionInputFocus],
   );
 
+  const handleScheduleSend = useCallback(
+    async (payload: MessagePayload, runAt: string) => {
+      if (!client) {
+        toast.error(
+          t("composer.scheduleNotConnected", {
+            defaultValue: "Not connected to daemon — cannot schedule",
+          }),
+        );
+        return;
+      }
+      try {
+        await client.createSchedule({
+          prompt: payload.text,
+          cadence: { type: "once", runAt },
+          target: { type: "agent", agentId },
+        });
+        toast.show(t("composer.scheduledToast", { defaultValue: "Message scheduled!" }));
+        if (clearDraft) clearDraft("sent");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to schedule message");
+      }
+    },
+    [client, agentId, toast, t, clearDraft],
+  );
+
   const handleLightboxClose = useCallback(() => {
     setLightboxMetadata(null);
   }, []);
@@ -1873,6 +1906,7 @@ export function Composer({
               onSelectionChange={handleSelectionChange}
               onFocusChange={handleFocusChange}
               onHeightChange={onComposerHeightChange}
+              onSchedule={handleScheduleSend}
               inputWrapperStyle={inputWrapperStyle}
             />
             <Combobox

@@ -12,6 +12,7 @@ export interface AgentScreenAgent {
       isGit?: boolean;
     };
   } | null;
+  pendingSchedules?: { id: string; prompt: string; runAt: string }[];
 }
 
 export type AgentScreenMissingState =

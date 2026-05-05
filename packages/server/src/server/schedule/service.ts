@@ -43,6 +43,20 @@ function normalizeMaxRuns(value: number | null | undefined): number | null {
   return value;
 }
 
+function normalizeExpiresAt(value: string | null | undefined, now: Date): string | null {
+  if (value == null) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid expiresAt timestamp: ${value}`);
+  }
+  if (parsed.getTime() <= now.getTime()) {
+    throw new Error("expiresAt must be in the future");
+  }
+  return parsed.toISOString();
+}
+
 function countCompletedRuns(schedule: StoredSchedule): number {
   return schedule.runs.filter((run) => run.status !== "running").length;
 }
@@ -108,8 +122,10 @@ export class ScheduleService {
   private tickTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: ScheduleServiceOptions) {
-    this.store = new ScheduleStore(join(options.ottieHome, "schedules"));
     this.logger = options.logger.child({ module: "schedule-service" });
+    this.store = new ScheduleStore(join(options.ottieHome, "schedules"), {
+      logger: this.logger,
+    });
     this.agentManager = options.agentManager;
     this.agentStorage = options.agentStorage;
     this.now = options.now ?? (() => new Date());
@@ -152,8 +168,8 @@ export class ScheduleService {
       nextRunAt: computeNextRunAt(input.cadence, now).toISOString(),
       lastRunAt: null,
       pausedAt: null,
-      expiresAt: input.expiresAt ?? null,
-      maxRuns: normalizeMaxRuns(input.maxRuns),
+      expiresAt: normalizeExpiresAt(input.expiresAt, now),
+      maxRuns: input.cadence.type === "once" ? 1 : normalizeMaxRuns(input.maxRuns),
       runs: [],
     });
     return schedule;

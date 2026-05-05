@@ -27,6 +27,7 @@ export interface StreamHistoryBoundary {
 export interface StreamRenderAuxiliary {
   pendingPermissions: ReactNode;
   workingIndicator: ReactNode;
+  scheduledMessages: ReactNode;
 }
 
 export interface AgentStreamRenderModel {
@@ -47,6 +48,7 @@ const EMPTY_STREAM_ITEMS: StreamItem[] = [];
 const EMPTY_AUXILIARY: StreamRenderAuxiliary = {
   pendingPermissions: null,
   workingIndicator: null,
+  scheduledMessages: null,
 };
 
 const orderedTailCache = new WeakMap<StreamItem[], Map<string, StreamItem[]>>();

@@ -17,28 +17,30 @@ const MOCK_PLUGINS: PluginInfo[] = [
   {
     id: "codeisland",
     name: "CodeIsland Notch Integration",
-    description: "A real-time macOS Dynamic Island panel for your AI coding agents. See tool calls and stream status without switching windows.",
+    description:
+      "A real-time macOS Dynamic Island panel for your AI coding agents. See tool calls and stream status without switching windows.",
     author: "wxtsky",
   },
   {
     id: "github-sync",
     name: "GitHub PR Sync",
-    description: "Automatically opens pull requests and syncs agent task summaries to GitHub issues.",
+    description:
+      "Automatically opens pull requests and syncs agent task summaries to GitHub issues.",
     author: "ottie-core",
-  }
+  },
 ];
 
 export function CommunityScreen() {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  
+
   // Mock installation state
   const [installed, setInstalled] = useState<Record<string, boolean>>({
-    codeisland: true // Pre-installed via our seed script
+    codeisland: true, // Pre-installed via our seed script
   });
 
   const toggleInstall = (id: string) => {
-    setInstalled(prev => ({ ...prev, [id]: !prev[id] }));
+    setInstalled((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   return (
@@ -48,11 +50,13 @@ export function CommunityScreen() {
         <View style={styles.header}>
           <Blocks size={32} color={theme.colors.foreground} />
           <Text style={styles.title}>Plugin Store</Text>
-          <Text style={styles.body}>Discover and install community extensions to power up your daemon.</Text>
+          <Text style={styles.body}>
+            Discover and install community extensions to power up your daemon.
+          </Text>
         </View>
 
         <View style={styles.list}>
-          {MOCK_PLUGINS.map(plugin => {
+          {MOCK_PLUGINS.map((plugin) => {
             const isInstalled = installed[plugin.id];
             return (
               <View key={plugin.id} style={styles.pluginCard}>
@@ -61,7 +65,7 @@ export function CommunityScreen() {
                     <Text style={styles.pluginName}>{plugin.name}</Text>
                     <Text style={styles.pluginAuthor}>by {plugin.author}</Text>
                   </View>
-                  <Pressable 
+                  <Pressable
                     style={[styles.installButton, isInstalled && styles.installedButton]}
                     onPress={() => toggleInstall(plugin.id)}
                   >

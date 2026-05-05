@@ -20,6 +20,11 @@ export async function readDesktopFileBase64(pathOrUri: string): Promise<string> 
 }
 
 export async function resolveDesktopPreviewUrl(attachment: AttachmentMetadata): Promise<string> {
+  if (typeof attachment.storageKey !== "string" || attachment.storageKey.length === 0) {
+    throw new Error(
+      `[attachments] Cannot resolve preview URL: attachment ${attachment.id} has no storageKey`,
+    );
+  }
   const base64 = await readDesktopFileBase64(attachment.storageKey);
 
   if (typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {

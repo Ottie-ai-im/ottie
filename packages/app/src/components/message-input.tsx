@@ -5,6 +5,7 @@ import {
   Platform,
   Pressable,
   ActivityIndicator,
+  ScrollView,
   StyleSheet as RNStyleSheet,
   NativeSyntheticEvent,
   TextInputContentSizeChangeEventData,
@@ -24,7 +25,18 @@ import {
 } from "react";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
-import { ArrowUp, Mic, MicOff, CornerDownLeft, Plus, Square } from "lucide-react-native";
+import {
+  ArrowUp,
+  Mic,
+  MicOff,
+  CornerDownLeft,
+  Plus,
+  Square,
+  Clock,
+  Calendar,
+  ChevronRight,
+} from "lucide-react-native";
+import { format, addDays, setHours, setMinutes } from "date-fns";
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { useDictation } from "@/hooks/use-dictation";
 import { DictationOverlay } from "./dictation-controls";
@@ -49,10 +61,12 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { ChevronRight, ChevronLeft } from "lucide-react-native";
+import { ChevronLeft } from "lucide-react-native";
 import { useWebElementScrollbar } from "@/components/use-web-scrollbar";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
+import { useTranslation } from "react-i18next";
 import { formatShortcut } from "@/utils/format-shortcut";
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
@@ -139,6 +153,8 @@ export interface MessageInputProps {
   onHeightChange?: (height: number) => void;
   /** Extra styles merged onto the input wrapper (e.g. elevated background). */
   inputWrapperStyle?: import("react-native").ViewStyle;
+  /** Called when user schedules a message. */
+  onSchedule?: (payload: MessagePayload, runAt: string) => void;
 }
 
 export interface MessageInputRef {
@@ -425,7 +441,7 @@ function SendTooltipBody({
 function SendButtonContent({
   isSubmitLoading,
   submitIcon,
-  buttonIconSize: _buttonIconSize,
+  buttonIconSize,
 }: {
   isSubmitLoading: boolean;
   submitIcon: "arrow" | "return";
@@ -1351,6 +1367,7 @@ interface ResolvedMessageInputProps {
   onFocusChange: ((focused: boolean) => void) | undefined;
   onHeightChange: ((height: number) => void) | undefined;
   inputWrapperStyle: import("react-native").ViewStyle | undefined;
+  onSchedule: ((payload: MessagePayload, runAt: string) => void) | undefined;
 }
 
 function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInputProps {
@@ -1390,6 +1407,7 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     onFocusChange: props.onFocusChange,
     onHeightChange: props.onHeightChange,
     inputWrapperStyle: props.inputWrapperStyle,
+    onSchedule: props.onSchedule,
   };
 }
 
@@ -1417,6 +1435,191 @@ function getScrollableAncestorChain(element: HTMLElement | null): string[] {
     current = current.parentElement;
   }
   return results;
+}
+
+function nextQuarterHour(currentMinute: number): number {
+  // Start at the next quarter-hour so the default schedule time is in the future.
+  if (currentMinute < 15) return 15;
+  if (currentMinute < 30) return 30;
+  if (currentMinute < 45) return 45;
+  return 0;
+}
+
+function formatScheduleConfirmLabel(args: {
+  isInPast: boolean;
+  isZh: boolean;
+  dateLabel: string;
+  timeLabel: string;
+}): string {
+  if (args.isInPast) {
+    return args.isZh ? "时间已过" : "Time is in the past";
+  }
+  if (args.isZh) {
+    return `在 ${args.dateLabel} ${args.timeLabel} 发送`;
+  }
+  return `Send on ${args.dateLabel} at ${args.timeLabel}`;
+}
+
+function ScheduleSendButton({
+  onSchedule,
+  value,
+  attachments,
+  cwd,
+  disabled,
+}: {
+  onSchedule: ((payload: MessagePayload, runAt: string) => void) | undefined;
+  value: string;
+  attachments: ComposerAttachment[];
+  cwd: string;
+  disabled: boolean;
+}) {
+  const { theme } = useUnistyles();
+  const { t, i18n } = useTranslation();
+
+  const now = new Date();
+  const [selDayOffset, setSelDayOffset] = useState(0);
+  const [selHour, setSelHour] = useState(now.getHours());
+  const [selMinute, setSelMinute] = useState(() => nextQuarterHour(now.getMinutes()));
+
+  const isZh = i18n.language.startsWith("zh");
+  const dateFormat = isZh ? "M月d日" : "MMM d";
+
+  const days = useMemo(() => {
+    const today = new Date();
+    return Array.from({ length: 14 }, (_, i) => {
+      const d = addDays(today, i);
+      let label: string;
+      if (i === 0) label = isZh ? "今天" : "Today";
+      else if (i === 1) label = isZh ? "明天" : "Tomorrow";
+      else label = format(d, dateFormat);
+      return { label, date: d };
+    });
+  }, [dateFormat, isZh]);
+
+  const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
+  const minutes = useMemo(() => [0, 15, 30, 45], []);
+
+  const targetDate = setHours(setMinutes(days[selDayOffset].date, selMinute), selHour);
+  const isInPast = targetDate.getTime() <= Date.now();
+  const canSchedule = value.trim().length > 0 && !disabled && !isInPast;
+
+  if (!onSchedule) return null;
+
+  const handleConfirm = () => {
+    if (!canSchedule) return;
+    onSchedule({ text: value, attachments, cwd }, targetDate.toISOString());
+  };
+
+  const selectedDateLabel = days[selDayOffset].label;
+  const selectedTimeLabel = `${selHour.toString().padStart(2, "0")}:${selMinute.toString().padStart(2, "0")}`;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        style={({ hovered }) => [
+          styles.scheduleButton,
+          hovered && styles.iconButtonHovered,
+          disabled && styles.buttonDisabled,
+        ]}
+      >
+        <Clock size={20} color={theme.colors.foregroundMuted} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="end" width={320}>
+        <View style={{ flex: 1, padding: 16, minHeight: 320 }}>
+          <Text style={styles.scheduleTitle}>
+            {t("composer.scheduleTitle", { defaultValue: "Schedule send" })}
+          </Text>
+
+          <View style={styles.pickerContainer}>
+            <View style={styles.pickerColumnWrapper}>
+              <ScrollView style={styles.pickerColumn} showsVerticalScrollIndicator={false}>
+                {days.map((day, i) => (
+                  <Pressable
+                    key={i}
+                    onPress={() => setSelDayOffset(i)}
+                    style={[styles.pickerItem, selDayOffset === i && styles.pickerItemSelected]}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerItemText,
+                        selDayOffset === i && styles.pickerItemTextSelected,
+                      ]}
+                    >
+                      {day.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+            <View style={styles.pickerColumnWrapper}>
+              <ScrollView style={styles.pickerColumn} showsVerticalScrollIndicator={false}>
+                {hours.map((h) => (
+                  <Pressable
+                    key={h}
+                    onPress={() => setSelHour(h)}
+                    style={[styles.pickerItem, selHour === h && styles.pickerItemSelected]}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerItemText,
+                        selHour === h && styles.pickerItemTextSelected,
+                      ]}
+                    >
+                      {h.toString().padStart(2, "0")}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+            <View style={styles.pickerColumnWrapper}>
+              <ScrollView style={styles.pickerColumn} showsVerticalScrollIndicator={false}>
+                {minutes.map((m) => (
+                  <Pressable
+                    key={m}
+                    onPress={() => setSelMinute(m)}
+                    style={[styles.pickerItem, selMinute === m && styles.pickerItemSelected]}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerItemText,
+                        selMinute === m && styles.pickerItemTextSelected,
+                      ]}
+                    >
+                      {m.toString().padStart(2, "0")}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+
+          <View style={{ marginTop: "auto" }}>
+            <Pressable
+              onPress={handleConfirm}
+              disabled={!canSchedule}
+              style={({ hovered, pressed }) => [
+                styles.confirmButtonLargeAction,
+                hovered && { opacity: 0.9 },
+                pressed && { opacity: 0.8 },
+                !canSchedule && styles.buttonDisabled,
+              ]}
+            >
+              <ArrowUp size={16} color="#FFF" style={{ marginRight: 8 }} />
+              <Text style={styles.confirmButtonLargeActionText}>
+                {formatScheduleConfirmLabel({
+                  isInPast,
+                  isZh,
+                  dateLabel: selectedDateLabel,
+                  timeLabel: selectedTimeLabel,
+                })}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
@@ -1457,6 +1660,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       onFocusChange,
       onHeightChange,
       inputWrapperStyle,
+      onSchedule,
     } = resolveMessageInputProps(props);
     const { theme } = useUnistyles();
     const buttonIconSize = isWeb ? theme.iconSize.md : theme.iconSize.lg;
@@ -2095,21 +2299,30 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                   {inputScrollbar}
                 </View>
                 {hasComposerText && shouldShowSendButton ? (
-                  <SendButtonTooltip
-                    shouldShow={shouldShowSendButton}
-                    canPressLoadingButton={canPressLoadingButton}
-                    onSubmitLoadingPress={onSubmitLoadingPress}
-                    onDefaultSendAction={handleDefaultSendAction}
-                    isSendButtonDisabled={isSendButtonDisabled}
-                    submitAccessibilityLabel={submitAccessibilityLabel}
-                    sendButtonCombinedStyle={sendButtonCombinedStyle}
-                    isSubmitLoading={isSubmitLoading}
-                    submitIcon={submitIcon}
-                    buttonIconSize={buttonIconSize}
-                    submitButtonAccessibilityLabel={submitButtonAccessibilityLabel}
-                    defaultActionQueues={defaultActionQueues}
-                    sendKeys={sendKeys}
-                  />
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <ScheduleSendButton
+                      onSchedule={onSchedule}
+                      value={value}
+                      attachments={attachments}
+                      cwd={cwd}
+                      disabled={disabled || isSubmitLoading}
+                    />
+                    <SendButtonTooltip
+                      shouldShow={shouldShowSendButton}
+                      canPressLoadingButton={canPressLoadingButton}
+                      onSubmitLoadingPress={onSubmitLoadingPress}
+                      onDefaultSendAction={handleDefaultSendAction}
+                      isSendButtonDisabled={isSendButtonDisabled}
+                      submitAccessibilityLabel={submitAccessibilityLabel}
+                      sendButtonCombinedStyle={sendButtonCombinedStyle}
+                      isSubmitLoading={isSubmitLoading}
+                      submitIcon={submitIcon}
+                      buttonIconSize={buttonIconSize}
+                      submitButtonAccessibilityLabel={submitButtonAccessibilityLabel}
+                      defaultActionQueues={defaultActionQueues}
+                      sendKeys={sendKeys}
+                    />
+                  </View>
                 ) : (
                   <AttachmentDropdown
                     isConnected={isConnected}
@@ -2179,6 +2392,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                     dictationToggleKeys={dictationToggleKeys}
                   />
                   {rightContent}
+                  <ScheduleSendButton
+                    onSchedule={onSchedule}
+                    value={value}
+                    attachments={attachments}
+                    cwd={cwd}
+                    disabled={disabled || isSubmitLoading}
+                  />
                   <SendButtonTooltip
                     shouldShow={shouldShowSendButton}
                     canPressLoadingButton={canPressLoadingButton}
@@ -2376,6 +2596,77 @@ const styles = StyleSheet.create((theme: Theme) => ({
     justifyContent: "center",
     marginLeft: theme.spacing[1],
     ...theme.shadow.sm,
+  },
+  scheduleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.borderRadius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: theme.spacing[1],
+  },
+  menuItemWithIcon: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  menuItemText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foreground,
+  },
+  scheduleTitle: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.foreground,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  pickerContainer: {
+    flexDirection: "row",
+    height: 180,
+    gap: 8,
+    marginBottom: 16,
+  },
+  pickerColumnWrapper: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    overflow: "hidden",
+  },
+  pickerColumn: {
+    flex: 1,
+  },
+  pickerItem: {
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerItemSelected: {
+    backgroundColor: theme.colors.surface2,
+  },
+  pickerItemText: {
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+  },
+  pickerItemTextSelected: {
+    color: theme.colors.foreground,
+    fontWeight: theme.fontWeight.bold,
+  },
+  confirmButtonLargeAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.accent,
+    paddingVertical: 14,
+    borderRadius: theme.borderRadius.lg,
+    ...theme.shadow.md,
+  },
+  confirmButtonLargeActionText: {
+    color: "#FFFFFF",
+    fontWeight: theme.fontWeight.bold,
+    fontSize: theme.fontSize.base,
   },
   iconButtonHovered: {
     backgroundColor: theme.colors.surface2,

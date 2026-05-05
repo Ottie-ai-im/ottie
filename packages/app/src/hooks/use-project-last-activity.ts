@@ -5,6 +5,7 @@
 
 import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceReadStore } from "@/stores/workspace-read-store";
+import { useChatRowStateStore } from "@/stores/chat-row-state-store";
 
 export function useProjectLastActivityAt(
   serverId: string | null,
@@ -32,6 +33,26 @@ export function useWorkspaceActivityAt(
   return useSessionStore((state) => {
     if (!serverId || !workspaceId) return null;
     return state.sessions[serverId]?.workspaces.get(workspaceId)?.activityAt ?? null;
+  });
+}
+
+/**
+ * Sums the per-agent `completedCount` (from chat-row-state-store) across every
+ * agent in this project. Drives the project-level "tasks completed" blue
+ * badge in the desktop sidebar — reactively recomputes when the chat-row
+ * store changes.
+ */
+export function useProjectCompletedCount(
+  serverId: string | null,
+  agentIds: readonly string[],
+): number {
+  return useChatRowStateStore((state) => {
+    if (!serverId || agentIds.length === 0) return 0;
+    let count = 0;
+    for (const id of agentIds) {
+      count += state.rows[`${serverId}:${id}`]?.completedCount ?? 0;
+    }
+    return count;
   });
 }
 

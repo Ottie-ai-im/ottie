@@ -49,6 +49,7 @@ describe("useChatRowStateStore", () => {
       pinnedAt: null,
       muted: false,
       unread: 0,
+      completedCount: 0,
       archived: false,
     });
   });
@@ -109,7 +110,7 @@ describe("useChatRowStateStore", () => {
       version: number;
     };
     expect(persisted.state.rows[key]?.pinned).toBe(true);
-    expect(persisted.version).toBe(1);
+    expect(persisted.version).toBe(2);
   });
 
   it("getPinnedRowKeys() returns ids sorted by pinnedAt desc (Test 5)", () => {

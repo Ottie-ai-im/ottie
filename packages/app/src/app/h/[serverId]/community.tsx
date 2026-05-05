@@ -16,7 +16,7 @@ function HostCommunityRouteContent() {
   const serverId = typeof params.serverId === "string" ? params.serverId : "";
 
   return (
-    <MobileTabHost serverId={serverId} activeTab="community">
+    <MobileTabHost serverId={serverId} activeTab="extensions">
       <CommunityScreen />
     </MobileTabHost>
   );

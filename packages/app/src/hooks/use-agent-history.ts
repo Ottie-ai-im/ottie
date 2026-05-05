@@ -35,12 +35,14 @@ async function fetchAgentHistoryPage(input: {
   client: DaemonClient;
   serverId: string;
   cursor: string | null;
+  includeArchived: boolean;
 }): Promise<AgentHistoryPage> {
   const payload = await input.client.fetchAgentHistory({
     sort: AGENT_HISTORY_SORT,
     page: input.cursor
       ? { limit: AGENT_HISTORY_PAGE_LIMIT, cursor: input.cursor }
       : { limit: AGENT_HISTORY_PAGE_LIMIT },
+    filter: input.includeArchived ? { includeArchived: true } : undefined,
   });
 
   const { agents } = buildAgentDirectoryState({
@@ -73,6 +75,8 @@ async function fetchAgentHistoryPage(input: {
 export function useAgentHistory(options: {
   serverId?: string | null;
   enabled?: boolean;
+  /** When true, fetch the archived agent list instead of the active list. */
+  includeArchived?: boolean;
 }): AgentHistoryResult {
   const daemons = useHosts();
   const serverId = useMemo(() => {
@@ -80,9 +84,13 @@ export function useAgentHistory(options: {
     return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
   }, [options.serverId]);
   const enabled = options.enabled ?? true;
+  const includeArchived = options.includeArchived ?? false;
   const client = useHostRuntimeClient(serverId ?? "");
   const isConnected = useHostRuntimeIsConnected(serverId ?? "");
-  const queryKey = useMemo(() => agentHistoryQueryKey(serverId), [serverId]);
+  const queryKey = useMemo(
+    () => agentHistoryQueryKey(serverId, { includeArchived }),
+    [serverId, includeArchived],
+  );
   const serverLabel = daemons.find((daemon) => daemon.serverId === serverId)?.label ?? serverId;
 
   const historyQuery = useInfiniteQuery<
@@ -102,7 +110,7 @@ export function useAgentHistory(options: {
       if (!serverId || !client) {
         throw new Error("Host is not connected");
       }
-      return fetchAgentHistoryPage({ client, serverId, cursor: pageParam });
+      return fetchAgentHistoryPage({ client, serverId, cursor: pageParam, includeArchived });
     },
   });
   const { data, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, isLoading, refetch } =

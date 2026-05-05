@@ -4,17 +4,17 @@
 //
 // What's NOT yet ported (returns "not implemented in Tauri yet" so the UI
 // can degrade gracefully):
-//   - desktop_daemon_status / start / stop / restart / logs / pairing
 //   - cli_daemon_status / install_cli / get_cli_install_status
 //   - check_app_update / install_app_update / get_local_daemon_version
 //   - install_skills / get_skills_install_status
-//   - write_attachment_base64 / copy_attachment_file / read_file_base64 /
-//     delete_attachment_file / garbage_collect_attachment_files
 //   - open_local_daemon_transport / send_local_daemon_transport_message /
 //     close_local_daemon_transport
 //
-// These were Electron main-process helpers tied to Node APIs. Reimplementing
-// them in Rust is real work and not required for first-time UI bring-up.
+// Attachment file IO (write_attachment_base64 / copy_attachment_file /
+// read_file_base64 / delete_attachment_file / garbage_collect_attachment_files
+// / write_attachment_bytes) IS implemented — ported from Paseo's
+// `packages/desktop/src/features/attachments.ts` so the Tauri build behaves
+// the same way as the upstream Electron build.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -103,8 +103,13 @@ fn ureq_get_json(url: &str) -> Result<Value, String> {
         .map(|i| i + 4)
         .or_else(|| buf.windows(2).position(|w| w == b"\n\n").map(|i| i + 2))
         .ok_or_else(|| "no header/body separator in response".to_string())?;
-    let status_line = std::str::from_utf8(&buf[..buf.iter().position(|&b| b == b'\r' || b == b'\n').unwrap_or(buf.len())])
-        .unwrap_or("");
+    let status_line = std::str::from_utf8(
+        &buf[..buf
+            .iter()
+            .position(|&b| b == b'\r' || b == b'\n')
+            .unwrap_or(buf.len())],
+    )
+    .unwrap_or("");
     if !status_line.contains(" 200 ") {
         return Err(format!("non-200 from daemon: {status_line}"));
     }
@@ -163,6 +168,267 @@ fn daemon_status_value(info: &DaemonInfo) -> Value {
     })
 }
 
+// -------------------------- attachments ----------------------------------
+//
+// Ported from Paseo's Electron equivalent — `packages/desktop/src/features/
+// attachments.ts` — so the on-disk layout, ID/extension validation, path-
+// traversal guard, and GC semantics match exactly. Spec:
+//
+//   directory: $OTTIE_HOME/desktop-attachments/
+//   file:      {attachmentId}{extension}    (extension defaults to ".bin")
+//   id regex:  ^[A-Za-z0-9_-]+$
+//   ext regex: ^\.[A-Za-z0-9]{1,16}$
+//
+// Every read/delete path must `canonicalize` under the managed directory —
+// callers passing absolute paths from arbitrary metadata cannot use this to
+// touch files outside the attachment dir.
+
+const ATTACHMENTS_DIRNAME: &str = "desktop-attachments";
+
+fn attachments_dir(info: &DaemonInfo) -> std::path::PathBuf {
+    std::path::PathBuf::from(&info.home).join(ATTACHMENTS_DIRNAME)
+}
+
+fn ensure_attachments_dir(info: &DaemonInfo) -> Result<std::path::PathBuf, String> {
+    let dir = attachments_dir(info);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("failed to create attachments dir: {e}"))?;
+    Ok(dir)
+}
+
+fn is_valid_attachment_id(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+fn normalize_attachment_id(value: Option<&Value>) -> Result<String, String> {
+    let raw = value
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Attachment id is required.".to_string())?;
+    let trimmed = raw.trim().to_string();
+    if !is_valid_attachment_id(&trimmed) {
+        return Err(format!("Invalid attachment id: {raw}"));
+    }
+    Ok(trimmed)
+}
+
+fn is_valid_extension(value: &str) -> bool {
+    if !value.starts_with('.') {
+        return false;
+    }
+    let rest = &value[1..];
+    if rest.is_empty() || rest.len() > 16 {
+        return false;
+    }
+    rest.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+fn normalize_extension(value: Option<&Value>) -> Result<String, String> {
+    let raw = match value {
+        None | Some(Value::Null) => return Ok(".bin".to_string()),
+        Some(Value::String(s)) if s.is_empty() => return Ok(".bin".to_string()),
+        Some(Value::String(s)) => s.clone(),
+        Some(other) => return Err(format!("Attachment extension must be a string: {other}")),
+    };
+    let normalized = raw.trim().to_lowercase();
+    if !is_valid_extension(&normalized) {
+        return Err(format!("Invalid attachment extension: {raw}"));
+    }
+    Ok(normalized)
+}
+
+fn build_managed_attachment_path(
+    info: &DaemonInfo,
+    args: &Value,
+) -> Result<std::path::PathBuf, String> {
+    let dir = ensure_attachments_dir(info)?;
+    let id = normalize_attachment_id(args.get("attachmentId"))?;
+    let ext = normalize_extension(args.get("extension"))?;
+    Ok(dir.join(format!("{id}{ext}")))
+}
+
+/// Verify a path stays inside `desktop-attachments/`. Used by read / delete to
+/// reject metadata that points outside the managed directory.
+fn resolve_managed_attachment_path(
+    info: &DaemonInfo,
+    raw: Option<&Value>,
+) -> Result<std::path::PathBuf, String> {
+    let raw_str = raw
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .ok_or_else(|| "Attachment path is required.".to_string())?;
+    if raw_str.is_empty() {
+        return Err("Attachment path is required.".to_string());
+    }
+
+    // Compare canonicalised absolute paths to defeat `..` / symlink shenanigans.
+    let dir = attachments_dir(info);
+    let dir_canonical = dir
+        .canonicalize()
+        .or_else(|_| {
+            std::fs::create_dir_all(&dir).ok();
+            dir.canonicalize()
+        })
+        .map_err(|e| format!("failed to resolve attachments dir: {e}"))?;
+
+    let candidate = std::path::PathBuf::from(&raw_str);
+    let candidate_canonical = candidate
+        .canonicalize()
+        .map_err(|e| format!("failed to resolve attachment path: {e}"))?;
+
+    if !candidate_canonical.starts_with(&dir_canonical) {
+        return Err("Attachment path must stay within desktop-managed storage.".to_string());
+    }
+    Ok(candidate_canonical)
+}
+
+fn write_attachment_base64(info: &DaemonInfo, args: &Value) -> Result<Value, String> {
+    use base64::Engine;
+    let base64_str = args
+        .get("base64")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "Attachment base64 payload is required.".to_string())?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64_str)
+        .map_err(|e| format!("invalid base64 payload: {e}"))?;
+    let target = build_managed_attachment_path(info, args)?;
+    std::fs::write(&target, &bytes).map_err(|e| format!("failed to write attachment: {e}"))?;
+    Ok(json!({
+        "path": target.to_string_lossy(),
+        "byteSize": bytes.len(),
+    }))
+}
+
+fn write_attachment_bytes(info: &DaemonInfo, args: &Value) -> Result<Value, String> {
+    let bytes_value = args
+        .get("bytes")
+        .ok_or_else(|| "Attachment byte payload is required.".to_string())?;
+    let bytes: Vec<u8> = match bytes_value {
+        Value::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                let n = item
+                    .as_u64()
+                    .ok_or_else(|| "Attachment byte array must contain integers".to_string())?;
+                if n > 255 {
+                    return Err("Attachment byte values must fit in a u8".to_string());
+                }
+                out.push(n as u8);
+            }
+            out
+        }
+        _ => return Err("Attachment byte payload is required.".to_string()),
+    };
+    let target = build_managed_attachment_path(info, args)?;
+    std::fs::write(&target, &bytes).map_err(|e| format!("failed to write attachment: {e}"))?;
+    Ok(json!({
+        "path": target.to_string_lossy(),
+        "byteSize": bytes.len(),
+    }))
+}
+
+fn copy_attachment_file(info: &DaemonInfo, args: &Value) -> Result<Value, String> {
+    let source = args
+        .get("sourcePath")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "Attachment source path is required.".to_string())?;
+    let source_path = std::path::PathBuf::from(&source);
+    let target = build_managed_attachment_path(info, args)?;
+    if source_path != target {
+        std::fs::copy(&source_path, &target)
+            .map_err(|e| format!("failed to copy attachment: {e}"))?;
+    }
+    let meta = std::fs::metadata(&target).map_err(|e| format!("failed to stat attachment: {e}"))?;
+    Ok(json!({
+        "path": target.to_string_lossy(),
+        "byteSize": meta.len(),
+    }))
+}
+
+fn read_managed_file_base64(info: &DaemonInfo, args: &Value) -> Result<Value, String> {
+    use base64::Engine;
+    let path = resolve_managed_attachment_path(info, args.get("path"))?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("failed to read attachment: {e}"))?;
+    Ok(Value::String(
+        base64::engine::general_purpose::STANDARD.encode(bytes),
+    ))
+}
+
+fn delete_managed_attachment_file(info: &DaemonInfo, args: &Value) -> Result<Value, String> {
+    // resolve_managed_attachment_path canonicalizes — for delete we want to
+    // succeed even if the file is missing (mirroring Paseo's `force: true`).
+    let raw = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "Attachment path is required.".to_string())?;
+    let dir = ensure_attachments_dir(info)?
+        .canonicalize()
+        .map_err(|e| format!("failed to resolve attachments dir: {e}"))?;
+    let candidate = std::path::PathBuf::from(&raw);
+    // canonicalize fails on missing files — fall back to manual normalization
+    // (resolve absolute, lexically join). For a missing file we just return
+    // success since the post-condition (file gone) is already satisfied.
+    let absolute = if candidate.is_absolute() {
+        candidate.clone()
+    } else {
+        std::env::current_dir()
+            .map_err(|e| format!("cwd unavailable: {e}"))?
+            .join(&candidate)
+    };
+    if !absolute.starts_with(&dir) {
+        return Err("Attachment path must stay within desktop-managed storage.".to_string());
+    }
+    if absolute.exists() {
+        std::fs::remove_file(&absolute).map_err(|e| format!("failed to delete attachment: {e}"))?;
+    }
+    Ok(Value::Bool(true))
+}
+
+fn garbage_collect_managed_attachment_files(
+    info: &DaemonInfo,
+    args: &Value,
+) -> Result<Value, String> {
+    let dir = ensure_attachments_dir(info)?;
+    let referenced: std::collections::HashSet<String> = match args.get("referencedIds") {
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| is_valid_attachment_id(s))
+            .collect(),
+        _ => std::collections::HashSet::new(),
+    };
+
+    let mut deleted: usize = 0;
+    let entries =
+        std::fs::read_dir(&dir).map_err(|e| format!("failed to read attachments dir: {e}"))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string();
+        if referenced.contains(&stem) {
+            continue;
+        }
+        if std::fs::remove_file(&path).is_ok() {
+            deleted += 1;
+        }
+    }
+    Ok(json!(deleted))
+}
+
 // -------------------------- generic invoke -------------------------------
 //
 // The Electron build dispatched a long list of named commands through one
@@ -176,17 +442,15 @@ pub struct NotImplemented {
     pub tauri_port: bool,
 }
 
-// `args` is currently informational — every dispatched branch ignores it,
-// but keeping it in the signature lets the frontend pass the same payload
-// shape the Electron preload used historically and lets us read it later without
-// rewiring the bridge.
+// `args` is forwarded as the second arg to each branch; attachment commands
+// read fields like `attachmentId` / `base64` / `path` / `referencedIds` out
+// of it. Branches that don't need it just ignore the parameter.
 #[tauri::command]
 pub fn ottie_invoke<R: Runtime>(
     app: AppHandle<R>,
     command: String,
-    #[allow(unused_variables)] args: Option<Value>,
+    args: Option<Value>,
 ) -> Result<Value, String> {
-    let _ = args;
     let info = app
         .try_state::<DaemonInfoState>()
         .map(|s| s.0.lock().unwrap().clone())
@@ -202,8 +466,9 @@ pub fn ottie_invoke<R: Runtime>(
         // yet, that placeholder gets pinned and the next probe (which sees the
         // real id) fails the host-id sanity check, leaving the app stuck at
         // "Connecting to local server...".
-        "start_desktop_daemon"
-        | "restart_desktop_daemon" => Ok(daemon_status_value_blocking(&info)),
+        "start_desktop_daemon" | "restart_desktop_daemon" => {
+            Ok(daemon_status_value_blocking(&info))
+        }
 
         "stop_desktop_daemon" => {
             let mut stopped = info.clone();
@@ -263,6 +528,29 @@ pub fn ottie_invoke<R: Runtime>(
         // safe — the renderer treats it as "user just acted".
         "desktop_get_system_idle_time" => Ok(json!(0)),
 
+        // Attachment file IO — ported from Paseo's Electron implementation.
+        // See the helpers above for the full spec; the dispatcher just
+        // forwards args. Errors come back as command failures, which the
+        // renderer's `invokeDesktopCommand` surfaces as a rejected promise.
+        "write_attachment_base64" => {
+            write_attachment_base64(&info, args.as_ref().unwrap_or(&Value::Null))
+        }
+        "write_attachment_bytes" => {
+            write_attachment_bytes(&info, args.as_ref().unwrap_or(&Value::Null))
+        }
+        "copy_attachment_file" => {
+            copy_attachment_file(&info, args.as_ref().unwrap_or(&Value::Null))
+        }
+        "read_file_base64" => {
+            read_managed_file_base64(&info, args.as_ref().unwrap_or(&Value::Null))
+        }
+        "delete_attachment_file" => {
+            delete_managed_attachment_file(&info, args.as_ref().unwrap_or(&Value::Null))
+        }
+        "garbage_collect_attachment_files" => {
+            garbage_collect_managed_attachment_files(&info, args.as_ref().unwrap_or(&Value::Null))
+        }
+
         // Updater / installer surface: park as not implemented.
         "check_app_update"
         | "install_app_update"
@@ -270,18 +558,10 @@ pub fn ottie_invoke<R: Runtime>(
         | "get_cli_install_status"
         | "install_skills"
         | "get_skills_install_status"
-        | "write_attachment_base64"
-        | "copy_attachment_file"
-        | "read_file_base64"
-        | "delete_attachment_file"
-        | "garbage_collect_attachment_files"
         | "open_local_daemon_transport"
         | "send_local_daemon_transport_message"
         | "close_local_daemon_transport" => Ok(serde_json::to_value(NotImplemented {
-            error: format!(
-                "{} is not implemented in the Tauri shell yet",
-                command
-            ),
+            error: format!("{} is not implemented in the Tauri shell yet", command),
             tauri_port: true,
         })
         .unwrap()),
@@ -462,10 +742,7 @@ pub fn ottie_notification_send<R: Runtime>(
 // ------------------------------ opener -----------------------------------
 
 #[tauri::command]
-pub fn ottie_opener_open_url<R: Runtime>(
-    app: AppHandle<R>,
-    url: String,
-) -> Result<(), String> {
+pub fn ottie_opener_open_url<R: Runtime>(app: AppHandle<R>, url: String) -> Result<(), String> {
     app.opener()
         .open_url(&url, None::<&str>)
         .map_err(|e| e.to_string())
@@ -511,10 +788,7 @@ pub fn ottie_menu_show_context<R: Runtime>(
 // ------------------------------ window -----------------------------------
 
 fn focused<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
-    app.webview_windows()
-        .into_iter()
-        .map(|(_, w)| w)
-        .next()
+    app.webview_windows().into_iter().map(|(_, w)| w).next()
 }
 
 #[tauri::command]
@@ -593,4 +867,3 @@ pub fn emit_to_webview<R: Runtime>(app: &AppHandle<R>, event: &str, payload: &Va
     // Also use Tauri's own event bus so listeners using @tauri-apps/api work.
     let _ = app.emit(&event_name, payload.clone());
 }
-

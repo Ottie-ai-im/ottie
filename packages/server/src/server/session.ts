@@ -992,6 +992,15 @@ export class Session {
     }
     this.localTokenService = new LocalTokenService(localTokenMode ?? { kind: "loopback-trust" });
     registerLocalTokenHandlers(this.router, this.localTokenService, (msg) => this.emit(msg));
+
+    this.router.register("schedule/create", (m) => this.handleScheduleCreateRequest(m as any));
+    this.router.register("schedule/list", (m) => this.handleScheduleListRequest(m as any));
+    this.router.register("schedule/inspect", (m) => this.handleScheduleInspectRequest(m as any));
+    this.router.register("schedule/logs", (m) => this.handleScheduleLogsRequest(m as any));
+    this.router.register("schedule/pause", (m) => this.handleSchedulePauseRequest(m as any));
+    this.router.register("schedule/resume", (m) => this.handleScheduleResumeRequest(m as any));
+    this.router.register("schedule/delete", (m) => this.handleScheduleDeleteRequest(m as any));
+
     void this.initializeAgentMcp();
     this.subscribeToAgentEvents();
     this.sessionLogger.trace("Session created");
@@ -1391,6 +1400,24 @@ export class Session {
       }
     }
     payload.archivedAt = storedRecord?.archivedAt ?? null;
+
+    // Include pending schedules
+    const schedules = await this.scheduleService.list();
+    payload.pendingSchedules = schedules
+      .filter(
+        (s) => s.target.type === "agent" && s.target.agentId === agent.id && s.status === "active",
+      )
+      .map((s) => ({
+        id: s.id,
+        prompt: s.prompt,
+        runAt: s.nextRunAt ?? s.createdAt, // Fallback to createdAt if nextRunAt is missing
+      }));
+
+    this.sessionLogger.debug(
+      { agentId: agent.id, count: payload.pendingSchedules.length },
+      "buildAgentPayload pendingSchedules",
+    );
+
     return payload;
   }
 
@@ -1619,6 +1646,30 @@ export class Session {
     return this.buildProjectPlacementForWorkspace(workspace);
   }
 
+  private async dispatchAgentUpdate(agentId: string): Promise<void> {
+    const liveAgent = this.agentManager.getAgent(agentId);
+    if (liveAgent) {
+      await this.forwardAgentUpdate(liveAgent);
+      return;
+    }
+
+    const record = await this.agentStorage.get(agentId);
+    if (record && this.agentUpdatesSubscription) {
+      const payload = this.buildStoredAgentPayload(record);
+      const project = await this.buildProjectPlacementForCwd(payload.cwd, {
+        refreshGit: false,
+        fallback: true,
+      });
+      if (project) {
+        this.bufferOrEmitAgentUpdate(this.agentUpdatesSubscription, {
+          kind: "upsert",
+          agent: payload,
+          project,
+        });
+      }
+    }
+  }
+
   private async forwardAgentUpdate(agent: ManagedAgent): Promise<void> {
     try {
       const subscription = this.agentUpdatesSubscription;
@@ -1661,6 +1712,7 @@ export class Session {
    * Main entry point for processing session messages
    */
   public async handleMessage(msg: SessionInboundMessage): Promise<void> {
+    this.sessionLogger.debug({ type: msg.type }, "handleMessage");
     this.inflightCounter.increment();
     try {
       const payloadBytes = JSON.stringify(msg).length;
@@ -8776,6 +8828,18 @@ export class Session {
           error: null,
         },
       });
+      if (target.type === "agent") {
+        this.sessionLogger.info(
+          { agentId: target.agentId, scheduleId: schedule.id },
+          "Schedule created for agent, dispatching update",
+        );
+        void this.dispatchAgentUpdate(target.agentId).then(() => {
+          this.sessionLogger.info(
+            { agentId: target.agentId, scheduleId: schedule.id },
+            "Agent update dispatched",
+          );
+        });
+      }
     } catch (error) {
       this.emitScheduleRpcError(request, error);
     }
@@ -8875,6 +8939,9 @@ export class Session {
     request: Extract<SessionInboundMessage, { type: "schedule/delete" }>,
   ): Promise<void> {
     try {
+      const schedule = await this.scheduleService.inspect(request.scheduleId).catch(() => null);
+      const targetAgentId = schedule?.target.type === "agent" ? schedule.target.agentId : null;
+
       await this.scheduleService.delete(request.scheduleId);
       this.emit({
         type: "schedule/delete/response",
@@ -8884,6 +8951,9 @@ export class Session {
           error: null,
         },
       });
+      if (targetAgentId) {
+        void this.dispatchAgentUpdate(targetAgentId);
+      }
     } catch (error) {
       this.emitScheduleRpcError(request, error);
     }

@@ -636,6 +636,15 @@ export const AgentSnapshotPayloadSchema = z.object({
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
+  pendingSchedules: z
+    .array(
+      z.object({
+        id: z.string(),
+        prompt: z.string(),
+        runAt: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;

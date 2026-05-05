@@ -43,6 +43,7 @@ import {
 import { useDraftStore } from "@/stores/draft-store";
 import { useUsageStore } from "@/stores/usage-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
+import { makeRowKey, useChatRowStateStore } from "@/stores/chat-row-state-store";
 import { sendOsNotification } from "@/utils/os-notifications";
 import { getIsAppActivelyVisible } from "@/utils/app-visibility";
 import {
@@ -650,6 +651,13 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
 
       const prevStatus = previousAgentStatusRef.current.get(agent.id);
       if (prevStatus === "running" && agent.status !== "running") {
+        // Bump the chat-row "completed task" badge whenever a run wraps up
+        // cleanly (attentionReason === "finished"). Errors and pending-
+        // permission stops do not count — they have their own indicators.
+        if (agent.attentionReason === "finished") {
+          useChatRowStateStore.getState().incrementCompleted(makeRowKey(serverId, agent.id));
+        }
+
         const session = useSessionStore.getState().sessions[serverId];
         const queue = session?.queuedMessages.get(agent.id);
         if (queue && queue.length > 0) {
@@ -790,6 +798,12 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       const session = useSessionStore.getState().sessions[serverId];
       const attentionFocusedAgentId = session?.focusedAgentId ?? null;
       if (params.reason === "error") {
+        return;
+      }
+      // Respect the chat-row mute flag — muted chats never fire OS notifications.
+      const rowKey = makeRowKey(serverId, params.agentId);
+      const rowState = useChatRowStateStore.getState().rows[rowKey];
+      if (rowState?.muted) {
         return;
       }
       const isActivelyVisible = getIsAppActivelyVisible(appState);

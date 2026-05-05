@@ -1,26 +1,35 @@
 // SessionsScreen — the WeChat-style "Chats" tab.
 //
-// Plan 02c reshape: replaces the legacy `<AgentList>` with a `<FlatList>` of
-// `<ChatRow>` items, sorts pinned rows first (using
-// `useChatRowStateStore.getPinnedRowKeys()`), and surfaces the
-// `<TopRightAddMenu>` next to the header title.
+// Layout:
+//   - MenuHeader ("Chats" + TopRightAddMenu)
+//   - SearchInput (filters by title / cwd / serverLabel)
+//   - FlatList of mixed items: ONLINE / OFFLINE section headers + ChatRows
+//
+// Grouping (Plan B — "what you can control"):
+//   - Online  : status !== "closed"  (initializing | idle | running | error)
+//   - Offline : status === "closed"
+// Within each group: pinned rows first (pinnedAt desc), then by lastActivityAt desc.
+//
+// Selection: a row is highlighted when usePathname() matches its detail route.
 //
 // Empty-state branches:
 //   - First-time empty (`!emptyOttiePlayedFirstChats && agents.length===0`):
 //     Otter logo + "Your first agent is one tap away" copy.
-//     Sets the flag once rendered so subsequent empties show pure copy.
 //   - Subsequent empty: pure-copy variant.
+//   - Search-empty: pure-copy variant ("No results").
 //
-// Initial-load loader is `<MathCurveLoader>` per UI-SPEC §D-13 (sanctioned
-// top-level loader for the chats list).
+// Initial-load loader is `<MathCurveLoader>` per UI-SPEC §D-13.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, RefreshControl, Text, View, type ListRenderItem } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
+import { usePathname } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { Button } from "@/components/ui/button";
+import { SearchInput } from "@/components/ui/combobox";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ChatRow } from "@/components/chat-row";
 import { TopRightAddMenu } from "@/components/top-right-add-menu";
 import { MathCurveLoader } from "@/components/math-curve-loader";
@@ -29,7 +38,17 @@ import { useAgentHistory } from "@/hooks/use-agent-history";
 import { useOnboardingStateStore } from "@/stores/onboarding-state-store";
 import { makeRowKey, useChatRowStateStore } from "@/stores/chat-row-state-store";
 import { fireDelightToast } from "@/utils/delight-toast";
+import { buildHostAgentDetailRoute } from "@/utils/host-routes";
+import { shortenPath } from "@/utils/shorten-path";
 import type { AggregatedAgent } from "@/hooks/use-aggregated-agents";
+
+type ListItem =
+  | { type: "header"; key: string; label: string; count: number }
+  | { type: "row"; key: string; agent: AggregatedAgent; selected: boolean };
+
+function isOnline(agent: AggregatedAgent): boolean {
+  return agent.status !== "closed";
+}
 
 export function SessionsScreen({ serverId }: { serverId: string }) {
   const isFocused = useIsFocused();
@@ -41,12 +60,17 @@ export function SessionsScreen({ serverId }: { serverId: string }) {
   return <SessionsScreenContent serverId={serverId} />;
 }
 
+type ScopeValue = "active" | "archived";
+
 function SessionsScreenContent({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
+  const pathname = usePathname();
+  const [scope, setScope] = useState<ScopeValue>("active");
   const { agents, hasMore, isInitialLoad, isLoadingMore, isRevalidating, loadMore, refreshAll } =
     useAgentHistory({
       serverId,
+      includeArchived: scope === "archived",
     });
 
   // Track user-initiated refresh to avoid showing spinner on background revalidation
@@ -64,26 +88,81 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
     }
   }, [isRevalidating, isManualRefresh]);
 
-  // Pinned rows sort first (by pinnedAt desc, returned by the store helper),
-  // then unpinned rows by lastActivityAt desc. Pinned set rebuilds when the
-  // store changes — subscribe via a selector for re-renders.
+  const [query, setQuery] = useState("");
+
+  // Pinned set drives intra-group ordering (pinned first, then lastActivityAt desc).
   const rows = useChatRowStateStore((s) => s.rows);
-  const pinnedRowKeys = useMemo(() => {
-    return Object.entries(rows)
-      .filter(([, value]) => value.pinned)
-      .sort(([, a], [, b]) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0))
-      .map(([key]) => key);
+  const pinnedSet = useMemo(() => {
+    const out = new Set<string>();
+    for (const [key, value] of Object.entries(rows)) {
+      if (value.pinned) out.add(key);
+    }
+    return out;
   }, [rows]);
 
-  const sortedAgents = useMemo(() => {
-    const pinnedSet = new Set(pinnedRowKeys);
-    return [...agents].sort((a, b) => {
+  const filteredAgents = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return agents;
+    return agents.filter((a) => {
+      const haystack = [a.title ?? "", a.cwd ? shortenPath(a.cwd) : "", a.serverLabel]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [agents, query]);
+
+  const sortFn = useCallback(
+    (a: AggregatedAgent, b: AggregatedAgent) => {
       const aPinned = pinnedSet.has(makeRowKey(a.serverId, a.id));
       const bPinned = pinnedSet.has(makeRowKey(b.serverId, b.id));
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
       return b.lastActivityAt.getTime() - a.lastActivityAt.getTime();
-    });
-  }, [agents, pinnedRowKeys]);
+    },
+    [pinnedSet],
+  );
+
+  const { onlineAgents, offlineAgents } = useMemo(() => {
+    const online: AggregatedAgent[] = [];
+    const offline: AggregatedAgent[] = [];
+    for (const a of filteredAgents) {
+      (isOnline(a) ? online : offline).push(a);
+    }
+    online.sort(sortFn);
+    offline.sort(sortFn);
+    return { onlineAgents: online, offlineAgents: offline };
+  }, [filteredAgents, sortFn]);
+
+  const listItems = useMemo<ListItem[]>(() => {
+    const items: ListItem[] = [];
+    const selectedKey = pickSelectedKey(pathname, filteredAgents);
+    if (onlineAgents.length > 0) {
+      items.push({
+        type: "header",
+        key: "header-online",
+        label: t("chat.section.online", { defaultValue: "ONLINE" }),
+        count: onlineAgents.length,
+      });
+      for (const agent of onlineAgents) {
+        const key = `${agent.serverId}:${agent.id}`;
+        items.push({ type: "row", key, agent, selected: key === selectedKey });
+      }
+    }
+    if (offlineAgents.length > 0) {
+      items.push({
+        type: "header",
+        key: "header-offline",
+        label: t("chat.section.offline", { defaultValue: "OFFLINE" }),
+        count: offlineAgents.length,
+      });
+      for (const agent of offlineAgents) {
+        const key = `${agent.serverId}:${agent.id}`;
+        items.push({ type: "row", key, agent, selected: key === selectedKey });
+      }
+    }
+    return items;
+  }, [onlineAgents, offlineAgents, pathname, filteredAgents, t]);
+
+  const totalAgents = agents.length;
 
   // First-time empty Otter (D-14): set the flag once the empty branch
   // renders so the next empty shows pure copy.
@@ -92,16 +171,18 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
   const isFirstTime = !emptyOttiePlayed;
 
   useEffect(() => {
-    if (!isInitialLoad && sortedAgents.length === 0 && isFirstTime) {
+    if (scope !== "active") return;
+    if (!isInitialLoad && totalAgents === 0 && isFirstTime) {
       setEmptyOttiePlayed(true);
     }
-  }, [isInitialLoad, sortedAgents.length, isFirstTime, setEmptyOttiePlayed]);
+  }, [scope, isInitialLoad, totalAgents, isFirstTime, setEmptyOttiePlayed]);
 
   useEffect(() => {
-    if (!isInitialLoad && sortedAgents.length > 0) {
+    if (scope !== "active") return;
+    if (!isInitialLoad && totalAgents > 0) {
       fireDelightToast("first-agent");
     }
-  }, [isInitialLoad, sortedAgents.length]);
+  }, [scope, isInitialLoad, totalAgents]);
 
   const listFooterComponent = useMemo(
     () =>
@@ -115,12 +196,20 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
     [hasMore, loadMore, isLoadingMore],
   );
 
-  const renderItem = useCallback<ListRenderItem<AggregatedAgent>>(
-    ({ item }) => <ChatRow agent={item} />,
-    [],
-  );
+  const renderItem = useCallback<ListRenderItem<ListItem>>(({ item }) => {
+    if (item.type === "header") {
+      return (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionHeaderText}>
+            {item.label} · {item.count}
+          </Text>
+        </View>
+      );
+    }
+    return <ChatRow agent={item.agent} selected={item.selected} />;
+  }, []);
 
-  const keyExtractor = useCallback((item: AggregatedAgent) => `${item.serverId}:${item.id}`, []);
+  const keyExtractor = useCallback((item: ListItem) => item.key, []);
 
   const refreshColors = useMemo(
     () => [theme.colors.foregroundMuted],
@@ -141,9 +230,78 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
 
   const headerRight = useMemo(() => <TopRightAddMenu serverId={serverId} />, [serverId]);
 
+  const showInitialEmpty = !isInitialLoad && totalAgents === 0;
+  const showSearchEmpty = !isInitialLoad && totalAgents > 0 && listItems.length === 0;
+
+  const scopeOptions = useMemo(
+    () =>
+      [
+        {
+          value: "active" as const,
+          label: t("chat.scope.active", { defaultValue: "Active" }),
+          testID: "chat-scope-active",
+        },
+        {
+          value: "archived" as const,
+          label: t("chat.scope.archived", { defaultValue: "Archived" }),
+          testID: "chat-scope-archived",
+        },
+      ] satisfies ReadonlyArray<{ value: ScopeValue; label: string; testID: string }>,
+    [t],
+  );
+
+  let initialEmptyView: React.ReactNode = null;
+  if (showInitialEmpty) {
+    if (scope === "archived") {
+      initialEmptyView = (
+        <>
+          <Text style={styles.emptyHeading}>
+            {t("chat.empty.archived.heading", { defaultValue: "No archived chats" })}
+          </Text>
+          <Text style={styles.emptyBody}>
+            {t("chat.empty.archived.body", {
+              defaultValue: "Chats you archive will show up here.",
+            })}
+          </Text>
+        </>
+      );
+    } else if (isFirstTime) {
+      initialEmptyView = (
+        <>
+          <otterAssets.emptyState size={120} />
+          <Text style={styles.emptyHeadingDisplay}>{t("chat.empty.firstTime.heading")}</Text>
+          <Text style={styles.emptyBody}>{t("chat.empty.firstTime.body")}</Text>
+        </>
+      );
+    } else {
+      initialEmptyView = (
+        <>
+          <Text style={styles.emptyHeading}>{t("chat.empty.heading")}</Text>
+          <Text style={styles.emptyBody}>{t("chat.empty.body")}</Text>
+        </>
+      );
+    }
+  }
+
   return (
     <View style={styles.container}>
       <MenuHeader title="Chats" rightContent={headerRight} />
+      <View style={styles.searchBar}>
+        <SearchInput
+          placeholder={t("chat.searchPlaceholder", { defaultValue: "Search..." })}
+          value={query}
+          onChangeText={setQuery}
+        />
+      </View>
+      <View style={styles.scopeBar}>
+        <SegmentedControl<ScopeValue>
+          options={scopeOptions}
+          value={scope}
+          onValueChange={setScope}
+          size="sm"
+          testID="chat-scope-toggle"
+        />
+      </View>
       {isInitialLoad ? (
         <View style={styles.loadingContainer}>
           <MathCurveLoader
@@ -155,25 +313,17 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
           />
         </View>
       ) : null}
-      {!isInitialLoad && sortedAgents.length === 0 ? (
+      {showInitialEmpty ? <View style={styles.emptyContainer}>{initialEmptyView}</View> : null}
+      {showSearchEmpty ? (
         <View style={styles.emptyContainer}>
-          {isFirstTime ? (
-            <>
-              <otterAssets.emptyState size={120} />
-              <Text style={styles.emptyHeadingDisplay}>{t("chat.empty.firstTime.heading")}</Text>
-              <Text style={styles.emptyBody}>{t("chat.empty.firstTime.body")}</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.emptyHeading}>{t("chat.empty.heading")}</Text>
-              <Text style={styles.emptyBody}>{t("chat.empty.body")}</Text>
-            </>
-          )}
+          <Text style={styles.emptyHeading}>
+            {t("chat.search.empty", { defaultValue: "No results" })}
+          </Text>
         </View>
       ) : null}
-      {!isInitialLoad && sortedAgents.length > 0 ? (
+      {!isInitialLoad && listItems.length > 0 ? (
         <FlatList
-          data={sortedAgents}
+          data={listItems}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           style={styles.list}
@@ -189,10 +339,30 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
   );
 }
 
+function pickSelectedKey(pathname: string | null, agents: AggregatedAgent[]): string | null {
+  if (!pathname) return null;
+  for (const agent of agents) {
+    const route = buildHostAgentDetailRoute(agent.serverId, agent.id);
+    if (pathname === route || pathname.startsWith(`${route}/`)) {
+      return `${agent.serverId}:${agent.id}`;
+    }
+  }
+  return null;
+}
+
 const styles = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
     backgroundColor: theme.colors.surface0,
+  },
+  searchBar: {
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[2],
+    paddingBottom: theme.spacing[2],
+  },
+  scopeBar: {
+    paddingHorizontal: theme.spacing[4],
+    paddingBottom: theme.spacing[2],
   },
   list: {
     flex: 1,
@@ -200,6 +370,17 @@ const styles = StyleSheet.create((theme) => ({
   },
   listContent: {
     paddingBottom: theme.spacing[6],
+  },
+  sectionHeader: {
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[3],
+    paddingBottom: theme.spacing[1],
+  },
+  sectionHeaderText: {
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.semibold,
+    letterSpacing: 0.6,
+    color: theme.colors.foregroundMuted,
   },
   emptyContainer: {
     flex: 1,

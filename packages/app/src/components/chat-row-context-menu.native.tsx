@@ -23,6 +23,9 @@ export interface ChatRowContextMenuProps {
   agentId: string;
   isPinned: boolean;
   isMuted: boolean;
+  /** True when the agent is archived on the daemon (or hidden via local
+   *  archive flag). Toggles the menu between "Archive" and "Unarchive". */
+  isArchived: boolean;
   /** Anchor is unused on native — sheet slides up from the bottom. Kept for
    *  prop parity with the web variant so call sites compile cross-platform. */
   anchor: { x: number; y: number } | null;
@@ -43,6 +46,7 @@ export function ChatRowContextMenu({
   agentId,
   isPinned,
   isMuted,
+  isArchived,
   open,
   onClose,
 }: ChatRowContextMenuProps) {
@@ -67,10 +71,15 @@ export function ChatRowContextMenu({
         label: t(isMuted ? "chat.menu.unmute" : "chat.menu.mute"),
       },
       { id: "chat.menu.rename", label: t("chat.menu.rename") },
-      { id: "chat.menu.archive", label: t("chat.menu.archive") },
+      isArchived
+        ? {
+            id: "chat.menu.unarchive",
+            label: t("chat.menu.unarchive", { defaultValue: "Unarchive" }),
+          }
+        : { id: "chat.menu.archive", label: t("chat.menu.archive") },
       { id: "chat.menu.delete", label: t("chat.menu.delete"), destructive: true },
     ],
-    [isPinned, isMuted, t],
+    [isPinned, isMuted, isArchived, t],
   );
 
   const handleSelect = useCallback(

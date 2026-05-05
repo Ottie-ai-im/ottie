@@ -4,7 +4,10 @@
 // daemon sidecar, exposes the `window.ottieDesktop` IPC surface, restores
 // the application menu, isolates per-worktree user data in dev, and so on.
 
-#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
 
 mod bridge;
 mod daemon;
@@ -20,10 +23,10 @@ use tauri::{
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-#[cfg(target_os = "macos")]
-use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
 #[cfg(target_os = "windows")]
 use window_vibrancy::apply_acrylic;
+#[cfg(target_os = "macos")]
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
 
 /// Apply the platform-native window backdrop so the window background reads
 /// as macOS 26 "Liquid Glass" / Windows acrylic. Called from `setup`.
@@ -171,9 +174,7 @@ fn main() {
 
 // --------------------- application menu (parity Electron) ----------------
 
-fn install_application_menu<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-) -> tauri::Result<()> {
+fn install_application_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     let app_name = "Ottie";
     let mut builder = MenuBuilder::new(app);
 
@@ -235,11 +236,7 @@ fn install_application_menu<R: tauri::Runtime>(
         .close_window()
         .build()?;
 
-    let menu = builder
-        .item(&edit)
-        .item(&view)
-        .item(&window_menu)
-        .build()?;
+    let menu = builder.item(&edit).item(&view).item(&window_menu).build()?;
 
     app.set_menu(menu)?;
     app.on_menu_event(|app, event| match event.id().as_ref() {
@@ -259,7 +256,9 @@ fn install_application_menu<R: tauri::Runtime>(
                 }
             }
             #[cfg(not(debug_assertions))]
-            { let _ = app; }
+            {
+                let _ = app;
+            }
         }
         _ => {}
     });
@@ -328,10 +327,7 @@ fn apply_worktree_user_data_isolation() {
     let dir = base.join(format!("Ottie-{suffix}"));
     if std::fs::create_dir_all(&dir).is_ok() {
         env::set_var("OTTIE_DESKTOP_USER_DATA_DIR", &dir);
-        log::info!(
-            "[worktree] isolated user data dir: {}",
-            dir.display()
-        );
+        log::info!("[worktree] isolated user data dir: {}", dir.display());
     }
 }
 

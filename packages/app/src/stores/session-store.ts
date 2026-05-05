@@ -105,6 +105,7 @@ export interface Agent {
   archivedAt?: Date | null;
   labels: Record<string, string>;
   projectPlacement?: ProjectPlacementPayload | null;
+  pendingSchedules?: { id: string; prompt: string; runAt: string }[];
 }
 
 export interface WorkspaceDescriptor {

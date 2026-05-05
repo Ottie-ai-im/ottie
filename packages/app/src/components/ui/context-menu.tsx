@@ -809,6 +809,23 @@ export function ContextMenuItem({
   );
 }
 
+function DefaultContextMenuBackground({ style }: { style?: StyleProp<ViewStyle> }) {
+  const { theme } = useUnistyles();
+  const backgroundStyle = useMemo(
+    () => [
+      style,
+      {
+        backgroundColor: theme.colors.surfaceGlassStrong,
+        borderColor: theme.colors.borderGlass,
+        borderTopLeftRadius: theme.borderRadius.xl,
+        borderTopRightRadius: theme.borderRadius.xl,
+      },
+    ],
+    [style, theme.colors.surfaceGlassStrong, theme.colors.borderGlass, theme.borderRadius.xl],
+  );
+  return <View style={backgroundStyle} />;
+}
+
 const styles = StyleSheet.create((theme) => ({
   overlay: {
     flex: 1,

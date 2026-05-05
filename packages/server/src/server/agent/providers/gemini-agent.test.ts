@@ -27,19 +27,19 @@ describe("GeminiAgentClient", () => {
         createPiModel("openai", "gpt-4o"),
       ]),
     };
-    
+
     // Inject mock registry
     (client as any).modelRegistry = registry;
-    
+
     // We also need to mock getSessionServices to return this registry
-    vi.spyOn(client as any, 'getSessionServices').mockResolvedValue({
-      modelRegistry: registry
+    vi.spyOn(client as any, "getSessionServices").mockResolvedValue({
+      modelRegistry: registry,
     });
 
     const models = await client.listModels({ cwd: "/tmp/ottie-gemini-test", force: false });
 
     expect(models.length).toBe(2);
-    expect(models.every(m => m.id.startsWith("google/gemini"))).toBe(true);
+    expect(models.every((m) => m.id.startsWith("google/gemini"))).toBe(true);
     expect(models[0].provider).toBe("gemini");
   });
 
@@ -52,7 +52,7 @@ describe("GeminiAgentClient", () => {
     try {
       process.env.GEMINI_API_KEY = "test-key";
       expect(await client.isAvailable()).toBe(true);
-      
+
       delete process.env.GEMINI_API_KEY;
       delete process.env.GOOGLE_API_KEY;
       delete process.env.OPENROUTER_API_KEY;

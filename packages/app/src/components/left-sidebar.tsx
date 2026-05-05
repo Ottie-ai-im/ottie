@@ -1,4 +1,4 @@
-import { router, usePathname } from "expo-router";
+import { router, usePathname, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { MobileTabBar, type MobileTab } from "@/components/mobile-tab-bar";
 import { buildHostCommunityRoute, buildHostDevicesRoute } from "@/utils/host-routes";
@@ -513,11 +513,11 @@ function MobileSidebar({
             router.push(buildHostDevicesRoute(activeServerId));
           }
           return;
-        case "community":
+        case "extensions":
           if (activeServerId) {
             router.push(buildHostCommunityRoute(activeServerId));
           }
-          return;
+          break;
         case "settings":
           router.push("/settings");
           return;

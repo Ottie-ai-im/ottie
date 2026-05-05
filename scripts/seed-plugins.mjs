@@ -16,8 +16,8 @@ await fs.writeFile(
       main: "index.js",
     },
     null,
-    2
-  )
+    2,
+  ),
 );
 
 await fs.writeFile(
@@ -67,7 +67,7 @@ export function activate(api) {
     }
   });
 }
-`
+`,
 );
 
 console.log("CodeIsland plugin seeded into:", pluginDir);

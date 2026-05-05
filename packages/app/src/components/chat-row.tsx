@@ -19,12 +19,19 @@
 // coordinates. See PATTERNS lines 234-301 for the composition recipe.
 
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  View,
+  type PressableStateCallbackType,
+} from "react-native";
 import { router } from "expo-router";
+import { Folder } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { isNative } from "@/constants/platform";
-import { AgentStatusDot } from "@/components/agent-status-dot";
 import { UnreadBadge } from "@/components/unread-badge";
+import { CompletedBadge } from "@/components/completed-badge";
 import { ChatRowContextMenu } from "@/components/chat-row-context-menu";
 import { ChatRowSwipeActions } from "@/components/chat-row-swipe-actions";
 import { useHaptic } from "@/hooks/use-haptic";
@@ -36,18 +43,31 @@ import type { AggregatedAgent } from "@/hooks/use-aggregated-agents";
 
 const LONG_PRESS_DELAY_MS = 350; // UI-SPEC line 315
 
+// Selection palette — matches the reference mock (light blue tint + blue bar).
+// Defined here as literals because the semantic theme has no blue-selection token.
+const SELECTED_BG = "rgba(59, 130, 246, 0.10)";
+const SELECTED_BAR = "#3b82f6";
+
 export interface ChatRowProps {
   agent: AggregatedAgent;
+  selected?: boolean;
 }
 
-export function ChatRow({ agent }: ChatRowProps) {
+export function ChatRow({ agent, selected = false }: ChatRowProps) {
   const { theme } = useUnistyles();
   const haptic = useHaptic({ enabled: true, isLowPowerMode: false });
 
   const rowKey = useMemo(() => makeRowKey(agent.serverId, agent.id), [agent.serverId, agent.id]);
   const rowState = useChatRowStateStore(
     (s) =>
-      s.rows[rowKey] ?? { pinned: false, pinnedAt: null, muted: false, unread: 0, archived: false },
+      s.rows[rowKey] ?? {
+        pinned: false,
+        pinnedAt: null,
+        muted: false,
+        unread: 0,
+        completedCount: 0,
+        archived: false,
+      },
   );
 
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -79,15 +99,16 @@ export function ChatRow({ agent }: ChatRowProps) {
   const pressableStyle = useCallback(
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.row,
-      rowState.pinned && {
-        backgroundColor: theme.colors.surface1,
-        borderLeftColor: theme.colors.accent,
-        borderLeftWidth: 2,
+      selected && {
+        backgroundColor: SELECTED_BG,
+        borderLeftColor: SELECTED_BAR,
+        borderLeftWidth: 3,
+        paddingLeft: theme.spacing[4] - 3,
       },
-      Boolean(hovered) && styles.rowHovered,
-      pressed && styles.rowPressed,
+      !selected && Boolean(hovered) && styles.rowHovered,
+      !selected && pressed && styles.rowPressed,
     ],
-    [rowState.pinned, theme.colors.surface1, theme.colors.accent],
+    [selected, theme.spacing],
   );
 
   const titleStyle = useMemo(
@@ -119,12 +140,7 @@ export function ChatRow({ agent }: ChatRowProps) {
       accessibilityLabel={accessibilityLabel}
       testID={`chat-row-${agent.serverId}-${agent.id}`}
     >
-      <AgentStatusDot
-        status={agent.status}
-        requiresAttention={agent.requiresAttention}
-        attentionReason={agent.attentionReason}
-        pendingPermissionCount={agent.pendingPermissionCount}
-      />
+      <ChatRowAvatar status={agent.status} />
       <View style={styles.body}>
         <Text style={titleStyle} numberOfLines={1}>
           {agent.title ?? "New session"}
@@ -136,8 +152,18 @@ export function ChatRow({ agent }: ChatRowProps) {
         ) : null}
       </View>
       <View style={styles.trailing}>
-        <Text style={styles.timeAgo}>{formatTimeAgo(agent.lastActivityAt)}</Text>
-        <UnreadBadge count={rowState.unread} muted={rowState.muted} />
+        {rowState.unread > 0 || rowState.completedCount > 0 ? (
+          <View style={styles.badgeStack}>
+            {rowState.unread > 0 ? (
+              <UnreadBadge count={rowState.unread} muted={rowState.muted} />
+            ) : null}
+            {rowState.completedCount > 0 ? (
+              <CompletedBadge count={rowState.completedCount} muted={rowState.muted} />
+            ) : null}
+          </View>
+        ) : (
+          <Text style={styles.timeAgo}>{formatTimeAgo(agent.lastActivityAt)}</Text>
+        )}
       </View>
     </Pressable>
   );
@@ -160,6 +186,7 @@ export function ChatRow({ agent }: ChatRowProps) {
         agentId={agent.id}
         isPinned={rowState.pinned}
         isMuted={rowState.muted}
+        isArchived={agent.archivedAt !== null || rowState.archived}
         anchor={menuAnchor}
         open={menuAnchor != null}
         onClose={handleCloseMenu}
@@ -168,6 +195,41 @@ export function ChatRow({ agent }: ChatRowProps) {
           Kept out of this shared file so it never imports onPointerEnter /
           onPointerLeave (NAT-03 hard rule). Consumers wrap chat-row in their
           own overlay when they want hover quick-actions. */}
+    </View>
+  );
+}
+
+function ChatRowAvatar({ status }: { status: AggregatedAgent["status"] }) {
+  const { theme } = useUnistyles();
+  const isWorking = status === "running" || status === "initializing";
+
+  const spinnerStyle = useMemo(() => [styles.indicator, styles.indicatorSpinner], []);
+  const idleStyle = useMemo(
+    () => [styles.indicator, { backgroundColor: theme.colors.accent }],
+    [theme.colors.accent],
+  );
+  const errorStyle = useMemo(
+    () => [styles.indicator, { backgroundColor: theme.colors.destructive }],
+    [theme.colors.destructive],
+  );
+
+  let indicator: React.ReactNode = null;
+  if (isWorking) {
+    indicator = (
+      <View style={spinnerStyle}>
+        <ActivityIndicator size="small" color={theme.colors.foregroundMuted} />
+      </View>
+    );
+  } else if (status === "idle") {
+    indicator = <View style={idleStyle} />;
+  } else if (status === "error") {
+    indicator = <View style={errorStyle} />;
+  }
+
+  return (
+    <View style={styles.avatar}>
+      <Folder size={20} color={theme.colors.foregroundMuted} strokeWidth={1.75} />
+      {indicator}
     </View>
   );
 }
@@ -187,6 +249,32 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowPressed: {
     backgroundColor: theme.colors.surface2,
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  indicator: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 12,
+    height: 12,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 2,
+    borderColor: theme.colors.surface0,
+  },
+  indicatorSpinner: {
+    width: 14,
+    height: 14,
+    backgroundColor: theme.colors.surface0,
+    alignItems: "center",
+    justifyContent: "center",
   },
   body: {
     flex: 1,
@@ -208,6 +296,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   trailing: {
     alignItems: "flex-end",
+    gap: theme.spacing[1],
+  },
+  badgeStack: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: theme.spacing[1],
   },
   timeAgo: {

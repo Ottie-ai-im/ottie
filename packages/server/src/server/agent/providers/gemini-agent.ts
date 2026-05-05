@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -10,13 +9,6 @@ import {
   createAgentSessionServices,
   type AgentSession as PiAgentSession,
   type AgentSessionServices,
-  type BashToolInput,
-  type EditToolInput,
-  type FindToolInput,
-  type GrepToolInput,
-  type LsToolInput,
-  type ReadToolInput,
-  type WriteToolInput,
 } from "@mariozechner/pi-coding-agent";
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import type { Api, Model } from "@mariozechner/pi-ai";
@@ -28,23 +20,14 @@ import type {
   AgentMetadata,
   AgentMode,
   AgentModelDefinition,
-  AgentPermissionRequest,
-  AgentPermissionResponse,
   AgentPersistenceHandle,
-  AgentPromptInput,
-  AgentRunOptions,
-  AgentRunResult,
-  AgentRuntimeInfo,
   AgentSession,
   AgentSessionConfig,
-  AgentSlashCommand,
-  AgentStreamEvent,
-  AgentTimelineItem,
   ListModesOptions,
   ListModelsOptions,
 } from "../agent-sdk-types.js";
 import type { ProviderRuntimeSettings } from "../provider-launch-config.js";
-import { findExecutable, isCommandAvailable } from "../../../utils/executable.js";
+import { findExecutable } from "../../../utils/executable.js";
 import {
   formatDiagnosticStatus,
   formatProviderDiagnostic,
@@ -52,10 +35,7 @@ import {
   resolveBinaryVersion,
   toDiagnosticErrorMessage,
 } from "./diagnostic-utils.js";
-import { 
-  PiDirectAgentSession, 
-  transformPiModels, 
-} from "./pi-direct-agent.js";
+import { PiDirectAgentSession, transformPiModels } from "./pi-direct-agent.js";
 
 const GEMINI_PROVIDER = "gemini";
 const DEFAULT_GEMINI_THINKING_LEVEL: ThinkingLevel = "medium";
@@ -176,14 +156,9 @@ export class GeminiAgentClient implements AgentClient {
   readonly provider = GEMINI_PROVIDER;
   readonly capabilities = GEMINI_CAPABILITIES;
 
-  private readonly logger: Logger;
-  private readonly runtimeSettings?: ProviderRuntimeSettings;
   private modelRegistry: ModelRegistry | null = null;
 
-  constructor(options: GeminiAgentClientOptions) {
-    this.logger = options.logger;
-    this.runtimeSettings = options.runtimeSettings;
-  }
+  constructor(_options: GeminiAgentClientOptions) {}
 
   private async getSessionServices(cwd: string): Promise<AgentSessionServices> {
     return createAgentSessionServices({
@@ -262,11 +237,10 @@ export class GeminiAgentClient implements AgentClient {
   async listModels(options: ListModelsOptions): Promise<AgentModelDefinition[]> {
     const services = await this.getSessionServices(options.cwd);
     const allModels = services.modelRegistry.getAvailable();
-    
+
     // Filter for Google/Gemini models
-    const googleModels = allModels.filter(m => 
-      m.provider === "google" || 
-      m.id.toLowerCase().includes("gemini")
+    const googleModels = allModels.filter(
+      (m) => m.provider === "google" || m.id.toLowerCase().includes("gemini"),
     );
 
     const models = googleModels.map((model) => ({
@@ -290,11 +264,11 @@ export class GeminiAgentClient implements AgentClient {
   }
 
   async isAvailable(): Promise<boolean> {
-    const hasApiKey = 
+    const hasApiKey =
       Boolean(process.env.GEMINI_API_KEY) ||
       Boolean(process.env.GOOGLE_API_KEY) ||
       Boolean(process.env.OPENROUTER_API_KEY);
-    
+
     if (hasApiKey) {
       return true;
     }
@@ -324,7 +298,7 @@ export class GeminiAgentClient implements AgentClient {
       const available = await this.isAvailable();
       const binary = await findExecutable(PI_BINARY_COMMAND);
       const version = binary ? await resolveBinaryVersion(binary) : "unknown";
-      
+
       const adcPath = join(homedir(), ".config", "gcloud", "application_default_credentials.json");
       const hasAdc = existsSync(adcPath);
       const authConfigPath = join(homedir(), ".pi", "agent", "auth.json");

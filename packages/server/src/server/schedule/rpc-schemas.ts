@@ -10,11 +10,11 @@ import {
 const ScheduleCreateTargetSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("self"),
-    agentId: z.string().uuid(),
+    agentId: z.string(),
   }),
   z.object({
     type: z.literal("agent"),
-    agentId: z.string().uuid(),
+    agentId: z.string(),
   }),
   z.object({
     type: z.literal("new-agent"),
@@ -22,16 +22,18 @@ const ScheduleCreateTargetSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const ScheduleCreateRequestSchema = z.object({
-  type: z.literal("schedule/create"),
-  requestId: z.string(),
-  prompt: z.string().min(1),
-  name: z.string().optional(),
-  cadence: ScheduleCadenceSchema,
-  target: ScheduleCreateTargetSchema,
-  maxRuns: z.number().int().positive().optional(),
-  expiresAt: z.string().optional(),
-});
+export const ScheduleCreateRequestSchema = z
+  .object({
+    type: z.literal("schedule/create"),
+    requestId: z.string(),
+    prompt: z.string().min(1),
+    name: z.string().nullable().optional(),
+    cadence: ScheduleCadenceSchema,
+    target: ScheduleCreateTargetSchema,
+    maxRuns: z.number().int().positive().nullable().optional(),
+    expiresAt: z.string().nullable().optional(),
+  })
+  .passthrough();
 
 export const ScheduleListRequestSchema = z.object({
   type: z.literal("schedule/list"),

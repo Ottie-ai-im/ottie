@@ -79,6 +79,22 @@ interface ParsedCronExpression {
   dayOfMonth: CronFieldMatcher;
   month: CronFieldMatcher;
   dayOfWeek: CronFieldMatcher;
+  // Standard crontab(5) semantics: when both day-of-month AND day-of-week are
+  // restricted (neither is "*"), match if EITHER matches. Otherwise both are
+  // applied as AND with the rest of the fields.
+  dayOfMonthRestricted: boolean;
+  dayOfWeekRestricted: boolean;
+}
+
+function isFieldRestricted(source: string): boolean {
+  // Treat "*" or "*/N" (with no other parts) as unrestricted.
+  return source
+    .trim()
+    .split(",")
+    .some((part) => {
+      const [base] = part.trim().split("/");
+      return base !== "*";
+    });
 }
 
 function parseCronExpression(expression: string): ParsedCronExpression {
@@ -93,30 +109,39 @@ function parseCronExpression(expression: string): ParsedCronExpression {
     dayOfMonth: parseField(parts[2], { min: 1, max: 31, name: "day-of-month" }),
     month: parseField(parts[3], { min: 1, max: 12, name: "month" }),
     dayOfWeek: parseField(parts[4], { min: 0, max: 6, name: "day-of-week" }),
+    dayOfMonthRestricted: isFieldRestricted(parts[2]),
+    dayOfWeekRestricted: isFieldRestricted(parts[4]),
   };
 }
 
 function startOfNextMinute(date: Date): Date {
-  return new Date(
-    Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      date.getUTCHours(),
-      date.getUTCMinutes() + 1,
-      0,
-      0,
-    ),
-  );
+  // Local-time cron semantics: compute "next minute boundary" in the daemon's
+  // local timezone so users can write "0 9 * * *" and get 9 AM local.
+  const next = new Date(date.getTime());
+  next.setSeconds(0, 0);
+  next.setMinutes(next.getMinutes() + 1);
+  return next;
 }
 
 export function validateScheduleCadence(cadence: ScheduleCadence): void {
   if (cadence.type === "cron") {
     parseCronExpression(cadence.expression);
+  } else if (cadence.type === "once") {
+    const runAt = new Date(cadence.runAt);
+    if (Number.isNaN(runAt.getTime())) {
+      throw new Error(`Invalid 'once' runAt timestamp: ${cadence.runAt}`);
+    }
   }
 }
 
 export function computeNextRunAt(cadence: ScheduleCadence, after: Date): Date {
+  if (cadence.type === "once") {
+    const runAt = new Date(cadence.runAt);
+    // If it's already past, we return it anyway, the tick logic should handle it or it might have already run.
+    // However, usually computeNextRunAt is called to schedule the NEXT run.
+    return runAt;
+  }
+
   if (cadence.type === "every") {
     return new Date(after.getTime() + cadence.everyMs);
   }
@@ -126,18 +151,24 @@ export function computeNextRunAt(cadence: ScheduleCadence, after: Date): Date {
   let cursor = startOfNextMinute(after);
 
   for (let index = 0; index < limit; index += 1) {
-    const minute = cursor.getUTCMinutes();
-    const hour = cursor.getUTCHours();
-    const dayOfMonth = cursor.getUTCDate();
-    const month = cursor.getUTCMonth() + 1;
-    const dayOfWeek = cursor.getUTCDay();
+    // Use local-time fields so cron expressions follow the daemon's timezone
+    // (matches Linux cron, GitHub Actions, Vixie cron behaviour).
+    const minute = cursor.getMinutes();
+    const hour = cursor.getHours();
+    const dayOfMonth = cursor.getDate();
+    const month = cursor.getMonth() + 1;
+    const dayOfWeek = cursor.getDay();
+
+    const dayMatches =
+      cron.dayOfMonthRestricted && cron.dayOfWeekRestricted
+        ? cron.dayOfMonth.matches(dayOfMonth) || cron.dayOfWeek.matches(dayOfWeek)
+        : cron.dayOfMonth.matches(dayOfMonth) && cron.dayOfWeek.matches(dayOfWeek);
 
     if (
       cron.minute.matches(minute) &&
       cron.hour.matches(hour) &&
-      cron.dayOfMonth.matches(dayOfMonth) &&
       cron.month.matches(month) &&
-      cron.dayOfWeek.matches(dayOfWeek)
+      dayMatches
     ) {
       return cursor;
     }
