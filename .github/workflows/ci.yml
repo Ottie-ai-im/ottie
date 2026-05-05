@@ -32,13 +32,13 @@ jobs:
         run: pnpm run lint
 
       - name: Build highlight
-        run: pnpm run build --filter @ottie/highlight
+        run: pnpm --filter @ottie/highlight run build
 
       - name: Build relay
-        run: pnpm run build --filter @ottie/relay
+        run: pnpm --filter @ottie/relay run build
 
       - name: Build server
-        run: pnpm run build --filter @ottie/server
+        run: pnpm --filter @ottie/server run build
 
       - name: Typecheck
         run: pnpm run typecheck
@@ -73,10 +73,10 @@ jobs:
         run: pnpm install
 
       - name: Build relay (dependency for server tests)
-        run: pnpm run build --filter @ottie/relay
+        run: pnpm --filter @ottie/relay run build
 
       - name: Build server (dependency for session/* test imports)
-        run: pnpm run build --filter @ottie/server
+        run: pnpm --filter @ottie/server run build
 
       - name: Run carve test suite under flag combo
         run: |
