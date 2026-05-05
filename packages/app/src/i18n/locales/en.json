@@ -314,7 +314,11 @@
     "install": {
       "docker": "Docker (recommended)",
       "pipx": "pipx (Python)",
-      "npm": "npm (Node)"
+      "npm": "npm (Node)",
+      "detected": "✓ detected",
+      "notDetected": "(not detected)",
+      "oneClick": "Install with Docker",
+      "installing": "Installing… this can take a few minutes"
     },
     "poweredBy": "Powered by Open WebUI — open-source multi-agent chat",
     "openWebUi": {

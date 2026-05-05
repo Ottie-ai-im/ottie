@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { findExecutable } from "../../utils/executable.js";
 
 export type LocalServiceId = "open-webui" | "openclaw" | "hermes";
 
@@ -97,6 +98,19 @@ async function probeService(probe: LocalServiceProbe): Promise<LocalServiceStatu
     port: null,
     url: null,
     responseTimeMs: null,
+  };
+}
+
+export interface InstallerAvailability {
+  docker: boolean;
+  pipx: boolean;
+}
+
+export async function detectInstallers(): Promise<InstallerAvailability> {
+  const [docker, pipx] = await Promise.all([findExecutable("docker"), findExecutable("pipx")]);
+  return {
+    docker: Boolean(docker),
+    pipx: Boolean(pipx),
   };
 }
 

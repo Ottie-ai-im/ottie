@@ -47,6 +47,8 @@ import { UsageListRequestSchema, UsageListResponseSchema } from "../server/usage
 import {
   LocalServicesListRequestSchema,
   LocalServicesListResponseSchema,
+  LocalServicesInstallRequestSchema,
+  LocalServicesInstallResponseSchema,
 } from "../server/local-services/rpc-schemas.js";
 import {
   LoopRunRequestSchema,
@@ -1865,6 +1867,32 @@ export const PluginLaunchResponseSchema = z.object({
   }),
 });
 
+const PluginInstallProgressPhaseSchema = z.enum([
+  "writing_bridge",
+  "fetching_release",
+  "downloading",
+  "extracting",
+  "installing_app",
+  "done",
+]);
+
+/**
+ * Streamed during a plugin install so the UI can show real progress instead
+ * of a spinner. Correlated by `pluginId`; the terminal
+ * `plugin_install_response` is still authoritative for success/failure.
+ */
+export const PluginInstallProgressSchema = z.object({
+  type: z.literal("plugin_install_progress"),
+  payload: z.object({
+    requestId: z.string().optional(),
+    pluginId: z.string(),
+    phase: PluginInstallProgressPhaseSchema,
+    bytesLoaded: z.number().optional(),
+    bytesTotal: z.number().optional(),
+    note: z.string().optional(),
+  }),
+});
+
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   VoiceAudioChunkMessageSchema,
   AbortRequestMessageSchema,
@@ -1972,6 +2000,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ScheduleDeleteRequestSchema,
   UsageListRequestSchema,
   LocalServicesListRequestSchema,
+  LocalServicesInstallRequestSchema,
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -3587,6 +3616,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ScheduleDeleteResponseSchema,
   UsageListResponseSchema,
   LocalServicesListResponseSchema,
+  LocalServicesInstallResponseSchema,
   LoopRunResponseSchema,
   LoopListResponseSchema,
   LoopInspectResponseSchema,
@@ -3600,6 +3630,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   PluginInstallResponseSchema,
   PluginUninstallResponseSchema,
   PluginLaunchResponseSchema,
+  PluginInstallProgressSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

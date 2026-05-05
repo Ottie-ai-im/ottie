@@ -79,7 +79,9 @@ import {
 import { UsageListResponseSchema, type UsageSummary } from "../server/usage/rpc-schemas.js";
 import {
   LocalServicesListResponseSchema,
+  LocalServicesInstallResponseSchema,
   type LocalServiceStatusPayload,
+  type InstallerAvailability,
 } from "../server/local-services/rpc-schemas.js";
 import type {
   CreateScheduleInput,
@@ -4447,7 +4449,10 @@ export class DaemonClient {
     return payload.schedule;
   }
 
-  async listLocalServices(params?: { requestId?: string }): Promise<LocalServiceStatusPayload[]> {
+  async listLocalServices(params?: { requestId?: string }): Promise<{
+    services: LocalServiceStatusPayload[];
+    installers: InstallerAvailability | undefined;
+  }> {
     const requestId = this.createRequestId(params?.requestId);
     const payload = await this.sendRequest<any>({
       requestId,
@@ -4464,7 +4469,44 @@ export class DaemonClient {
       },
     });
     if (payload.error) throw new Error(payload.error);
-    return payload.services;
+    return { services: payload.services, installers: payload.installers };
+  }
+
+  async installLocalService(args: {
+    serviceId: "open-webui";
+    method: "docker" | "pipx";
+    requestId?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    output: string;
+    port: number | null;
+  }> {
+    const requestId = this.createRequestId(args.requestId);
+    const payload = await this.sendRequest<any>({
+      requestId,
+      message: {
+        type: "local-services/install",
+        requestId,
+        serviceId: args.serviceId,
+        method: args.method,
+      },
+      // Pulling the Open WebUI Docker image can take several minutes on first
+      // run. Give the install up to 6 minutes before we give up waiting.
+      timeout: 6 * 60_000,
+      select: (msg) => {
+        if (msg.type === "local-services/install/response" && msg.payload.requestId === requestId) {
+          return LocalServicesInstallResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+    return {
+      success: payload.success,
+      message: payload.message || payload.error || "",
+      output: payload.output,
+      port: payload.port,
+    };
   }
 
   async getUsage(params?: { requestId?: string }): Promise<UsageSummary> {

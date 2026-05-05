@@ -8,7 +8,7 @@ import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
 import { isWeb } from "@/constants/platform";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { useHosts } from "@/runtime/host-runtime";
-import { useLocalServices } from "@/hooks/use-local-services";
+import { useInstallLocalService, useLocalServices } from "@/hooks/use-local-services";
 import { DEFAULT_OPEN_WEBUI_URL, useAssistantsConfigStore } from "@/stores/assistants-config-store";
 
 interface KnownDashboard {
@@ -55,10 +55,15 @@ export function AssistantsScreen() {
   const resetOpenWebUiUrl = useAssistantsConfigStore((s) => s.resetOpenWebUiUrl);
   const hosts = useHosts();
   const serverId = hosts[0]?.serverId ?? null;
-  const { services } = useLocalServices(serverId);
+  const { services, installers } = useLocalServices(serverId);
+  const { install, isInstalling, lastResult } = useInstallLocalService(serverId);
   const openWebUiStatus = services.find((s) => s.id === "open-webui");
   const openWebUiRunning = Boolean(openWebUiStatus?.running);
   const detectedOpenWebUiUrl = openWebUiStatus?.url ?? null;
+
+  const handleInstallDocker = useCallback(() => {
+    void install({ serviceId: "open-webui", method: "docker" });
+  }, [install]);
 
   const [showSettings, setShowSettings] = useState(false);
   const [draftUrl, setDraftUrl] = useState(openWebUiUrl);
@@ -123,7 +128,15 @@ export function AssistantsScreen() {
         openWebUiRunning ? (
           <EmbeddedWebUi url={detectedOpenWebUiUrl ?? openWebUiUrl} />
         ) : (
-          <NotRunningCard configuredUrl={openWebUiUrl} onOpen={handleOpenInBrowser} />
+          <NotRunningCard
+            configuredUrl={openWebUiUrl}
+            onOpen={handleOpenInBrowser}
+            dockerAvailable={installers?.docker ?? false}
+            pipxAvailable={installers?.pipx ?? false}
+            onInstallDocker={handleInstallDocker}
+            isInstalling={isInstalling}
+            lastInstallResult={lastResult}
+          />
         )
       ) : (
         <NativeFallback url={openWebUiUrl} onOpen={handleOpenInBrowser} services={services} />
@@ -135,9 +148,24 @@ export function AssistantsScreen() {
 function NotRunningCard({
   configuredUrl,
   onOpen,
+  dockerAvailable,
+  pipxAvailable,
+  onInstallDocker,
+  isInstalling,
+  lastInstallResult,
 }: {
   configuredUrl: string;
   onOpen: (url: string) => void;
+  dockerAvailable: boolean;
+  pipxAvailable: boolean;
+  onInstallDocker: () => void;
+  isInstalling: boolean;
+  lastInstallResult: {
+    success: boolean;
+    message: string;
+    output: string;
+    port: number | null;
+  } | null;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -152,14 +180,61 @@ function NotRunningCard({
         </View>
         <Text style={styles.notRunningTitle}>{t("assistants.installPrompt")}</Text>
         <Text style={styles.notRunningHint}>{t("assistants.installPromptHint")}</Text>
+
+        {dockerAvailable ? (
+          <View style={styles.installOption}>
+            <Text style={styles.installOptionLabel}>
+              {t("assistants.install.docker")} {t("assistants.install.detected")}
+            </Text>
+            <Pressable
+              style={[styles.primaryButton, isInstalling ? styles.primaryButtonDisabled : null]}
+              onPress={onInstallDocker}
+              disabled={isInstalling}
+              testID="assistants-install-docker"
+            >
+              <Text style={styles.primaryButtonText}>
+                {isInstalling
+                  ? t("assistants.install.installing")
+                  : t("assistants.install.oneClick")}
+              </Text>
+            </Pressable>
+            {lastInstallResult ? (
+              <Text
+                style={[
+                  styles.installResultText,
+                  {
+                    color: lastInstallResult.success
+                      ? theme.colors.palette.green[400]
+                      : theme.colors.destructive,
+                  },
+                ]}
+              >
+                {lastInstallResult.message}
+              </Text>
+            ) : null}
+            {lastInstallResult && !lastInstallResult.success && lastInstallResult.output ? (
+              <Text style={styles.installCommand} selectable>
+                {lastInstallResult.output}
+              </Text>
+            ) : null}
+          </View>
+        ) : (
+          <View style={styles.installOption}>
+            <Text style={styles.installOptionLabel}>
+              {t("assistants.install.docker")} {t("assistants.install.notDetected")}
+            </Text>
+            <Text style={styles.installCommand} selectable>
+              docker run -d --name ottie-open-webui --restart unless-stopped -p 3000:8080 -v
+              ottie-open-webui-data:/app/backend/data ghcr.io/open-webui/open-webui:main
+            </Text>
+          </View>
+        )}
+
         <View style={styles.installOption}>
-          <Text style={styles.installOptionLabel}>{t("assistants.install.docker")}</Text>
-          <Text style={styles.installCommand} selectable>
-            docker run -d --name open-webui -p 3000:8080 ghcr.io/open-webui/open-webui:main
+          <Text style={styles.installOptionLabel}>
+            {t("assistants.install.pipx")}{" "}
+            {pipxAvailable ? t("assistants.install.detected") : t("assistants.install.notDetected")}
           </Text>
-        </View>
-        <View style={styles.installOption}>
-          <Text style={styles.installOptionLabel}>{t("assistants.install.pipx")}</Text>
           <Text style={styles.installCommand} selectable>
             pipx install open-webui && open-webui serve
           </Text>
@@ -350,12 +425,22 @@ const styles = StyleSheet.create((theme) => ({
   primaryButton: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: theme.spacing[1],
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[3],
     backgroundColor: theme.colors.accent,
     borderRadius: theme.borderRadius.button,
     borderCurve: "continuous",
+    alignSelf: "flex-start",
+  },
+  primaryButtonDisabled: {
+    opacity: 0.6,
+  },
+  installResultText: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    marginTop: theme.spacing[1],
   },
   primaryButtonText: {
     fontFamily: theme.fontFamily.system,

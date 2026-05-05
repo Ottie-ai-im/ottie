@@ -10,6 +10,24 @@ import type { PluginManager } from "./plugin-manager.js";
 
 export type PluginInstallStatus = "installed" | "not_installed" | "incompatible";
 
+export type PluginInstallProgressPhase =
+  | "writing_bridge"
+  | "fetching_release"
+  | "downloading"
+  | "extracting"
+  | "installing_app"
+  | "done";
+
+export interface PluginInstallProgressEvent {
+  pluginId: string;
+  phase: PluginInstallProgressPhase;
+  bytesLoaded?: number;
+  bytesTotal?: number;
+  note?: string;
+}
+
+export type PluginInstallProgressListener = (event: PluginInstallProgressEvent) => void;
+
 export interface PluginCompanionAppInstall {
   bundleName: string;
   /** "installed" — `.app` exists at preferredInstallPath, ready to launch. */
@@ -78,7 +96,11 @@ async function rmrf(p: string): Promise<void> {
   await fs.rm(p, { recursive: true, force: true });
 }
 
-async function downloadToFile(url: string, destination: string): Promise<void> {
+async function downloadToFile(
+  url: string,
+  destination: string,
+  onProgress?: (loaded: number, total: number | undefined) => void,
+): Promise<void> {
   const response = await fetch(url, {
     redirect: "follow",
     headers: { "User-Agent": "ottie-plugin-installer" },
@@ -86,8 +108,32 @@ async function downloadToFile(url: string, destination: string): Promise<void> {
   if (!response.ok || !response.body) {
     throw new Error(`Download failed (${response.status}) for ${url}`);
   }
-  const buf = Buffer.from(await response.arrayBuffer());
-  await fs.writeFile(destination, buf);
+  const lengthHeader = response.headers.get("content-length");
+  const total = lengthHeader ? Number.parseInt(lengthHeader, 10) : undefined;
+
+  const handle = await fs.open(destination, "w");
+  try {
+    const reader = response.body.getReader();
+    let loaded = 0;
+    let lastReport = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        await handle.write(value);
+        loaded += value.byteLength;
+        // Cap callback frequency at ~10/s to keep WS chatter reasonable.
+        const now = Date.now();
+        if (onProgress && now - lastReport > 100) {
+          onProgress(loaded, total);
+          lastReport = now;
+        }
+      }
+    }
+    if (onProgress) onProgress(loaded, total);
+  } finally {
+    await handle.close();
+  }
 }
 
 interface GithubReleaseAsset {
@@ -170,10 +216,12 @@ async function installMacAppFromAsset(params: {
   bundleName: string;
   destinationPath: string;
   logger: Logger;
+  onPhase?: (phase: "extracting" | "installing_app", note?: string) => void;
 }): Promise<string> {
-  const { assetPath, bundleName, destinationPath, logger } = params;
+  const { assetPath, bundleName, destinationPath, logger, onPhase } = params;
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ottie-plugin-"));
   try {
+    onPhase?.("extracting");
     if (assetPath.toLowerCase().endsWith(".zip")) {
       await runCommand("unzip", ["-q", "-o", assetPath, "-d", tempRoot], { timeoutMs: 60_000 });
     } else if (assetPath.toLowerCase().endsWith(".dmg")) {
@@ -213,6 +261,7 @@ async function installMacAppFromAsset(params: {
     }
 
     const stagedAppPath = path.join(tempRoot, matchedName);
+    onPhase?.("installing_app", destinationPath);
     await rmrf(destinationPath);
     await copyDirectory(stagedAppPath, destinationPath);
     return destinationPath;

@@ -217,18 +217,33 @@ function PluginCard({
     [onOpenReleasePage, releaseUrl],
   );
 
+  const statusPillIncompatibleStyle = useMemo(
+    () => [styles.statusPill, styles.statusPillMuted],
+    [],
+  );
+  const statusPillInstalledStyle = useMemo(
+    () => [styles.statusPill, styles.statusPillInstalled],
+    [],
+  );
+  const statusTextInstalledStyle = useMemo(
+    () => [styles.statusText, styles.statusTextInstalled],
+    [],
+  );
+  const primaryButtonStyle = useMemo(() => [styles.button, styles.primaryButton], []);
+  const secondaryButtonStyle = useMemo(() => [styles.button, styles.secondaryButton], []);
+
   let statusBadge: React.ReactNode = null;
   if (isIncompatible) {
     statusBadge = (
-      <View style={[styles.statusPill, styles.statusPillMuted]}>
+      <View style={statusPillIncompatibleStyle}>
         <Text style={styles.statusText}>{platforms ? `${platforms} only` : "Unsupported"}</Text>
       </View>
     );
   } else if (isInstalled) {
     statusBadge = (
-      <View style={[styles.statusPill, styles.statusPillInstalled]}>
+      <View style={statusPillInstalledStyle}>
         <CheckCircle2 size={12} color={theme.colors.palette.green[500]} />
-        <Text style={[styles.statusText, styles.statusTextInstalled]}>Installed</Text>
+        <Text style={statusTextInstalledStyle}>Installed</Text>
       </View>
     );
   }
@@ -260,62 +275,114 @@ function PluginCard({
         </View>
       ) : null}
 
+      <PluginActionRow
+        isInstalled={isInstalled}
+        isIncompatible={isIncompatible}
+        isInstalling={isInstalling}
+        isUninstalling={isUninstalling}
+        isLaunching={isLaunching}
+        companion={companion}
+        companionInstalled={companionInstalled}
+        primaryButtonStyle={primaryButtonStyle}
+        secondaryButtonStyle={secondaryButtonStyle}
+        onInstall={handleInstall}
+        onUninstall={handleUninstall}
+        onLaunch={handleLaunch}
+      />
+    </View>
+  );
+}
+
+interface PluginActionRowProps {
+  isInstalled: boolean;
+  isIncompatible: boolean;
+  isInstalling: boolean;
+  isUninstalling: boolean;
+  isLaunching: boolean;
+  companion: PluginCompanionAppInfo | undefined;
+  companionInstalled: boolean;
+  primaryButtonStyle: React.ComponentProps<typeof Pressable>["style"];
+  secondaryButtonStyle: React.ComponentProps<typeof Pressable>["style"];
+  onInstall: () => void;
+  onUninstall: () => void;
+  onLaunch: () => void;
+}
+
+function PluginActionRow({
+  isInstalled,
+  isIncompatible,
+  isInstalling,
+  isUninstalling,
+  isLaunching,
+  companion,
+  companionInstalled,
+  primaryButtonStyle,
+  secondaryButtonStyle,
+  onInstall,
+  onUninstall,
+  onLaunch,
+}: PluginActionRowProps) {
+  const { theme } = useUnistyles();
+  if (isIncompatible) return null;
+
+  if (isInstalled) {
+    return (
       <View style={styles.actionRow}>
-        {isIncompatible ? null : isInstalled ? (
-          <>
-            {companion ? (
-              <Pressable
-                style={[styles.button, styles.primaryButton]}
-                disabled={!companionInstalled || isLaunching}
-                onPress={handleLaunch}
-                accessibilityRole="button"
-              >
-                {isLaunching ? (
-                  <ActivityIndicator size="small" color={theme.colors.accentForeground} />
-                ) : (
-                  <>
-                    <Play size={14} color={theme.colors.accentForeground} />
-                    <Text style={styles.primaryButtonText}>
-                      {companionInstalled ? "Open" : "Companion missing"}
-                    </Text>
-                  </>
-                )}
-              </Pressable>
-            ) : null}
-            <Pressable
-              style={[styles.button, styles.secondaryButton]}
-              disabled={isUninstalling}
-              onPress={handleUninstall}
-              accessibilityRole="button"
-            >
-              {isUninstalling ? (
-                <ActivityIndicator size="small" color={theme.colors.foreground} />
-              ) : (
-                <>
-                  <Trash2 size={14} color={theme.colors.foreground} />
-                  <Text style={styles.secondaryButtonText}>Uninstall</Text>
-                </>
-              )}
-            </Pressable>
-          </>
-        ) : (
+        {companion ? (
           <Pressable
-            style={[styles.button, styles.primaryButton]}
-            disabled={isInstalling}
-            onPress={handleInstall}
+            style={primaryButtonStyle}
+            disabled={!companionInstalled || isLaunching}
+            onPress={onLaunch}
             accessibilityRole="button"
           >
-            {isInstalling ? (
+            {isLaunching ? (
               <ActivityIndicator size="small" color={theme.colors.accentForeground} />
             ) : (
               <>
-                <Download size={14} color={theme.colors.accentForeground} />
-                <Text style={styles.primaryButtonText}>Install</Text>
+                <Play size={14} color={theme.colors.accentForeground} />
+                <Text style={styles.primaryButtonText}>
+                  {companionInstalled ? "Open" : "Companion missing"}
+                </Text>
               </>
             )}
           </Pressable>
-        )}
+        ) : null}
+        <Pressable
+          style={secondaryButtonStyle}
+          disabled={isUninstalling}
+          onPress={onUninstall}
+          accessibilityRole="button"
+        >
+          {isUninstalling ? (
+            <ActivityIndicator size="small" color={theme.colors.foreground} />
+          ) : (
+            <>
+              <Trash2 size={14} color={theme.colors.foreground} />
+              <Text style={styles.secondaryButtonText}>Uninstall</Text>
+            </>
+          )}
+        </Pressable>
       </View>
+    );
+  }
+
+  return (
+    <View style={styles.actionRow}>
+      <Pressable
+        style={primaryButtonStyle}
+        disabled={isInstalling}
+        onPress={onInstall}
+        accessibilityRole="button"
+      >
+        {isInstalling ? (
+          <ActivityIndicator size="small" color={theme.colors.accentForeground} />
+        ) : (
+          <>
+            <Download size={14} color={theme.colors.accentForeground} />
+            <Text style={styles.primaryButtonText}>Install</Text>
+          </>
+        )}
+      </Pressable>
     </View>
   );
 }

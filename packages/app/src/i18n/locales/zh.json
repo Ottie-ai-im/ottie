@@ -314,7 +314,11 @@
     "install": {
       "docker": "Docker（推荐）",
       "pipx": "pipx（Python）",
-      "npm": "npm（Node）"
+      "npm": "npm（Node）",
+      "detected": "✓ 已检测到",
+      "notDetected": "（未检测到）",
+      "oneClick": "一键用 Docker 安装",
+      "installing": "安装中…首次拉取镜像可能需要几分钟"
     },
     "poweredBy": "由 Open WebUI 提供支持——开源多 agent 聊天",
     "openWebUi": {

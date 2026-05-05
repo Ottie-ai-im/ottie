@@ -1022,6 +1022,9 @@ export class Session {
     this.router.register("local-services/list", (m) =>
       this.handleLocalServicesListRequest(m as any),
     );
+    this.router.register("local-services/install", (m) =>
+      this.handleLocalServicesInstallRequest(m as any),
+    );
 
     void this.initializeAgentMcp();
     this.subscribeToAgentEvents();
@@ -2127,6 +2130,8 @@ export class Session {
         return this.handleUsageListRequest(msg);
       case "local-services/list":
         return this.handleLocalServicesListRequest(msg);
+      case "local-services/install":
+        return this.handleLocalServicesInstallRequest(msg);
       case "schedule/delete":
         return this.handleScheduleDeleteRequest(msg);
       case "loop/run":
@@ -9023,13 +9028,15 @@ export class Session {
     request: Extract<SessionInboundMessage, { type: "local-services/list" }>,
   ): Promise<void> {
     try {
-      const { listLocalServices } = await import("./local-services/local-services-detector.js");
-      const services = await listLocalServices();
+      const { listLocalServices, detectInstallers } =
+        await import("./local-services/local-services-detector.js");
+      const [services, installers] = await Promise.all([listLocalServices(), detectInstallers()]);
       this.emit({
         type: "local-services/list/response",
         payload: {
           requestId: request.requestId,
           services,
+          installers,
           error: null,
         },
       });
@@ -9039,6 +9046,42 @@ export class Session {
         payload: {
           requestId: request.requestId,
           services: [],
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleLocalServicesInstallRequest(
+    request: Extract<SessionInboundMessage, { type: "local-services/install" }>,
+  ): Promise<void> {
+    try {
+      const { installService } = await import("./local-services/service-installer.js");
+      const result = await installService(request.serviceId, request.method, this.sessionLogger);
+      this.emit({
+        type: "local-services/install/response",
+        payload: {
+          requestId: request.requestId,
+          success: result.success,
+          serviceId: result.serviceId,
+          method: result.method,
+          message: result.message,
+          output: result.output,
+          port: result.port,
+          error: result.success ? null : result.message,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "local-services/install/response",
+        payload: {
+          requestId: request.requestId,
+          success: false,
+          serviceId: request.serviceId,
+          method: request.method,
+          message: "",
+          output: "",
+          port: null,
           error: error instanceof Error ? error.message : String(error),
         },
       });
