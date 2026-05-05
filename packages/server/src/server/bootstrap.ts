@@ -786,6 +786,39 @@ export async function createOttieDaemon(
   logger.info({ mode: localTokenMode.kind, elapsed: elapsed() }, "Local-daemon auth mode resolved");
 
   const pluginManager = new PluginManager(config.ottieHome, logger);
+  // Stale-while-revalidate plugin catalog. Boot uses the on-disk cache (if
+  // any) so daemon start never blocks on an internet round-trip; in the
+  // background we re-fetch + re-verify the signed manifest and update both
+  // the in-memory catalog and the cache file.
+  try {
+    const {
+      readRemoteCatalogConfigFromEnv,
+      fetchRemoteCatalog,
+      readCachedCatalog,
+      writeCachedCatalog,
+    } = await import("./plugins/remote-catalog.js");
+    const { setRemoteCatalogEntries } = await import("./plugins/plugin-catalog.js");
+    const cached = await readCachedCatalog(config.ottieHome);
+    if (cached && cached.length > 0) {
+      setRemoteCatalogEntries(cached);
+      logger.info({ count: cached.length }, "Loaded plugin catalog from cache");
+    }
+    const remoteConfig = readRemoteCatalogConfigFromEnv();
+    if (remoteConfig) {
+      void (async () => {
+        try {
+          const remoteEntries = await fetchRemoteCatalog(remoteConfig);
+          setRemoteCatalogEntries(remoteEntries);
+          await writeCachedCatalog(config.ottieHome, remoteEntries);
+          logger.info({ count: remoteEntries.length }, "Refreshed plugin catalog");
+        } catch (err) {
+          logger.warn({ err }, "Plugin catalog refresh failed; keeping cache");
+        }
+      })();
+    }
+  } catch (err) {
+    logger.warn({ err }, "Plugin catalog bootstrap failed; using built-in only");
+  }
   await pluginManager.initialize();
 
   const start = async () => {

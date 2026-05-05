@@ -43,7 +43,19 @@ export function registerPluginHandlers(
 
   router.register("plugin_install_request", async (msg) => {
     if (msg.type !== "plugin_install_request") return;
-    const result = await installer.install(msg.pluginId);
+    const result = await installer.install(msg.pluginId, (event) => {
+      emit({
+        type: "plugin_install_progress",
+        payload: {
+          requestId: msg.requestId,
+          pluginId: event.pluginId,
+          phase: event.phase,
+          bytesLoaded: event.bytesLoaded,
+          bytesTotal: event.bytesTotal,
+          note: event.note,
+        },
+      });
+    });
     emit({
       type: "plugin_install_response",
       payload: {

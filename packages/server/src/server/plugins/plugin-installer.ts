@@ -5,7 +5,7 @@ import path from "node:path";
 import type { Logger } from "pino";
 
 import type { PluginCatalogEntry, PluginPlatform } from "./plugin-catalog.js";
-import { findCatalogEntry, PLUGIN_CATALOG } from "./plugin-catalog.js";
+import { findCatalogEntry, getCatalog } from "./plugin-catalog.js";
 import type { PluginManager } from "./plugin-manager.js";
 
 export type PluginInstallStatus = "installed" | "not_installed" | "incompatible";
@@ -288,7 +288,7 @@ export class PluginInstaller {
    */
   async list(): Promise<PluginListEntry[]> {
     const entries: PluginListEntry[] = [];
-    for (const entry of PLUGIN_CATALOG) {
+    for (const entry of getCatalog()) {
       const compatible = isCompatiblePlatform(entry);
       const installedDir = path.join(this.pluginsDir, entry.id);
       const bridgeInstalled = await pathExists(path.join(installedDir, "package.json"));
@@ -339,7 +339,10 @@ export class PluginInstaller {
     return entries;
   }
 
-  async install(pluginId: string): Promise<PluginInstallResult> {
+  async install(
+    pluginId: string,
+    onProgress?: PluginInstallProgressListener,
+  ): Promise<PluginInstallResult> {
     const entry = findCatalogEntry(pluginId);
     if (!entry) {
       return {
@@ -360,6 +363,7 @@ export class PluginInstaller {
 
     const installedDir = path.join(this.pluginsDir, entry.id);
     try {
+      onProgress?.({ pluginId, phase: "writing_bridge" });
       await fs.mkdir(installedDir, { recursive: true });
       await fs.writeFile(
         path.join(installedDir, "package.json"),
@@ -384,8 +388,10 @@ export class PluginInstaller {
 
     let companionResult: PluginCompanionAppInstall | undefined;
     if (entry.companionApp) {
-      companionResult = await this.installCompanionApp(entry);
+      companionResult = await this.installCompanionApp(entry, onProgress);
     }
+
+    onProgress?.({ pluginId, phase: "done" });
 
     return {
       success: true,
@@ -451,7 +457,10 @@ export class PluginInstaller {
     }
   }
 
-  private async installCompanionApp(entry: PluginCatalogEntry): Promise<PluginCompanionAppInstall> {
+  private async installCompanionApp(
+    entry: PluginCatalogEntry,
+    onProgress?: PluginInstallProgressListener,
+  ): Promise<PluginCompanionAppInstall> {
     const companion = entry.companionApp;
     if (!companion) {
       return { bundleName: "", state: "skipped" };
@@ -475,6 +484,7 @@ export class PluginInstaller {
     }
 
     try {
+      onProgress?.({ pluginId: entry.id, phase: "fetching_release" });
       const asset = await fetchLatestReleaseAsset(
         companion.githubReleasesRepo,
         companion.assetExtensions,
@@ -492,13 +502,28 @@ export class PluginInstaller {
       }
 
       const tempAssetPath = path.join(os.tmpdir(), `ottie-${entry.id}-${Date.now()}-${asset.name}`);
-      await downloadToFile(asset.browser_download_url, tempAssetPath);
+      onProgress?.({
+        pluginId: entry.id,
+        phase: "downloading",
+        note: asset.name,
+      });
+      await downloadToFile(asset.browser_download_url, tempAssetPath, (loaded, total) => {
+        onProgress?.({
+          pluginId: entry.id,
+          phase: "downloading",
+          bytesLoaded: loaded,
+          bytesTotal: total,
+        });
+      });
       try {
         const installed = await installMacAppFromAsset({
           assetPath: tempAssetPath,
           bundleName: companion.bundleName,
           destinationPath: companion.preferredInstallPath,
           logger: this.logger,
+          onPhase: (phase, note) => {
+            onProgress?.({ pluginId: entry.id, phase, note });
+          },
         });
         this.logger.info({ pluginId: entry.id, app: installed }, "Companion app installed");
         return { bundleName: companion.bundleName, state: "installed", path: installed };

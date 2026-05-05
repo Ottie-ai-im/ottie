@@ -411,6 +411,7 @@ export const SETTINGS_SECTION_SLUGS = [
   "permissions",
   "labs",
   "localDaemon",
+  "extensions",
   "diagnostics",
   "about",
 ] as const;
@@ -480,6 +481,7 @@ export const SLUG_TO_BUCKET: Record<SettingsSectionSlug, SettingsBucket> = {
   permissions: "agents",
   labs: "advanced",
   localDaemon: "advanced",
+  extensions: "advanced",
   diagnostics: "advanced",
   about: "advanced",
 } as const;

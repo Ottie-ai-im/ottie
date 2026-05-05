@@ -248,6 +248,15 @@
         "title": "Regenerate token?",
         "message": "Other paired clients will need to re-pair."
       }
+    },
+    "extensions": {
+      "title": "Extensions",
+      "empty": "No extensions installed yet. Browse the Extensions tab to add some.",
+      "loadError": "Failed to load extensions",
+      "notConnected": "Connect to a daemon to manage extensions.",
+      "reinstall": "Reinstall",
+      "uninstall": "Uninstall",
+      "revealInFinder": "Show in Finder"
     }
   },
   "integrations": {
@@ -319,6 +328,14 @@
       "notDetected": "(not detected)",
       "oneClick": "Install with Docker",
       "installing": "Installing… this can take a few minutes"
+    },
+    "settingsSection": {
+      "title": "Assistants",
+      "installed": "Available",
+      "notInstalled": "Not installed",
+      "loading": "Loading…",
+      "notConnected": "Connect to this host to see assistants",
+      "refresh": "Refresh assistants"
     },
     "poweredBy": "Powered by Open WebUI — open-source multi-agent chat",
     "openWebUi": {

@@ -248,6 +248,15 @@
         "title": "重新生成令牌？",
         "message": "其他已配对的客户端需要重新配对。"
       }
+    },
+    "extensions": {
+      "title": "扩展",
+      "empty": "尚未安装任何扩展。前往「扩展」页发现并安装。",
+      "loadError": "加载扩展失败",
+      "notConnected": "连接 daemon 后可管理扩展。",
+      "reinstall": "重新安装",
+      "uninstall": "卸载",
+      "revealInFinder": "在 Finder 中显示"
     }
   },
   "integrations": {
@@ -319,6 +328,14 @@
       "notDetected": "（未检测到）",
       "oneClick": "一键用 Docker 安装",
       "installing": "安装中…首次拉取镜像可能需要几分钟"
+    },
+    "settingsSection": {
+      "title": "助理",
+      "installed": "已安装",
+      "notInstalled": "未安装",
+      "loading": "加载中…",
+      "notConnected": "连接 daemon 后可查看助理",
+      "refresh": "刷新助理"
     },
     "poweredBy": "由 Open WebUI 提供支持——开源多 agent 聊天",
     "openWebUi": {

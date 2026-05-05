@@ -6,7 +6,7 @@ import pino from "pino";
 
 import { PluginManager } from "./plugin-manager.js";
 import { PluginInstaller } from "./plugin-installer.js";
-import { PLUGIN_CATALOG } from "./plugin-catalog.js";
+import { getCatalog } from "./plugin-catalog.js";
 
 const silentLogger = pino({ level: "silent" });
 
@@ -32,7 +32,7 @@ describe("PluginInstaller", () => {
 
   it("lists every catalog entry with a status", async () => {
     const list = await installer.list();
-    expect(list).toHaveLength(PLUGIN_CATALOG.length);
+    expect(list).toHaveLength(getCatalog().length);
     for (const entry of list) {
       expect(entry.status).toBeDefined();
       expect(["installed", "not_installed", "incompatible"]).toContain(entry.status);
@@ -46,7 +46,7 @@ describe("PluginInstaller", () => {
   });
 
   it("writes the bridge files when the platform is supported", async () => {
-    const compatible = PLUGIN_CATALOG.find((e) =>
+    const compatible = getCatalog().find((e) =>
       (e.platforms as readonly string[]).includes(process.platform),
     );
     if (!compatible) return;
@@ -65,7 +65,7 @@ describe("PluginInstaller", () => {
   });
 
   it("removes bridge files on uninstall", async () => {
-    const compatible = PLUGIN_CATALOG.find((e) =>
+    const compatible = getCatalog().find((e) =>
       (e.platforms as readonly string[]).includes(process.platform),
     );
     if (!compatible) return;
@@ -90,7 +90,7 @@ describe("PluginInstaller", () => {
   });
 
   it("flags status as installed once the bridge is on disk", async () => {
-    const compatible = PLUGIN_CATALOG.find((e) =>
+    const compatible = getCatalog().find((e) =>
       (e.platforms as readonly string[]).includes(process.platform),
     );
     if (!compatible) return;
@@ -102,7 +102,7 @@ describe("PluginInstaller", () => {
   });
 
   it("refuses to launch a plugin whose companion app is missing", async () => {
-    const compatible = PLUGIN_CATALOG.find(
+    const compatible = getCatalog().find(
       (e) =>
         (e.platforms as readonly string[]).includes(process.platform) && e.companionApp != null,
     );

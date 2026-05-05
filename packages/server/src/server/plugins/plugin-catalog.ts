@@ -95,7 +95,7 @@ export function deactivate() {
 }
 `;
 
-export const PLUGIN_CATALOG: readonly PluginCatalogEntry[] = [
+export const BUILTIN_PLUGIN_CATALOG: readonly PluginCatalogEntry[] = [
   {
     id: "codeisland",
     name: "CodeIsland Notch Integration",
@@ -114,6 +114,25 @@ export const PLUGIN_CATALOG: readonly PluginCatalogEntry[] = [
   },
 ];
 
+// Mutable snapshot used by the running daemon. Built-in entries always live
+// here; remote catalog entries are merged via `setRemoteCatalogEntries`.
+let runtimeCatalog: readonly PluginCatalogEntry[] = BUILTIN_PLUGIN_CATALOG;
+
+export function getCatalog(): readonly PluginCatalogEntry[] {
+  return runtimeCatalog;
+}
+
+/**
+ * Merge remote-fetched, signature-verified entries with the built-ins. A
+ * built-in entry with the same id is kept (the daemon ships with the
+ * authoritative copy); we only add entries that aren't shadowed.
+ */
+export function setRemoteCatalogEntries(entries: readonly PluginCatalogEntry[]): void {
+  const builtinIds = new Set(BUILTIN_PLUGIN_CATALOG.map((e) => e.id));
+  const additions = entries.filter((e) => !builtinIds.has(e.id));
+  runtimeCatalog = [...BUILTIN_PLUGIN_CATALOG, ...additions];
+}
+
 export function findCatalogEntry(id: string): PluginCatalogEntry | undefined {
-  return PLUGIN_CATALOG.find((entry) => entry.id === id);
+  return runtimeCatalog.find((entry) => entry.id === id);
 }

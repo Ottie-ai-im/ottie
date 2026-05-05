@@ -57,9 +57,17 @@ export function AssistantsScreen() {
   const serverId = hosts[0]?.serverId ?? null;
   const { services, installers } = useLocalServices(serverId);
   const { install, isInstalling, lastResult } = useInstallLocalService(serverId);
-  const openWebUiStatus = services.find((s) => s.id === "open-webui");
-  const openWebUiRunning = Boolean(openWebUiStatus?.running);
-  const detectedOpenWebUiUrl = openWebUiStatus?.url ?? null;
+  const runningServices = services.filter((s) => s.running && s.url);
+  const anyRunning = runningServices.length > 0;
+
+  // Default selection: prefer Open WebUI (richest UI), fall back to first
+  // running service. If user manually picks something else via the chip
+  // selector we honor that choice for the lifetime of this mount.
+  const defaultSelection =
+    runningServices.find((s) => s.id === "open-webui")?.id ?? runningServices[0]?.id ?? null;
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const activeServiceId = selectedServiceId ?? defaultSelection;
+  const activeService = runningServices.find((s) => s.id === activeServiceId);
 
   const handleInstallDocker = useCallback(() => {
     void install({ serviceId: "open-webui", method: "docker" });
@@ -125,8 +133,17 @@ export function AssistantsScreen() {
       ) : null}
 
       {isWeb ? (
-        openWebUiRunning ? (
-          <EmbeddedWebUi url={detectedOpenWebUiUrl ?? openWebUiUrl} />
+        anyRunning && activeService ? (
+          <>
+            {runningServices.length > 1 ? (
+              <ServiceSwitcher
+                services={runningServices}
+                activeId={activeService.id}
+                onSelect={setSelectedServiceId}
+              />
+            ) : null}
+            <EmbeddedWebUi url={activeService.url ?? openWebUiUrl} />
+          </>
         ) : (
           <NotRunningCard
             configuredUrl={openWebUiUrl}
@@ -141,6 +158,46 @@ export function AssistantsScreen() {
       ) : (
         <NativeFallback url={openWebUiUrl} onOpen={handleOpenInBrowser} services={services} />
       )}
+    </View>
+  );
+}
+
+function ServiceSwitcher({
+  services,
+  activeId,
+  onSelect,
+}: {
+  services: Array<{ id: string; label: string; url: string | null }>;
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
+  const labels: Record<string, string> = {
+    "open-webui": "Open WebUI",
+    openclaw: "OpenClaw",
+    hermes: "Hermes Agent",
+  };
+  return (
+    <View style={styles.switcher}>
+      {services.map((s) => {
+        const active = s.id === activeId;
+        return (
+          <Pressable
+            key={s.id}
+            onPress={() => onSelect(s.id)}
+            style={[styles.chip, active ? styles.chipActive : null]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            testID={`assistants-switch-${s.id}`}
+          >
+            <View
+              style={[styles.chipDot, active ? styles.chipDotActive : styles.chipDotInactive]}
+            />
+            <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
+              {labels[s.id] ?? s.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -441,6 +498,47 @@ const styles = StyleSheet.create((theme) => ({
     fontFamily: theme.fontFamily.system,
     fontSize: theme.fontSize.xs,
     marginTop: theme.spacing[1],
+  },
+  switcher: {
+    flexDirection: "row",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderGlass,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.full,
+    borderCurve: "continuous",
+    backgroundColor: theme.colors.surface2,
+  },
+  chipActive: {
+    backgroundColor: theme.colors.accent,
+  },
+  chipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: theme.borderRadius.full,
+  },
+  chipDotActive: {
+    backgroundColor: theme.colors.accentForeground,
+  },
+  chipDotInactive: {
+    backgroundColor: theme.colors.palette.green[400],
+  },
+  chipText: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foreground,
+  },
+  chipTextActive: {
+    color: theme.colors.accentForeground,
+    fontWeight: theme.fontWeight.medium,
   },
   primaryButtonText: {
     fontFamily: theme.fontFamily.system,

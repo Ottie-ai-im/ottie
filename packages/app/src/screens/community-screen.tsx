@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,6 +26,48 @@ interface PluginEntry {
   companionApp?: PluginCompanionAppInfo;
 }
 
+type InstallPhase =
+  | "writing_bridge"
+  | "fetching_release"
+  | "downloading"
+  | "extracting"
+  | "installing_app"
+  | "done";
+
+interface InstallProgressState {
+  phase: InstallPhase;
+  bytesLoaded?: number;
+  bytesTotal?: number;
+  note?: string;
+}
+
+const PHASE_LABEL: Record<InstallPhase, string> = {
+  writing_bridge: "Writing bridge…",
+  fetching_release: "Fetching release info…",
+  downloading: "Downloading…",
+  extracting: "Extracting…",
+  installing_app: "Installing app…",
+  done: "Done",
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function describeProgress(progress: InstallProgressState): string {
+  const label = PHASE_LABEL[progress.phase];
+  if (progress.phase === "downloading" && progress.bytesLoaded != null) {
+    if (progress.bytesTotal && progress.bytesTotal > 0) {
+      const pct = Math.min(100, Math.round((progress.bytesLoaded / progress.bytesTotal) * 100));
+      return `${pct}% · ${formatBytes(progress.bytesLoaded)} / ${formatBytes(progress.bytesTotal)}`;
+    }
+    return `${formatBytes(progress.bytesLoaded)} downloaded`;
+  }
+  return label;
+}
+
 const PLUGIN_LIST_QUERY_KEY = ["plugin", "list"] as const;
 
 export function CommunityScreen() {
@@ -35,6 +77,21 @@ export function CommunityScreen() {
   const isConnected = useHostRuntimeIsConnected(serverId ?? "");
   const queryClient = useQueryClient();
   const toast = useToast();
+  const [progressByPlugin, setProgressByPlugin] = useState<Record<string, InstallProgressState>>(
+    {},
+  );
+
+  useEffect(() => {
+    if (!client) return;
+    const unsubscribe = client.on("plugin_install_progress", (msg) => {
+      const { pluginId, phase, bytesLoaded, bytesTotal, note } = msg.payload;
+      setProgressByPlugin((prev) => ({
+        ...prev,
+        [pluginId]: { phase, bytesLoaded, bytesTotal, note },
+      }));
+    });
+    return unsubscribe;
+  }, [client]);
 
   const pluginsQuery = useQuery({
     queryKey: [...PLUGIN_LIST_QUERY_KEY, serverId],
@@ -47,6 +104,15 @@ export function CommunityScreen() {
     staleTime: 30_000,
   });
 
+  const clearProgress = useCallback((pluginId: string) => {
+    setProgressByPlugin((prev) => {
+      if (!(pluginId in prev)) return prev;
+      const next = { ...prev };
+      delete next[pluginId];
+      return next;
+    });
+  }, []);
+
   const installMutation = useMutation({
     mutationFn: async (pluginId: string) => {
       if (!client) throw new Error("Daemon not connected");
@@ -54,6 +120,7 @@ export function CommunityScreen() {
     },
     onSuccess: (result) => {
       const id = result.pluginId ?? "extension";
+      clearProgress(id);
       if (!result.success) {
         toast.error(result.error ?? `Install of ${id} failed`);
         return;
@@ -68,7 +135,8 @@ export function CommunityScreen() {
       }
       void queryClient.invalidateQueries({ queryKey: PLUGIN_LIST_QUERY_KEY });
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, pluginId) => {
+      clearProgress(pluginId);
       toast.error(err instanceof Error ? err.message : String(err));
     },
   });
@@ -124,6 +192,7 @@ export function CommunityScreen() {
       isInstalling={installMutation.isPending && installMutation.variables === plugin.id}
       isUninstalling={uninstallMutation.isPending && uninstallMutation.variables === plugin.id}
       isLaunching={launchMutation.isPending && launchMutation.variables === plugin.id}
+      progress={progressByPlugin[plugin.id]}
       onInstall={handleInstall}
       onUninstall={handleUninstall}
       onLaunch={handleLaunch}
@@ -184,6 +253,7 @@ interface PluginCardProps {
   isInstalling: boolean;
   isUninstalling: boolean;
   isLaunching: boolean;
+  progress: InstallProgressState | undefined;
   onInstall: (pluginId: string) => void;
   onUninstall: (pluginId: string) => void;
   onLaunch: (pluginId: string) => void;
@@ -195,6 +265,7 @@ function PluginCard({
   isInstalling,
   isUninstalling,
   isLaunching,
+  progress,
   onInstall,
   onUninstall,
   onLaunch,
@@ -275,6 +346,7 @@ function PluginCard({
         </View>
       ) : null}
 
+      {isInstalling && progress ? <InstallProgressRow progress={progress} /> : null}
       <PluginActionRow
         isInstalled={isInstalled}
         isIncompatible={isIncompatible}
@@ -289,6 +361,37 @@ function PluginCard({
         onUninstall={handleUninstall}
         onLaunch={handleLaunch}
       />
+    </View>
+  );
+}
+
+interface InstallProgressRowProps {
+  progress: InstallProgressState;
+}
+
+function InstallProgressRow({ progress }: InstallProgressRowProps) {
+  const ratio =
+    progress.phase === "downloading" && progress.bytesTotal && progress.bytesTotal > 0
+      ? Math.min(1, (progress.bytesLoaded ?? 0) / progress.bytesTotal)
+      : null;
+  const percentLabel = ratio !== null ? `${Math.round(ratio * 100)}%` : null;
+  const fillStyle = useMemo(
+    () => [styles.progressFill, ratio !== null ? { width: `${ratio * 100}%` as const } : null],
+    [ratio],
+  );
+  const indeterminateStyle = useMemo(
+    () => [styles.progressFill, styles.progressFillIndeterminate],
+    [],
+  );
+  return (
+    <View style={styles.progressContainer}>
+      <View style={styles.progressTextRow}>
+        <Text style={styles.progressLabel}>{describeProgress(progress)}</Text>
+        {percentLabel ? <Text style={styles.progressPercent}>{percentLabel}</Text> : null}
+      </View>
+      <View style={styles.progressTrack}>
+        {ratio !== null ? <View style={fillStyle} /> : <View style={indeterminateStyle} />}
+      </View>
     </View>
   );
 }
@@ -551,5 +654,42 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.xs,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.foreground,
+  },
+  progressContainer: {
+    gap: 6,
+    paddingVertical: theme.spacing[1],
+  },
+  progressTextRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  progressLabel: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+    flexShrink: 1,
+  },
+  progressPercent: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+    marginLeft: theme.spacing[2],
+  },
+  progressTrack: {
+    height: 4,
+    borderRadius: theme.borderRadius.glassPill,
+    backgroundColor: theme.colors.surfaceGlassStrong,
+    overflow: "hidden" as const,
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.borderRadius.glassPill,
+  },
+  progressFillIndeterminate: {
+    width: "30%",
+    opacity: 0.6,
   },
 }));
