@@ -251,6 +251,30 @@ export function registerChatRowActions(): void {
       },
     }),
   );
+
+  // Phase 2.c-ui — open the "Add device" QR screen for the current host.
+  // serverId is required so the new screen can call device/link/generate
+  // against the right daemon; without it we fall through to the generic
+  // identity settings page which has its own Add device button.
+  actionRegistry.register(
+    defineAction("chat.add.addDevice", {
+      description: "Add another device under your identity (opens QR screen)",
+      modalities: ["menu", "cmdk"],
+      schema: OptionalServerPayload,
+      handler: async (payload) => {
+        const { router } = await import("expo-router");
+        const serverId = payload?.serverId;
+        if (typeof serverId === "string" && serverId.length > 0) {
+          router.push({
+            pathname: "/onboarding/add-device",
+            params: { serverId },
+          });
+        } else {
+          router.push("/settings/identity");
+        }
+      },
+    }),
+  );
 }
 
 // Side-effect: register on first import.

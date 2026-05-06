@@ -1,8 +1,11 @@
 // Top-right "+" menu rendered in the Chats tab header.
 //
-// 4 items: chat.add.newChat / chat.add.scanToPair / chat.add.joinHost /
-// chat.add.createWorkspace. Each dispatches via `actionRegistry` so cmdk /
-// voice / menu surfaces converge on the same handlers.
+// 5 items: chat.add.newChat / chat.add.scanToPair / chat.add.joinHost /
+// chat.add.createWorkspace / chat.add.addDevice. Each dispatches via
+// `actionRegistry` so cmdk / voice / menu surfaces converge on the same
+// handlers. addDevice was added in Phase 2.c-ui to surface the Add-device
+// QR flow from the primary discovery point (the Chats tab) rather than
+// only from settings/identity.
 //
 // Cross-platform Modal + GlassSurface stack (mirrors the web variant of the
 // chat-row context menu — the native variant of the `+` menu intentionally
@@ -34,6 +37,7 @@ const ITEMS: ReadonlyArray<AddMenuItem> = [
   { id: "chat.add.scanToPair", labelKey: "chat.add.scanToPair" },
   { id: "chat.add.joinHost", labelKey: "chat.add.joinHost" },
   { id: "chat.add.createWorkspace", labelKey: "chat.add.createWorkspace" },
+  { id: "chat.add.addDevice", labelKey: "chat.add.addDevice" },
 ];
 
 export function TopRightAddMenu({ serverId, testID }: TopRightAddMenuProps) {

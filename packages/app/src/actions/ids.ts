@@ -32,6 +32,7 @@ export type ActionId =
   | "chat.add.scanToPair"
   | "chat.add.joinHost"
   | "chat.add.createWorkspace"
+  | "chat.add.addDevice"
   // Settings deep-link buckets (D-09 / SET-03 — registered by Plan 02d)
   | "settings.open.account"
   | "settings.open.agents"
@@ -66,6 +67,7 @@ export const ALL_ACTION_IDS: readonly ActionId[] = [
   "chat.add.scanToPair",
   "chat.add.joinHost",
   "chat.add.createWorkspace",
+  "chat.add.addDevice",
   "settings.open.account",
   "settings.open.agents",
   "settings.open.voice",

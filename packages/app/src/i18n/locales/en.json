@@ -534,7 +534,8 @@
       "newChat": "New chat",
       "scanToPair": "Scan to pair",
       "joinHost": "Join host",
-      "createWorkspace": "Create workspace"
+      "createWorkspace": "Create workspace",
+      "addDevice": "Add device"
     },
     "swipe": {
       "markRead": "Read",

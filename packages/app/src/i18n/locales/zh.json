@@ -534,7 +534,8 @@
       "newChat": "新建",
       "scanToPair": "扫一扫配对",
       "joinHost": "加入 host",
-      "createWorkspace": "创建 workspace"
+      "createWorkspace": "创建 workspace",
+      "addDevice": "添加设备"
     },
     "swipe": {
       "markRead": "已读",
