@@ -35,6 +35,19 @@
     "loadFailed": "Identity exists but could not be loaded",
     "loadFailedHelp": "The identity file at $OTTIE_HOME/identity/root.json may be corrupt. Inspect or remove it manually."
   },
+  "identitySettings": {
+    "title": "Identity & devices",
+    "noHost": "No daemon connected. Pair a host first to see your identity.",
+    "uninitialized": "Identity not set up yet. Restart the app to be prompted for a display name.",
+    "identitySection": "Your identity",
+    "displayName": "Display name",
+    "rootPubkey": "Root public key",
+    "createdAt": "Created",
+    "devicesSection": "Devices",
+    "thisDevice": "This device",
+    "serverId": "Server ID",
+    "devicesComingSoon": "Linking additional devices is coming soon."
+  },
   "welcome": {
     "title": "Welcome to Ottie",
     "subtitle": "Connect your computer to get started",

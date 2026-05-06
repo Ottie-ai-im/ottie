@@ -880,6 +880,7 @@ function RootStack() {
         <Stack.Screen name="onboarding/identity" />
         <Stack.Screen name="settings/index" />
         <Stack.Screen name="settings/[section]" />
+        <Stack.Screen name="settings/identity" />
         <Stack.Screen name="pair-scan" />
       </Stack.Protected>
       {/*

@@ -35,6 +35,19 @@
     "loadFailed": "已有身份文件，但无法读取",
     "loadFailedHelp": "$OTTIE_HOME/identity/root.json 可能损坏。请手动检查或删除该文件。"
   },
+  "identitySettings": {
+    "title": "账号与设备",
+    "noHost": "尚未连接 daemon。先配对一个主机才能查看账号。",
+    "uninitialized": "尚未设置账号。重启 app 以填写昵称。",
+    "identitySection": "你的账号",
+    "displayName": "昵称",
+    "rootPubkey": "根公钥",
+    "createdAt": "创建时间",
+    "devicesSection": "设备",
+    "thisDevice": "这台设备",
+    "serverId": "服务器 ID",
+    "devicesComingSoon": "添加其他设备的功能即将推出。"
+  },
   "welcome": {
     "title": "欢迎使用 Ottie",
     "subtitle": "连接你的电脑以开始使用",
