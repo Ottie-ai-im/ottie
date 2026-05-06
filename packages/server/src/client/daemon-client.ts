@@ -1415,6 +1415,47 @@ export class DaemonClient {
   }
 
   // ============================================================================
+  // Identity RPCs (Phase 1.g)
+  // ============================================================================
+
+  async identityGet(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    state: import("../server/identity/identity-rpc-schemas.js").IdentityStateOnWire | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "identity/get", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "identity/get/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { state: msg.payload.state, error: msg.payload.error };
+      },
+    });
+  }
+
+  async identityInitialize(
+    displayName: string,
+    params?: { requestId?: string; timeoutMs?: number },
+  ): Promise<{
+    identity: import("../server/identity/identity-rpc-schemas.js").PublicRootIdentity | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "identity/initialize", requestId, displayName },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "identity/initialize/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { identity: msg.payload.identity, error: msg.payload.error };
+      },
+    });
+  }
+
+  // ============================================================================
   // Agent RPCs (requestId-correlated)
   // ============================================================================
 
