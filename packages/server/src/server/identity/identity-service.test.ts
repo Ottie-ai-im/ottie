@@ -173,3 +173,110 @@ describe("IdentityService — Phase 2.a self-device + device list", () => {
     expect(svc.getDeviceList()).toEqual([]);
   });
 });
+
+describe("IdentityService.adoptIdentityFromLink — Phase 2.e/2", () => {
+  function buildAdoptionInput() {
+    // Generate keys the same way the OLD device would after approving:
+    // root identity (Alice's) + a signed device record + a peer-list
+    // snapshot. We don't go through the relay here — adoptIdentityFrom
+    // Link is the persistence step alone.
+    const aliceHome = mkdtempSync(path.join(os.tmpdir(), "ottie-alice-old-"));
+    const aliceRoot = createRootIdentity(aliceHome, "Alice");
+    rmSync(aliceHome, { recursive: true, force: true });
+
+    // Bob's local device keypair (the new device).
+    const bobSigningKey = (() => {
+      const { generateKeyPairSync } = require("node:crypto") as typeof import("node:crypto");
+      const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+      const pub = (publicKey.export({ format: "jwk" }) as { x: string }).x;
+      const priv = (privateKey.export({ format: "jwk" }) as { d: string }).d;
+      return { pub, priv };
+    })();
+
+    // Sign Bob's device with Alice's root.
+    const { sign } = require("node:crypto") as typeof import("node:crypto");
+    const authorizedAt = new Date(1_700_000_000_000).toISOString();
+    const payload = [
+      "ottie-device-auth-v1",
+      "dev_bob_phone",
+      bobSigningKey.pub,
+      "client",
+      authorizedAt,
+    ].join("\n");
+    const signature = sign(null, Buffer.from(payload, "utf8"), aliceRoot.signPrivateKey);
+    const authorizationSignatureB64 = signature
+      .toString("base64")
+      .replace(/=+$/, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+
+    const signedDevice = {
+      v: 1 as const,
+      deviceId: "dev_bob_phone",
+      deviceLabel: "Bob's Phone",
+      role: "client" as const,
+      signPublicKeyB64: bobSigningKey.pub,
+      authorizedAt,
+      authorizationSignatureB64,
+    };
+
+    return {
+      rootIdentity: aliceRoot.stored,
+      signedDevice,
+      peerDevices: [signedDevice],
+      signPrivateKeyB64: bobSigningKey.priv,
+    };
+  }
+
+  test("writes root.json + self-device.json + devices.json on a fresh home", () => {
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_bob", deviceLabel: "Bob's Phone" },
+    });
+    expect(svc.getState().kind).toBe("uninitialized");
+
+    const input = buildAdoptionInput();
+    svc.adoptIdentityFromLink(input);
+
+    expect(svc.getState().kind).toBe("loaded");
+    expect(svc.requireBundle().stored.displayName).toBe(input.rootIdentity.displayName);
+    expect(svc.getDeviceList()).toHaveLength(1);
+    expect(svc.getDeviceList()[0]?.deviceId).toBe("dev_bob_phone");
+  });
+
+  test("a fresh IdentityService on the same home picks the adopted identity up from disk", () => {
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_bob", deviceLabel: "Bob's Phone" },
+    });
+    const input = buildAdoptionInput();
+    svc.adoptIdentityFromLink(input);
+
+    const reloaded = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_bob", deviceLabel: "Bob's Phone" },
+    });
+    expect(reloaded.getState().kind).toBe("loaded");
+    expect(reloaded.requireBundle().stored).toEqual(input.rootIdentity);
+    expect(reloaded.getDeviceList()).toHaveLength(1);
+    expect(reloaded.getDeviceList()[0]?.deviceId).toBe("dev_bob_phone");
+  });
+
+  test("throws if the daemon is already initialized — adoption only runs on a fresh home", () => {
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_existing", deviceLabel: "Already Mine" },
+    });
+    svc.initialize("Existing");
+
+    const input = buildAdoptionInput();
+    expect(() => svc.adoptIdentityFromLink(input)).toThrow(/already initialized|loaded/i);
+
+    // Existing identity must be untouched.
+    expect(svc.requireBundle().stored.displayName).toBe("Existing");
+  });
+});

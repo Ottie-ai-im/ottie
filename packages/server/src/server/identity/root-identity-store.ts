@@ -115,6 +115,54 @@ export function createRootIdentity(
   return { stored, signPublicKey: publicKey, signPrivateKey: privateKey };
 }
 
+/**
+ * Phase 2.e/2: write a `StoredRootIdentity` that came IN from another
+ * device (over the device-link approval reply) instead of being freshly
+ * generated. Used only on the new-device side after the user approved
+ * the link on their original device.
+ *
+ * Refuses to overwrite an existing identity for the same reason
+ * `createRootIdentity` does: silently rotating the user's external
+ * identity would break every existing friend pairing.
+ */
+export function writeImportedRootIdentity(
+  ottieHome: string,
+  stored: StoredRootIdentity,
+  logger?: pino.Logger,
+): RootIdentityBundle {
+  const log = logger?.child({ module: "root-identity" });
+  const filePath = rootIdentityFilePath(ottieHome);
+  if (existsSync(filePath)) {
+    throw new Error(
+      `Refusing to overwrite existing root identity at ${filePath} — adopt-from-link should only run on a fresh install`,
+    );
+  }
+
+  // Validate up-front: schema parse covers shape; key-rebuild covers that
+  // the base64url payloads actually decode to a real Ed25519 keypair. If
+  // either fails we want to throw before touching the disk.
+  const validated = RootIdentitySchema.parse(stored);
+  const signPublicKey = createPublicKey({
+    key: { kty: "OKP", crv: "Ed25519", x: validated.signPublicKeyB64 },
+    format: "jwk",
+  });
+  const signPrivateKey = createPrivateKey({
+    key: {
+      kty: "OKP",
+      crv: "Ed25519",
+      x: validated.signPublicKeyB64,
+      d: validated.signPrivateKeyB64,
+    },
+    format: "jwk",
+  });
+
+  mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  writeFileSync(filePath, `${JSON.stringify(validated, null, 2)}\n`, { mode: 0o600 });
+
+  log?.info({ filePath, displayName: validated.displayName }, "Imported root identity");
+  return { stored: validated, signPublicKey, signPrivateKey };
+}
+
 // ----- Ed25519 raw-byte (JWK base64url) serialization ---------------------
 //
 // Node's `KeyObject.export({ format: "jwk" })` for Ed25519 yields the 32-byte

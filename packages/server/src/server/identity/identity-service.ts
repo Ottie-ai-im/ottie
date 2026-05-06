@@ -1,3 +1,4 @@
+import type { KeyObject } from "node:crypto";
 import type pino from "pino";
 
 import type { RelayConnectionHandler } from "../relay-transport.js";
@@ -20,9 +21,15 @@ import type { PendingDeviceLinkCandidateOnWire } from "./identity-rpc-schemas.js
 import {
   createRootIdentity,
   loadRootIdentity,
+  writeImportedRootIdentity,
   type RootIdentityBundle,
 } from "./root-identity-store.js";
-import { createSelfDevice, loadSelfDevice, type SelfDeviceBundle } from "./self-device-store.js";
+import {
+  createSelfDevice,
+  loadSelfDevice,
+  writeImportedSelfDevice,
+  type SelfDeviceBundle,
+} from "./self-device-store.js";
 
 /**
  * Lifecycle state of the root identity at daemon startup.
@@ -264,10 +271,103 @@ export class IdentityService {
    * secrets the sender produced and persist them once the OLD device
    * approves.
    */
-  redeemDeviceLinkOffer(
+  async redeemDeviceLinkOffer(
     input: Omit<RedeemDeviceLinkOfferInput, "logger">,
   ): Promise<RedeemDeviceLinkOfferOutcome> {
-    return redeemDeviceLinkOffer({ ...input, logger: this.logger });
+    const outcome = await redeemDeviceLinkOffer({ ...input, logger: this.logger });
+    if (outcome.status !== "linked") return outcome;
+
+    // Persist the inbound identity to disk + sync in-memory state. If
+    // the disk write fails we surface that to the caller so the UI can
+    // tell the user "linked OK on the other side, but couldn't save —
+    // please try again". The other side's devices.json already has us,
+    // so a re-link won't double-add.
+    try {
+      this.adoptIdentityFromLink({
+        rootIdentity: outcome.rootIdentity,
+        signedDevice: outcome.signedDevice,
+        peerDevices: outcome.peerDevices,
+        signPrivateKeyB64: extractEd25519PrivateB64(outcome.localSecrets.signPrivateKey),
+      });
+      return outcome;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error({ err }, "Device-link adopt-from-link failed");
+      return {
+        status: "rejected",
+        errorCode: "adopt_failed",
+        errorMessage: `Linked successfully but failed to persist locally: ${message}`,
+      };
+    }
+  }
+
+  /**
+   * Phase 2.e/2: persist a root identity + self-device + device list
+   * that arrived via the device-link approval reply. This is the one
+   * code path that bootstraps a fresh `$OTTIE_HOME` from external
+   * material instead of generating its own keys.
+   *
+   * Throws if the daemon is already initialized — adoption must only
+   * run on a truly fresh install.
+   */
+  adoptIdentityFromLink(input: {
+    rootIdentity: import("./identity-types.js").StoredRootIdentity;
+    signedDevice: StoredDevice;
+    peerDevices: readonly StoredDevice[];
+    signPrivateKeyB64: string;
+  }): void {
+    if (this.state.kind !== "uninitialized") {
+      throw new Error(
+        `Cannot adopt identity from link: current state is "${this.state.kind}". ` +
+          "Adoption only runs on a fresh daemon with no existing root identity.",
+      );
+    }
+
+    // Sanity-check that the imported records are internally consistent
+    // before touching disk. Mismatches usually mean either a corrupted
+    // approval envelope or a bug in the OLD device's signing path.
+    if (input.signedDevice.deviceId.length === 0) {
+      throw new Error("Imported signedDevice has empty deviceId");
+    }
+
+    // 1. Root identity file (with the OLD device's root keypair copy).
+    const rootBundle = writeImportedRootIdentity(this.ottieHome, input.rootIdentity, this.logger);
+
+    // 2. Self-device file (this device's own signing keypair, generated
+    // locally during Phase 2.d sender, signed by the OLD device's root).
+    writeImportedSelfDevice(
+      this.ottieHome,
+      {
+        v: 1,
+        deviceId: input.signedDevice.deviceId,
+        signPublicKeyB64: input.signedDevice.signPublicKeyB64,
+        signPrivateKeyB64: input.signPrivateKeyB64,
+      },
+      this.logger,
+    );
+
+    // 3. Device list — the snapshot the OLD device sent at approval
+    // time, which already includes our newly-signed entry.
+    const list: StoredDeviceList = { v: 1, devices: [...input.peerDevices] };
+    saveDeviceList(this.ottieHome, list, this.logger);
+
+    // 4. Sync in-memory state so subsequent RPCs see "loaded" without
+    // needing a daemon restart.
+    this.state = { kind: "loaded", bundle: rootBundle };
+    this.deviceList = list;
+    // We don't re-load self-device into memory — currently it's only
+    // consumed during cross-device sync flows that re-read the file
+    // when needed. ensureSelfDevice() does that for fresh installs.
+    // Future Phase 2.f will revisit if hot-loading is needed here.
+
+    this.logger.info(
+      {
+        displayName: input.rootIdentity.displayName,
+        deviceId: input.signedDevice.deviceId,
+        peerCount: input.peerDevices.length,
+      },
+      "Adopted identity from device-link approval",
+    );
   }
 
   /**
@@ -583,4 +683,17 @@ export class IdentityService {
       throw err;
     }
   }
+}
+
+/**
+ * Pull the JWK 'd' field (base64url, no padding) out of a Node Ed25519
+ * KeyObject. Mirrors the export helper in self-device-store.ts but lives
+ * here so identity-service doesn't have to import a private function.
+ */
+function extractEd25519PrivateB64(key: KeyObject): string {
+  const jwk = key.export({ format: "jwk" }) as { d?: string };
+  if (!jwk.d) {
+    throw new Error("Ed25519 private key JWK is missing the 'd' field");
+  }
+  return jwk.d;
 }

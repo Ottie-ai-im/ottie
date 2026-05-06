@@ -85,6 +85,42 @@ export function createSelfDevice(
   return { stored, signPublicKey: publicKey, signPrivateKey: privateKey };
 }
 
+/**
+ * Phase 2.e/2: write a `StoredSelfDevice` from the keypair that the
+ * device-link sender produced locally. Used only on the new-device side
+ * — fresh installs go through `createSelfDevice` instead.
+ *
+ * Refuses to overwrite an existing self-device file. Pairing this with
+ * the same guard on root-identity ensures the adopt-from-link flow can
+ * only run on a truly fresh `$OTTIE_HOME`.
+ */
+export function writeImportedSelfDevice(
+  ottieHome: string,
+  stored: StoredSelfDevice,
+  logger?: pino.Logger,
+): SelfDeviceBundle {
+  const log = logger?.child({ module: "self-device" });
+  const filePath = selfDeviceFilePath(ottieHome);
+  if (existsSync(filePath)) {
+    throw new Error(
+      `Refusing to overwrite existing self-device at ${filePath} — adopt-from-link should only run on a fresh install`,
+    );
+  }
+
+  const validated = SelfDeviceSchema.parse(stored);
+  const signPublicKey = importEd25519PublicKey(validated.signPublicKeyB64);
+  const signPrivateKey = importEd25519PrivateKey(
+    validated.signPrivateKeyB64,
+    validated.signPublicKeyB64,
+  );
+
+  mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  writeFileSync(filePath, `${JSON.stringify(validated, null, 2)}\n`, { mode: 0o600 });
+
+  log?.info({ filePath, deviceId: validated.deviceId }, "Imported self-device keypair");
+  return { stored: validated, signPublicKey, signPrivateKey };
+}
+
 // ----- Ed25519 raw-byte (JWK base64url) serialization ---------------------
 // Mirrors the helpers in root-identity-store.ts. Kept duplicated rather than
 // shared because the layering between identity-types / device-types is meant
