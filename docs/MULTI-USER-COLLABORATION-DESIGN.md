@@ -963,37 +963,70 @@ git log. Update on every phase boundary.
   every 3s, Approve/Reject buttons
 
 ### Phase 2.f — multi-daemon device-list sync
-- 🔄 IN PROGRESS (4 of 6 sub-commits done)
-- ✅ 2.f/0: event sign/verify/apply pure functions (DeviceListEvent
+- ✅ COMPLETE (6 sub-commits)
+- 2.f/0: event sign/verify/apply pure functions (DeviceListEvent
   schema with kind=added/removed, Ed25519 sig by source self-device,
   per-source seq, idempotent merge with replay protection)
-- ✅ 2.f/1: events log persisted to events.json,
+- 2.f/1: events log persisted to events.json,
   `IdentityService.tryEmitDeviceAddedEvent` after approve, inbound
   apply path
-- ✅ 2.f/2a: SIGMA-I peer-sync handshake crypto (sign ephPubKey
+- 2.f/2a: SIGMA-I peer-sync handshake crypto (sign ephPubKey
   under long-term key, mutual auth, ECDH session key)
-- ✅ 2.f/2b: receiver-side `connectionHandler` for `peer-sync:`
+- 2.f/2b: receiver-side `connectionHandler` for `peer-sync:`
   prefix + `PeerSessionRegistry`, wired through bootstrap
-- ⏳ 2.f/2c: dialer — scan devices.json on boot, dial each peer
-  daemon over relay
-- ⏳ 2.f/3: outbound broadcast — when local emit fires, fan out
-  the encrypted event to every active peer session
+- 2.f/2c: dialer — scans devices.json on boot, dials each peer
+  daemon over relay, exponential-backoff reconnect
+- 2.f/3: outbound broadcast + reconnect catch-up — when local emit
+  fires, fan out encrypted event to every active peer session;
+  when a fresh session is established, replay the local events log
 
 ### Phase 2.g — remove device + revocation
-- ⏳ NOT STARTED
-- Will add: "Remove device" button in `/settings/identity`,
-  outbound `device-removed` event emit, peer-side apply
+- ✅ COMPLETE
+- `IdentityService.removeDevice(deviceId)` refuses self, persists
+  devices.json, emits + broadcasts `device-removed`, closes peer
+  session.
+- WS RPC `device/remove` + DaemonClient.deviceRemove.
+- UI: Trash2 button on each non-self device row in
+  `/settings/identity`, with Alert.alert confirmation.
+- Bilingual i18n.
+
+### Phase 2 — DONE end-to-end ✅
+Two laptops + a phone (one daemon each) under one identity now:
+1. Add a new device via QR/link with explicit owner approval
+2. Auto-sync the device list across all daemons within seconds via
+   peer-sync sessions
+3. Survive daemon restarts (reload from disk)
+4. Survive network blips (dialer reconnects, catch-up replay)
+5. Remove a device from any daemon, propagation happens through
+   the same broadcast pipeline
 
 ### Phase 3 — friend pairing + 1-to-1 chat
-- ⏳ NOT STARTED
-- Same crypto pattern as Phase 2.d but cross-identity (peer-pair
-  offer, both-sides-accept). Reuses Phase 2.f's relay machinery
-  for sync.
+- ⏳ NOT STARTED — START HERE NEXT
+- ~50% reuse of Phase 2 crypto + transport (same Cloudflare relay,
+  same NaCl box, same Ed25519, same SIGMA-I-style handshake but
+  cross-identity instead of intra-identity)
+- New work breakdown (planned):
+  - 3.a/0 — peer-pair offer schema + ECDH crypto (analog of
+    device-link types). Pure functions + tests.
+  - 3.a/1 — receiver-side: accept incoming pair-offer, surface in
+    "Pending friend requests" section of new `/settings/friends`
+  - 3.a/2 — sender-side: WS RPC `friend/pair/redeem` + UI to
+    paste/scan a friend-pair link
+  - 3.a/3 — bilateral confirm: both sides see the other in their
+    friend list after both tap accept
+  - 3.b/0 — chat-room kind=p2p schema, Peer entity in store
+  - 3.b/1 — message send/receive over relay (live)
+  - 3.b/2 — Cloudflare KV inbox for offline delivery; recipient
+    pulls on connect with cursor
+  - 3.b/3 — read receipts + UI integration (chats list shows
+    friends + agents side-by-side)
 
 ### Phase 4 — AI sharing
 - ⏳ NOT STARTED
 - §7.5 modal flow decided. Per-share two-step gate (no auto, no
-  per-friend defaults).
+  per-friend defaults). All online owner-devices render the modal,
+  whoever the owner picks up first wins. Cancel surfaces explicit
+  "declined" to friend. No mid-session daemon switching.
 
 ### Phase 5 — polish
 - ⏳ NOT STARTED
@@ -1001,16 +1034,19 @@ git log. Update on every phase boundary.
   session timeout enforcement.
 
 ### Test infrastructure status
-- 175+ tests across ~18 files, all green (with one occasional
-  vitest-parallel flake on the mock-relay e2e; passes on isolated
-  runs)
+- 192 tests across 20 files in the identity + relay-transport
+  suite, all green; 5 consecutive full-suite runs verified.
 - `mock-relay.ts` — in-process Cloudflare adapter clone for
-  spawning real WebSocket bridges in tests without wrangler-dev
+  spawning real WebSocket bridges in tests without wrangler-dev.
 - Real two-daemon e2e: `device-link-mock-relay.e2e.test.ts` covers
-  the Phase 2.d/2.e happy path through real `ws` sockets
+  the Phase 2.d/2.e happy path through real `ws` sockets.
+- Documented gotcha (relay-transport.ts comment + mock-relay.ts):
+  any new ws→ws bridge MUST propagate `isBinary` — Node's `ws`
+  delivers `data` as Buffer regardless of frame kind.
 
 ### Tech-stack invariants (do not change without re-deciding)
 - Cloudflare Workers relay (free tier suffices for personal-scale)
+  at `relay.claws.company:443`
 - NaCl box (Curve25519 + XSalsa20-Poly1305) for application-layer
   encryption everywhere; SIGMA-I for peer-sync handshake
 - Ed25519 for all signatures (root, self-device, events, peer-hello)
@@ -1019,3 +1055,5 @@ git log. Update on every phase boundary.
   but at least one daemon must be online to send messages
 - Open-source under AGPL-3.0; user explicitly OK with license
   traction
+- DO NOT switch to SimpleX, do not copy HuLa code (research
+  isolation memory: feedback_research_isolation.md)
