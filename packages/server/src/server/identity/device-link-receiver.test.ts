@@ -119,10 +119,13 @@ describe("createDeviceLinkConnectionHandler", () => {
     expect(stored?.candidate.role).toBe("daemon");
     expect(stored?.newDeviceEphPublicKeyB64).toBe(built.redemption.newDeviceEphPublicKeyB64);
     expect(stored?.ephPrivateKeyB64).toBe(pending.ephPrivateKeyB64);
+    // Phase 2.e: the receiver KEEPS the socket open and parks the
+    // reference on the candidate — approve/reject reuses it later.
+    expect(stored?.replySocket).toBe(fake.socket);
 
-    // Sender gets an ack and the socket is closed cleanly.
+    // Sender gets an ack but the socket stays OPEN (no close yet).
     expect(JSON.parse(fake.sent[0] ?? "{}")).toEqual({ type: "candidate-received" });
-    expect(fake.closes[0]?.code).toBe(1000);
+    expect(fake.closes).toHaveLength(0);
 
     // Single-use: the original pending offer is consumed.
     expect(pendingOffers.redeem(pending.offer.nonceB64)).toBeNull();

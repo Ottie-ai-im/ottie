@@ -8,6 +8,7 @@ import {
   DeviceLinkPendingStore,
   type CreatePendingOfferResult,
 } from "./device-link-pending-store.js";
+import { approveDeviceLinkCandidate, rejectDeviceLinkCandidate } from "./device-link-approve.js";
 import { createDeviceLinkConnectionHandler } from "./device-link-receiver.js";
 import {
   redeemDeviceLinkOffer,
@@ -15,6 +16,7 @@ import {
   type RedeemDeviceLinkOfferOutcome,
 } from "./device-link-sender.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
+import type { PendingDeviceLinkCandidateOnWire } from "./identity-rpc-schemas.js";
 import {
   createRootIdentity,
   loadRootIdentity,
@@ -266,6 +268,192 @@ export class IdentityService {
     input: Omit<RedeemDeviceLinkOfferInput, "logger">,
   ): Promise<RedeemDeviceLinkOfferOutcome> {
     return redeemDeviceLinkOffer({ ...input, logger: this.logger });
+  }
+
+  /**
+   * Phase 2.e: list candidates the OLD device's UI should surface in the
+   * "Approve a new device?" prompt. Each entry has just enough metadata
+   * for the UI; secrets stay daemon-side.
+   */
+  listPendingDeviceLinkCandidates(): readonly PendingDeviceLinkCandidateOnWire[] {
+    return this.pendingCandidates.list().map((record) => ({
+      nonceB64: record.nonceB64,
+      deviceLabel: record.candidate.deviceLabel,
+      role: record.candidate.role,
+      generatedAt: record.candidate.generatedAt,
+      receivedAt: new Date(record.receivedAtMs).toISOString(),
+      expiresAtMs: record.expiresAtMs,
+    }));
+  }
+
+  /**
+   * Phase 2.e: approve a parked candidate. Signs the new device's
+   * pubkey with the root identity, appends to devices.json, encrypts
+   * an approval reply (including the root key bundle + peer-list
+   * snapshot), sends it over the still-open Phase 2.d socket, then
+   * closes the socket.
+   *
+   * Result.approved is `true` on the happy path. `false` (with an
+   * `error`) means: candidate not found / expired / new device went
+   * offline before we could deliver the reply / disk write failed.
+   */
+  approveDeviceLink(nonceB64: string): {
+    approved: boolean;
+    devices: readonly StoredDevice[] | null;
+    error: string | null;
+  } {
+    if (this.state.kind !== "loaded") {
+      return {
+        approved: false,
+        devices: null,
+        error: "Cannot approve device-link — root identity not loaded",
+      };
+    }
+    if (!this.deviceList) {
+      return {
+        approved: false,
+        devices: null,
+        error: "Cannot approve device-link — device list not initialized",
+      };
+    }
+
+    const record = this.pendingCandidates.consume(nonceB64);
+    if (!record) {
+      return {
+        approved: false,
+        devices: null,
+        error: "Candidate not found, already consumed, or expired",
+      };
+    }
+
+    let result;
+    try {
+      result = approveDeviceLinkCandidate({
+        candidate: record.candidate,
+        ephPrivateKeyB64: record.ephPrivateKeyB64,
+        newDeviceEphPublicKeyB64: record.newDeviceEphPublicKeyB64,
+        rootIdentity: this.state.bundle,
+        existingDevices: this.deviceList.devices,
+      });
+    } catch (err) {
+      return {
+        approved: false,
+        devices: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    // Persist BEFORE talking to the new device. If disk write fails we
+    // bail without telling the new device "approved" — it'll see the
+    // socket close and surface that as an error to its caller.
+    const updated: StoredDeviceList = {
+      v: 1,
+      devices: [...this.deviceList.devices, result.signedDevice],
+    };
+    try {
+      saveDeviceList(this.ottieHome, updated, this.logger);
+    } catch (err) {
+      this.closeReplySocket(record.replySocket, 1011, "save_failed");
+      return {
+        approved: false,
+        devices: null,
+        error: `Failed to persist device list: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    this.deviceList = updated;
+
+    // Send the encrypted reply, then close the socket cleanly.
+    const sent = this.sendThenClose(record.replySocket, JSON.stringify(result.envelope));
+    if (!sent) {
+      this.logger.warn(
+        { noncePrefix: nonceB64.slice(0, 8) },
+        "device_link_approve_reply_send_failed_socket_dead",
+      );
+      // The signed device IS persisted on this side — the new device
+      // just won't have heard about it. Surface that so the user can
+      // re-link if needed (they'd see two devices: this and a future
+      // re-link). Phase 2.f peer-sync will eventually reconcile.
+      return {
+        approved: true,
+        devices: updated.devices,
+        error:
+          "Approved and saved locally, but the new device was already offline — " +
+          "tell them to scan again",
+      };
+    }
+
+    this.logger.info(
+      {
+        deviceId: result.signedDevice.deviceId,
+        deviceLabel: result.signedDevice.deviceLabel,
+      },
+      "Device-link candidate approved and reply sent",
+    );
+
+    return { approved: true, devices: updated.devices, error: null };
+  }
+
+  /**
+   * Phase 2.e: reject a parked candidate. Sends an encrypted "rejected"
+   * envelope back to the new device (so it knows the user said no), then
+   * closes the socket. Does NOT touch devices.json.
+   */
+  rejectDeviceLink(nonceB64: string, reason?: string): { rejected: boolean; error: string | null } {
+    const record = this.pendingCandidates.consume(nonceB64);
+    if (!record) {
+      return { rejected: false, error: "Candidate not found, already consumed, or expired" };
+    }
+    const { envelope } = rejectDeviceLinkCandidate({
+      ephPrivateKeyB64: record.ephPrivateKeyB64,
+      newDeviceEphPublicKeyB64: record.newDeviceEphPublicKeyB64,
+      ...(reason ? { rejectionReason: reason } : {}),
+    });
+    const sent = this.sendThenClose(record.replySocket, JSON.stringify(envelope));
+    if (!sent) {
+      return {
+        rejected: true,
+        error: "Rejection recorded locally, but the new device was already offline",
+      };
+    }
+    this.logger.info(
+      { noncePrefix: nonceB64.slice(0, 8), reason },
+      "Device-link candidate rejected",
+    );
+    return { rejected: true, error: null };
+  }
+
+  private sendThenClose(
+    socket:
+      | {
+          send: (data: string) => void;
+          close: (code?: number, reason?: string) => void;
+        }
+      | undefined,
+    data: string,
+  ): boolean {
+    if (!socket) return false;
+    try {
+      socket.send(data);
+    } catch (err) {
+      this.logger.warn({ err }, "device_link_reply_send_failed");
+      this.closeReplySocket(socket, 1011, "send_failed");
+      return false;
+    }
+    this.closeReplySocket(socket, 1000, "approved_and_replied");
+    return true;
+  }
+
+  private closeReplySocket(
+    socket: { close: (code?: number, reason?: string) => void } | undefined,
+    code: number,
+    reason: string,
+  ): void {
+    if (!socket) return;
+    try {
+      socket.close(code, reason);
+    } catch {
+      // ignore
+    }
   }
 
   // ----- private: self-device + device-list lifecycle ---------------------

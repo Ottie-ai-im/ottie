@@ -221,3 +221,80 @@ export const DeviceLinkRedeemResponseSchema = z.object({
 });
 
 export type DeviceLinkRedeemOutcome = z.infer<typeof DeviceLinkRedeemOutcomeSchema>;
+
+// ----- device/link/candidates (Phase 2.e) --------------------------------
+// OLD device's UI lists currently-pending candidates so the user can pick
+// one to approve or reject. The wire shape is intentionally MINIMAL — the
+// ephPrivateKey + ephPublicKey lives daemon-side only and never leaves.
+
+export const PendingDeviceLinkCandidateOnWireSchema = z.object({
+  /** offer.nonceB64; the lookup key for approve/reject. */
+  nonceB64: z.string().min(1),
+  /** What the new device wants to be called. */
+  deviceLabel: z.string().min(1),
+  /** daemon | client. */
+  role: z.enum(["daemon", "client"]),
+  /** ISO timestamp when the new device generated the candidate. */
+  generatedAt: z.string(),
+  /** ISO timestamp when the daemon received the candidate. */
+  receivedAt: z.string(),
+  /** Wall-clock ms when this candidate stops being approvable. */
+  expiresAtMs: z.number(),
+});
+
+export type PendingDeviceLinkCandidateOnWire = z.infer<
+  typeof PendingDeviceLinkCandidateOnWireSchema
+>;
+
+export const DeviceLinkCandidatesRequestSchema = z.object({
+  type: z.literal("device/link/candidates"),
+  requestId: z.string(),
+});
+
+export const DeviceLinkCandidatesResponseSchema = z.object({
+  type: z.literal("device/link/candidates/response"),
+  payload: z.object({
+    requestId: z.string(),
+    candidates: z.array(PendingDeviceLinkCandidateOnWireSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- device/link/approve (Phase 2.e) -----------------------------------
+
+export const DeviceLinkApproveRequestSchema = z.object({
+  type: z.literal("device/link/approve"),
+  requestId: z.string(),
+  nonceB64: z.string().min(1),
+});
+
+export const DeviceLinkApproveResponseSchema = z.object({
+  type: z.literal("device/link/approve/response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** True if the encrypted reply was sent and the new device's record landed in devices.json. */
+    approved: z.boolean(),
+    /** Resulting devices.json snapshot, after appending the freshly-signed device. */
+    devices: z.array(DeviceSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- device/link/reject (Phase 2.e) ------------------------------------
+
+export const DeviceLinkRejectRequestSchema = z.object({
+  type: z.literal("device/link/reject"),
+  requestId: z.string(),
+  nonceB64: z.string().min(1),
+  /** Optional reason shown on the new device's screen. */
+  reason: z.string().max(200).optional(),
+});
+
+export const DeviceLinkRejectResponseSchema = z.object({
+  type: z.literal("device/link/reject/response"),
+  payload: z.object({
+    requestId: z.string(),
+    rejected: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});

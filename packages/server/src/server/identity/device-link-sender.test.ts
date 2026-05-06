@@ -1,12 +1,32 @@
+import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, test } from "vitest";
 
 import type { RelayConnectionHandler, RelayCustomHandlerSocket } from "../relay-transport.js";
 
+import { approveDeviceLinkCandidate, rejectDeviceLinkCandidate } from "./device-link-approve.js";
 import { DeviceLinkPendingCandidateStore } from "./device-link-pending-candidate-store.js";
 import { DeviceLinkPendingStore } from "./device-link-pending-store.js";
 import { createDeviceLinkConnectionHandler } from "./device-link-receiver.js";
 import { redeemDeviceLinkOffer, type RedeemSocket } from "./device-link-sender.js";
 import { encodeDeviceLinkOffer } from "./device-link-types.js";
+import type { RootIdentityBundle } from "./root-identity-store.js";
+
+function makeRootIdentity(displayName: string): RootIdentityBundle {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const jwkPub = publicKey.export({ format: "jwk" }) as { x: string };
+  const jwkPriv = privateKey.export({ format: "jwk" }) as { d: string };
+  return {
+    stored: {
+      v: 1,
+      signPublicKeyB64: jwkPub.x,
+      signPrivateKeyB64: jwkPriv.d,
+      displayName,
+      createdAt: new Date(1_700_000_000_000).toISOString(),
+    },
+    signPublicKey: publicKey,
+    signPrivateKey: privateKey,
+  };
+}
 
 /**
  * Builds a sender ↔ receiver in-memory pair. The sender's `RedeemSocket`
@@ -127,13 +147,17 @@ async function attachReceiver(
   });
 }
 
-describe("redeemDeviceLinkOffer (sender)", () => {
-  test("happy path: encrypts a candidate, gets ack, returns accepted with localSecrets", async () => {
+describe("redeemDeviceLinkOffer (sender) — Phase 2.d/e end-to-end", () => {
+  test("happy path: candidate sent → ack → user approves → sender returns linked", async () => {
+    const aliceRoot = makeRootIdentity("Alice");
     const pendingOffers = new DeviceLinkPendingStore();
     const pendingCandidates = new DeviceLinkPendingCandidateStore();
     const handler = createDeviceLinkConnectionHandler({ pendingOffers, pendingCandidates });
 
-    const { pending } = pendingOffers.create(OFFER_FIXTURE);
+    const { pending } = pendingOffers.create({
+      ...OFFER_FIXTURE,
+      rootSignPublicKeyB64: aliceRoot.stored.signPublicKeyB64,
+    });
     const deepLink = encodeDeviceLinkOffer(pending.offer);
 
     const wire = pairFakeSockets();
@@ -146,20 +170,75 @@ describe("redeemDeviceLinkOffer (sender)", () => {
       createSocket: () => wire.senderSocket,
     });
     wire.fireSenderOpen();
-    const result = await promise;
 
-    expect(result.status).toBe("accepted");
-    if (result.status !== "accepted") return;
+    // Yield so the receiver can process the candidate frame and park it.
+    await Promise.resolve();
+
+    // Simulate the OLD device's user tapping "Approve":
+    const stored = pendingCandidates.consume(pending.offer.nonceB64);
+    expect(stored).not.toBeNull();
+    if (!stored) return;
+    const approval = approveDeviceLinkCandidate({
+      candidate: stored.candidate,
+      ephPrivateKeyB64: stored.ephPrivateKeyB64,
+      newDeviceEphPublicKeyB64: stored.newDeviceEphPublicKeyB64,
+      rootIdentity: aliceRoot,
+      existingDevices: [],
+    });
+    // Use the parked socket (same as the wire's receiver end) to deliver
+    // the encrypted reply — exactly what IdentityService.approveDeviceLink
+    // does at runtime.
+    stored.replySocket?.send(JSON.stringify(approval.envelope));
+    stored.replySocket?.close(1000, "approved");
+
+    const result = await promise;
+    expect(result.status).toBe("linked");
+    if (result.status !== "linked") return;
 
     expect(result.candidate.deviceLabel).toBe("Bob's Phone");
-    expect(result.candidate.role).toBe("client");
-    expect(result.localSecrets.deviceId).toBe(result.candidate.deviceId);
-    expect(result.localSecrets.signPublicKeyB64).toBe(result.candidate.signPublicKeyB64);
-    expect(result.offer.displayName).toBe("Alice");
+    expect(result.signedDevice.deviceId).toBe(result.candidate.deviceId);
+    expect(result.signedDevice.signPublicKeyB64).toBe(result.localSecrets.signPublicKeyB64);
+    expect(result.signedDevice.authorizationSignatureB64).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(result.rootIdentity.signPublicKeyB64).toBe(aliceRoot.stored.signPublicKeyB64);
+    expect(result.rootIdentity.displayName).toBe("Alice");
+    expect(result.peerDevices).toHaveLength(1);
+    expect(result.peerDevices[0]?.deviceId).toBe(result.candidate.deviceId);
+  });
 
-    // Receiver side has the candidate parked.
-    const stored = pendingCandidates.get(pending.offer.nonceB64);
-    expect(stored?.candidate.deviceLabel).toBe("Bob's Phone");
+  test("user rejects the candidate → sender returns rejected with user_rejected code", async () => {
+    const pendingOffers = new DeviceLinkPendingStore();
+    const pendingCandidates = new DeviceLinkPendingCandidateStore();
+    const handler = createDeviceLinkConnectionHandler({ pendingOffers, pendingCandidates });
+
+    const { pending } = pendingOffers.create(OFFER_FIXTURE);
+
+    const wire = pairFakeSockets();
+    await attachReceiver(handler, wire.receiverSocket, `device-link:${pending.offer.nonceB64}`);
+
+    const promise = redeemDeviceLinkOffer({
+      deepLinkOrOffer: pending.offer,
+      deviceLabel: "Bob's Phone",
+      role: "client",
+      createSocket: () => wire.senderSocket,
+    });
+    wire.fireSenderOpen();
+    await Promise.resolve();
+
+    const stored = pendingCandidates.consume(pending.offer.nonceB64);
+    if (!stored) throw new Error("expected candidate to be parked");
+    const { envelope } = rejectDeviceLinkCandidate({
+      ephPrivateKeyB64: stored.ephPrivateKeyB64,
+      newDeviceEphPublicKeyB64: stored.newDeviceEphPublicKeyB64,
+      rejectionReason: "not my device",
+    });
+    stored.replySocket?.send(JSON.stringify(envelope));
+    stored.replySocket?.close(1000, "rejected");
+
+    const result = await promise;
+    expect(result.status).toBe("rejected");
+    if (result.status !== "rejected") return;
+    expect(result.errorCode).toBe("user_rejected");
+    expect(result.errorMessage).toContain("not my device");
   });
 
   test("rejected by receiver: sender surfaces the error code with a friendly message", async () => {

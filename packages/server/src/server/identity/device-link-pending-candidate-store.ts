@@ -26,6 +26,17 @@ import type { DeviceLinkOffer } from "./device-link-types.js";
 const DEFAULT_TTL_MS = 10 * 60 * 1000; // 10 minutes — same as offer TTL
 const MAX_CONCURRENT_CANDIDATES = 8;
 
+/**
+ * Minimal subset of the relay-transport socket the approval flow needs.
+ * Defined here (rather than imported from `relay-transport.ts`) so this
+ * store stays a leaf module — keeps the dependency graph a tree and lets
+ * future test/mock socket impls satisfy the shape with just send+close.
+ */
+export interface CandidateReplySocket {
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+}
+
 export interface PendingCandidateRecord {
   /** Mirrors offer.nonceB64. Used as the lookup key end-to-end. */
   readonly nonceB64: string;
@@ -45,6 +56,17 @@ export interface PendingCandidateRecord {
   readonly receivedAtMs: number;
   /** Wall-clock ms after which the record is treated as stale. */
   readonly expiresAtMs: number;
+  /**
+   * Phase 2.e: the still-open relay socket the receiver was talking to
+   * when this candidate landed. Approval/rejection sends the encrypted
+   * reply over this socket and then closes it. Optional because:
+   *   - Records constructed in unit tests may omit a socket.
+   *   - If the new device's WebSocket dies between Phase 2.d and the
+   *     user's approval tap, this field is nulled out and the approval
+   *     gracefully short-circuits to "device went offline before
+   *     approval landed".
+   */
+  readonly replySocket?: CandidateReplySocket;
 }
 
 export interface RecordPendingCandidateInput {
@@ -53,6 +75,8 @@ export interface RecordPendingCandidateInput {
   offer: DeviceLinkOffer;
   ephPrivateKeyB64: string;
   newDeviceEphPublicKeyB64: string;
+  /** See PendingCandidateRecord.replySocket. */
+  replySocket?: CandidateReplySocket;
   /** Override clock for tests. */
   nowMs?: number;
   /** Override TTL for tests. */
@@ -93,6 +117,7 @@ export class DeviceLinkPendingCandidateStore {
       newDeviceEphPublicKeyB64: input.newDeviceEphPublicKeyB64,
       receivedAtMs: nowMs,
       expiresAtMs: nowMs + ttlMs,
+      ...(input.replySocket ? { replySocket: input.replySocket } : {}),
     };
     this.candidates.set(input.nonceB64, record);
     this.logger?.info(

@@ -4,8 +4,15 @@ import type pino from "pino";
 
 import { buildRelayWebSocketUrl } from "../../shared/daemon-endpoints.js";
 
+import { decryptDeviceLinkApprovalEnvelope } from "./device-link-approve.js";
+import {
+  DeviceLinkApprovalEnvelopeSchema,
+  type DeviceLinkApprovalReply,
+} from "./device-link-approve-types.js";
 import { buildDeviceLinkRedemption } from "./device-link-redeem.js";
 import type { CandidateDevice, DeviceLinkRedemption } from "./device-link-redeem-types.js";
+import type { StoredDevice } from "./device-types.js";
+import type { StoredRootIdentity } from "./identity-types.js";
 import { decodeDeviceLinkOffer, type DeviceLinkOffer } from "./device-link-types.js";
 
 /**
@@ -31,7 +38,7 @@ import { decodeDeviceLinkOffer, type DeviceLinkOffer } from "./device-link-types
  * a real relay.
  */
 
-const REDEEM_TIMEOUT_MS = 30_000;
+const REDEEM_TIMEOUT_MS = 5 * 60_000; // 5 minutes — Phase 2.e waits for user-tap approval
 
 export interface RedeemSocket {
   send(data: string): void;
@@ -53,17 +60,31 @@ export interface NewDeviceLocalSecretsForSender {
 
 export type RedeemDeviceLinkOfferOutcome =
   | {
-      readonly status: "accepted";
+      /**
+       * The OLD device approved the link end-to-end. Caller now has
+       * everything needed to bootstrap the new device's identity:
+       * root keypair, signed self-device record, and the OLD device's
+       * device-list snapshot at the time of approval.
+       */
+      readonly status: "linked";
       readonly candidate: CandidateDevice;
       readonly offer: DeviceLinkOffer;
       readonly localSecrets: NewDeviceLocalSecretsForSender;
+      readonly rootIdentity: StoredRootIdentity;
+      readonly signedDevice: StoredDevice;
+      readonly peerDevices: readonly StoredDevice[];
     }
   | {
       readonly status: "rejected";
       /**
-       * Receiver-side error code (`no_offer`, `decrypt_failed`,
-       * `nonce_mismatch`, `bad_schema`, `bad_json`, `bad_frame`,
-       * `too_large`) — or one of the local error codes below.
+       * Coded reason. Receiver-side codes from Phase 2.d
+       * (`no_offer`, `decrypt_failed`, `nonce_mismatch`, `bad_schema`,
+       * `bad_json`, `bad_frame`, `too_large`), Phase 2.e codes
+       * (`user_rejected`, `approval_decrypt_failed`,
+       * `approval_schema_invalid`, `approval_unexpected`), or local-
+       * sender codes (`offer_expired`, `build_failed`, `send_failed`,
+       * `timeout`, `connection_closed`, `socket_error`,
+       * `bad_response_frame`, `bad_response_json`).
        */
       readonly errorCode: string;
       readonly errorMessage: string;
@@ -182,6 +203,15 @@ export async function redeemDeviceLinkOffer(
       }
     });
 
+    // Two-stage protocol from the receiver:
+    //   1. `{type:"candidate-received"}` ack — flips ackReceived = true
+    //      and we keep listening for the approval envelope.
+    //   2. `DeviceLinkApprovalEnvelope` (kind: "device-link-approval-
+    //      envelope") — decrypted into the final approved/rejected reply.
+    //   At either stage, an `{type:"error", code:"..."}` short-circuits
+    //   to a rejected outcome.
+    let ackReceived = false;
+
     socket.on("message", (raw) => {
       const text = decodeMessage(raw);
       if (text === null) {
@@ -207,18 +237,16 @@ export async function redeemDeviceLinkOffer(
         return;
       }
 
-      const reply = parsed as { type?: unknown; code?: unknown };
-      if (reply.type === "candidate-received") {
-        cleanup();
-        log?.info("device_link_sender_accepted");
-        settle({
-          status: "accepted",
-          candidate: built.candidate,
-          offer: built.offer,
-          localSecrets: built.localSecrets,
-        });
+      const reply = parsed as { type?: unknown; code?: unknown; kind?: unknown };
+
+      // Stage 1: receiver acked the candidate. Stay open.
+      if (!ackReceived && reply.type === "candidate-received") {
+        ackReceived = true;
+        log?.info("device_link_sender_ack_received");
         return;
       }
+
+      // Either stage: receiver-side error short-circuits.
       if (reply.type === "error") {
         cleanup();
         const code = typeof reply.code === "string" ? reply.code : "unknown";
@@ -231,11 +259,71 @@ export async function redeemDeviceLinkOffer(
         return;
       }
 
+      // Stage 2: approval envelope. Schema-validate, decrypt, classify.
+      if (reply.kind === "device-link-approval-envelope") {
+        const validated = DeviceLinkApprovalEnvelopeSchema.safeParse(parsed);
+        if (!validated.success) {
+          cleanup();
+          settle({
+            status: "rejected",
+            errorCode: "approval_schema_invalid",
+            errorMessage: "Approval envelope failed schema validation",
+          });
+          return;
+        }
+
+        let approvalReply: DeviceLinkApprovalReply;
+        try {
+          approvalReply = decryptDeviceLinkApprovalEnvelope({
+            envelope: validated.data,
+            newDeviceEphPrivateKeyB64: built.localSecrets.ephPrivateKeyB64,
+            offerEphPublicKeyB64: built.offer.ephPublicKeyB64,
+          });
+        } catch (err) {
+          cleanup();
+          log?.warn({ err }, "device_link_sender_approval_decrypt_failed");
+          settle({
+            status: "rejected",
+            errorCode: "approval_decrypt_failed",
+            errorMessage:
+              err instanceof Error ? err.message : "Failed to decrypt approval envelope",
+          });
+          return;
+        }
+
+        cleanup();
+        if (approvalReply.status === "approved") {
+          log?.info({ deviceId: approvalReply.signedDevice.deviceId }, "device_link_sender_linked");
+          settle({
+            status: "linked",
+            candidate: built.candidate,
+            offer: built.offer,
+            localSecrets: built.localSecrets,
+            rootIdentity: approvalReply.rootIdentity,
+            signedDevice: approvalReply.signedDevice,
+            peerDevices: approvalReply.peerDevices,
+          });
+        } else {
+          log?.info({ reason: approvalReply.rejectionReason }, "device_link_sender_user_rejected");
+          settle({
+            status: "rejected",
+            errorCode: "user_rejected",
+            errorMessage:
+              approvalReply.rejectionReason && approvalReply.rejectionReason.length > 0
+                ? approvalReply.rejectionReason
+                : "The other device declined the link",
+          });
+        }
+        return;
+      }
+
       cleanup();
       settle({
         status: "rejected",
-        errorCode: "unexpected_response",
-        errorMessage: `Receiver sent an unexpected message type: ${String(reply.type)}`,
+        errorCode: "approval_unexpected",
+        errorMessage: `Receiver sent an unexpected message type: ${String(
+          reply.type ?? reply.kind,
+        )}`,
       });
     });
 

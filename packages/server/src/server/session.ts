@@ -2223,9 +2223,88 @@ export class Session {
         return this.handleDeviceLinkCancelRequest(msg);
       case "device/link/redeem":
         return this.handleDeviceLinkRedeemRequest(msg);
+      case "device/link/candidates":
+        return this.handleDeviceLinkCandidatesRequest(msg);
+      case "device/link/approve":
+        return this.handleDeviceLinkApproveRequest(msg);
+      case "device/link/reject":
+        return this.handleDeviceLinkRejectRequest(msg);
       default:
         return undefined;
     }
+  }
+
+  private async handleDeviceLinkCandidatesRequest(
+    request: Extract<SessionInboundMessage, { type: "device/link/candidates" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "device/link/candidates/response",
+        payload: {
+          requestId: request.requestId,
+          candidates: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const candidates = this.identityService.listPendingDeviceLinkCandidates();
+    this.emit({
+      type: "device/link/candidates/response",
+      payload: { requestId: request.requestId, candidates: [...candidates], error: null },
+    });
+  }
+
+  private async handleDeviceLinkApproveRequest(
+    request: Extract<SessionInboundMessage, { type: "device/link/approve" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "device/link/approve/response",
+        payload: {
+          requestId: request.requestId,
+          approved: false,
+          devices: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.approveDeviceLink(request.nonceB64);
+    this.emit({
+      type: "device/link/approve/response",
+      payload: {
+        requestId: request.requestId,
+        approved: result.approved,
+        devices: result.devices ? [...result.devices] : null,
+        error: result.error,
+      },
+    });
+  }
+
+  private async handleDeviceLinkRejectRequest(
+    request: Extract<SessionInboundMessage, { type: "device/link/reject" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "device/link/reject/response",
+        payload: {
+          requestId: request.requestId,
+          rejected: false,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.rejectDeviceLink(request.nonceB64, request.reason);
+    this.emit({
+      type: "device/link/reject/response",
+      payload: {
+        requestId: request.requestId,
+        rejected: result.rejected,
+        error: result.error,
+      },
+    });
   }
 
   private async handleDeviceLinkGenerateRequest(
@@ -2326,7 +2405,7 @@ export class Session {
         role: request.role,
       });
 
-      if (outcome.status === "accepted") {
+      if (outcome.status === "linked") {
         this.emit({
           type: "device/link/redeem/response",
           payload: {

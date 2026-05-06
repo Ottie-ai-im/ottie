@@ -1526,8 +1526,9 @@ export class DaemonClient {
     requestId?: string;
     /**
      * Generous default — the redeem flow opens a relay WebSocket to the
-     * OLD device, sends a payload, and waits for an ack. 60s covers slow
-     * networks and the new-device-side WebSocket dial.
+     * OLD device, sends a payload, and waits for the OLD device's user
+     * to approve. 5 minutes is roomy because the user-tap latency
+     * dominates here (Phase 2.e socket stays open through the wait).
      */
     timeoutMs?: number;
   }): Promise<{
@@ -1544,11 +1545,77 @@ export class DaemonClient {
         deviceLabel: args.deviceLabel,
         role: args.role,
       },
-      timeout: args.timeoutMs ?? 60_000,
+      timeout: args.timeoutMs ?? 5 * 60_000,
       select: (msg) => {
         if (msg.type !== "device/link/redeem/response") return null;
         if (msg.payload.requestId !== requestId) return null;
         return { outcome: msg.payload.outcome, error: msg.payload.error };
+      },
+    });
+  }
+
+  async deviceLinkCandidates(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    candidates:
+      | readonly import("../server/identity/identity-rpc-schemas.js").PendingDeviceLinkCandidateOnWire[]
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "device/link/candidates", requestId },
+      timeout: params?.timeoutMs ?? 5_000,
+      select: (msg) => {
+        if (msg.type !== "device/link/candidates/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { candidates: msg.payload.candidates, error: msg.payload.error };
+      },
+    });
+  }
+
+  async deviceLinkApprove(
+    nonceB64: string,
+    params?: { requestId?: string; timeoutMs?: number },
+  ): Promise<{
+    approved: boolean;
+    devices: readonly import("../server/identity/identity-rpc-schemas.js").PublicDevice[] | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "device/link/approve", requestId, nonceB64 },
+      timeout: params?.timeoutMs ?? 10_000,
+      select: (msg) => {
+        if (msg.type !== "device/link/approve/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return {
+          approved: msg.payload.approved,
+          devices: msg.payload.devices,
+          error: msg.payload.error,
+        };
+      },
+    });
+  }
+
+  async deviceLinkReject(
+    nonceB64: string,
+    params?: { requestId?: string; timeoutMs?: number; reason?: string },
+  ): Promise<{ rejected: boolean; error: string | null }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "device/link/reject",
+        requestId,
+        nonceB64,
+        ...(params?.reason ? { reason: params.reason } : {}),
+      },
+      timeout: params?.timeoutMs ?? 5_000,
+      select: (msg) => {
+        if (msg.type !== "device/link/reject/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { rejected: msg.payload.rejected, error: msg.payload.error };
       },
     });
   }
