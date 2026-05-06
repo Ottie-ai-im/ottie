@@ -7,11 +7,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, Plus } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
+import type { DaemonClient } from "@server/client/daemon-client";
 import type {
   IdentityStateOnWire,
+  PendingDeviceLinkCandidateOnWire,
   PublicDevice,
 } from "@server/server/identity/identity-rpc-schemas";
 import type { HostProfile } from "@/types/host-connection";
+
+const PENDING_POLL_MS = 3_000;
 
 // Phase 1.f — read-only "My identity & devices" page.
 // Phase 2.b adds: device list comes from the new device/list RPC instead of
@@ -122,6 +126,11 @@ const styles = StyleSheet.create((theme) => {
     addDeviceButtonRow: {
       marginTop: theme.spacing[3],
       flexDirection: "row" as const,
+    },
+    pendingButtonRow: {
+      marginTop: theme.spacing[2],
+      flexDirection: "row" as const,
+      gap: theme.spacing[3],
     },
     warningCard: {
       backgroundColor: theme.colors.surfaceGlass,
@@ -380,6 +389,152 @@ function LoadedBody({
           </Button>
         </View>
       )}
+
+      <PendingCandidatesSection serverId={fetchState.serverId} t={t} />
+    </View>
+  );
+}
+
+function PendingCandidatesSection({
+  serverId,
+  t,
+}: {
+  serverId: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const client = useHostRuntimeClient(serverId);
+  const [candidates, setCandidates] = useState<readonly PendingDeviceLinkCandidateOnWire[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busyNonce, setBusyNonce] = useState<string | null>(null);
+
+  const refresh = useCallback(async (clientRef: DaemonClient | null) => {
+    if (!clientRef) return;
+    try {
+      const response = await clientRef.deviceLinkCandidates();
+      if (response.error) {
+        setLoadError(response.error);
+      } else {
+        setLoadError(null);
+        setCandidates(response.candidates ?? []);
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      void refresh(client);
+    };
+    tick();
+    const id = setInterval(tick, PENDING_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [client, refresh]);
+
+  const handleApprove = useCallback(
+    async (nonceB64: string) => {
+      if (!client) return;
+      setBusyNonce(nonceB64);
+      try {
+        await client.deviceLinkApprove(nonceB64);
+      } finally {
+        setBusyNonce(null);
+        void refresh(client);
+      }
+    },
+    [client, refresh],
+  );
+  const handleReject = useCallback(
+    async (nonceB64: string) => {
+      if (!client) return;
+      setBusyNonce(nonceB64);
+      try {
+        await client.deviceLinkReject(nonceB64);
+      } finally {
+        setBusyNonce(null);
+        void refresh(client);
+      }
+    },
+    [client, refresh],
+  );
+
+  if (candidates.length === 0 && !loadError) {
+    return null;
+  }
+
+  return (
+    <View>
+      <Text style={styles.sectionTitleSpaced}>{t("identitySettings.pendingSection")}</Text>
+      {loadError ? (
+        <View style={styles.cardSpaced}>
+          <Text style={styles.helper}>{t("identitySettings.pendingRefreshFailed")}</Text>
+        </View>
+      ) : null}
+      {candidates.map((c, idx) => (
+        <PendingCandidateCard
+          key={c.nonceB64}
+          candidate={c}
+          index={idx}
+          busy={busyNonce === c.nonceB64}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          t={t}
+        />
+      ))}
+      <Text style={styles.helperSpaced}>{t("identitySettings.pendingHelper")}</Text>
+    </View>
+  );
+}
+
+function PendingCandidateCard({
+  candidate,
+  index,
+  busy,
+  onApprove,
+  onReject,
+  t,
+}: {
+  candidate: PendingDeviceLinkCandidateOnWire;
+  index: number;
+  busy: boolean;
+  onApprove: (nonceB64: string) => Promise<void>;
+  onReject: (nonceB64: string) => Promise<void>;
+  t: (key: string) => string;
+}) {
+  const handleApprovePress = useCallback(() => {
+    void onApprove(candidate.nonceB64);
+  }, [candidate.nonceB64, onApprove]);
+  const handleRejectPress = useCallback(() => {
+    void onReject(candidate.nonceB64);
+  }, [candidate.nonceB64, onReject]);
+  return (
+    <View style={index === 0 ? styles.cardSpaced : styles.cardCompactSpaced}>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.deviceLabel")}</Text>
+        <Text style={styles.rowValue}>{candidate.deviceLabel}</Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.role")}</Text>
+        <Text style={styles.rowValue}>{candidate.role}</Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.pendingRequestedAt")}</Text>
+        <Text style={styles.rowValue}>{candidate.receivedAt}</Text>
+      </View>
+      <View style={styles.pendingButtonRow}>
+        <Button variant="default" onPress={handleApprovePress} disabled={busy}>
+          {t("identitySettings.pendingApprove")}
+        </Button>
+        <Button variant="secondary" onPress={handleRejectPress} disabled={busy}>
+          {t("identitySettings.pendingReject")}
+        </Button>
+      </View>
     </View>
   );
 }

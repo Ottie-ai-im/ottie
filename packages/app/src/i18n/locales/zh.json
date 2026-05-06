@@ -51,7 +51,13 @@
     "role": "角色",
     "authorizedAt": "授权时间",
     "addDevice": "添加设备",
-    "devicesComingSoon": "添加其他设备的功能即将推出。"
+    "devicesComingSoon": "添加其他设备的功能即将推出。",
+    "pendingSection": "待审批的设备请求",
+    "pendingHelper": "有一台新设备申请加入你的账号。批准会用你的根密钥为它签名,拒绝则丢弃这次申请。",
+    "pendingApprove": "批准",
+    "pendingReject": "拒绝",
+    "pendingRequestedAt": "请求时间",
+    "pendingRefreshFailed": "无法加载待审批的设备请求。"
   },
   "addDevice": {
     "title": "添加设备",
@@ -63,6 +69,24 @@
     "copied": "已复制",
     "regenerate": "重新生成",
     "genericError": "无法生成设备配对凭据,请重试。"
+  },
+  "linkDevice": {
+    "title": "把这台设备加入你的账号",
+    "subtitle": "粘贴另一台设备显示的链接。提交后,在另一台设备上点「批准」完成配对。",
+    "linkLabel": "设备配对链接",
+    "linkPlaceholder": "ottie://device-link#payload=…",
+    "deviceLabelLabel": "为这台设备命名",
+    "deviceLabelPlaceholder": "例如:工作笔记本",
+    "submit": "加入账号",
+    "submitting": "已发送 — 等待另一台设备批准…",
+    "linked": "已加入。这台设备现在可以使用同一个账号。",
+    "errorMissingLink": "请先粘贴另一台设备显示的链接。",
+    "errorMissingLabel": "给这台设备起个名字,方便另一台设备识别。",
+    "errorPrefix": "无法配对",
+    "rejectedByUser": "对方拒绝了这次配对。",
+    "rejectedNoOffer": "链接已过期或已被使用,请在另一台设备重新生成。",
+    "rejectedTimeout": "等待对方批准超时。",
+    "rejectedConnectionClosed": "连接中断,请重试。"
   },
   "welcome": {
     "title": "欢迎使用 Ottie",
@@ -535,7 +559,8 @@
       "scanToPair": "扫一扫配对",
       "joinHost": "加入 host",
       "createWorkspace": "创建 workspace",
-      "addDevice": "添加设备"
+      "addDevice": "添加设备",
+      "linkToExisting": "把这台设备加入已有账号"
     },
     "swipe": {
       "markRead": "已读",

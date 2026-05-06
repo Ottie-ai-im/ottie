@@ -38,6 +38,7 @@ const ITEMS: ReadonlyArray<AddMenuItem> = [
   { id: "chat.add.joinHost", labelKey: "chat.add.joinHost" },
   { id: "chat.add.createWorkspace", labelKey: "chat.add.createWorkspace" },
   { id: "chat.add.addDevice", labelKey: "chat.add.addDevice" },
+  { id: "chat.add.linkToExisting", labelKey: "chat.add.linkToExisting" },
 ];
 
 export function TopRightAddMenu({ serverId, testID }: TopRightAddMenuProps) {

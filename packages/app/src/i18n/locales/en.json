@@ -51,7 +51,13 @@
     "role": "Role",
     "authorizedAt": "Authorized",
     "addDevice": "Add device",
-    "devicesComingSoon": "Linking additional devices is coming soon."
+    "devicesComingSoon": "Linking additional devices is coming soon.",
+    "pendingSection": "Pending device requests",
+    "pendingHelper": "A new device is asking to join your identity. Approve to sign it under your account, or reject to refuse.",
+    "pendingApprove": "Approve",
+    "pendingReject": "Reject",
+    "pendingRequestedAt": "Requested",
+    "pendingRefreshFailed": "Couldn't load pending device requests."
   },
   "addDevice": {
     "title": "Add device",
@@ -63,6 +69,24 @@
     "copied": "Copied",
     "regenerate": "Generate new",
     "genericError": "Could not generate a device-link offer. Please try again."
+  },
+  "linkDevice": {
+    "title": "Link this device",
+    "subtitle": "Paste the link the existing device showed you. After you submit, the user on the other device taps Approve to confirm.",
+    "linkLabel": "Device-link",
+    "linkPlaceholder": "ottie://device-link#payload=…",
+    "deviceLabelLabel": "Name for this device",
+    "deviceLabelPlaceholder": "e.g. Work laptop",
+    "submit": "Link this device",
+    "submitting": "Linking — waiting for approval on the other device…",
+    "linked": "Linked. You can now use this device under the same identity.",
+    "errorMissingLink": "Paste the link from the existing device first.",
+    "errorMissingLabel": "Choose a label so the other device can recognize this one.",
+    "errorPrefix": "Couldn't link this device",
+    "rejectedByUser": "The other device declined the link.",
+    "rejectedNoOffer": "The link has expired or already been used. Generate a new one.",
+    "rejectedTimeout": "Timed out waiting for the other device to approve.",
+    "rejectedConnectionClosed": "Lost the connection while waiting. Try again."
   },
   "welcome": {
     "title": "Welcome to Ottie",
@@ -535,7 +559,8 @@
       "scanToPair": "Scan to pair",
       "joinHost": "Join host",
       "createWorkspace": "Create workspace",
-      "addDevice": "Add device"
+      "addDevice": "Add device",
+      "linkToExisting": "Link this device to an account"
     },
     "swipe": {
       "markRead": "Read",

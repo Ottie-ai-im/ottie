@@ -275,6 +275,30 @@ export function registerChatRowActions(): void {
       },
     }),
   );
+
+  // Phase 2.d-ui — the inverse of addDevice: this device is the NEW
+  // one, pasting a link from an existing device to join its identity.
+  // Kept under chat.add.* for menu-grouping symmetry — the user's
+  // mental model is "I'm joining an account from another device".
+  actionRegistry.register(
+    defineAction("chat.add.linkToExisting", {
+      description: "Link this device to an existing identity (paste link from another device)",
+      modalities: ["menu", "cmdk"],
+      schema: OptionalServerPayload,
+      handler: async (payload) => {
+        const { router } = await import("expo-router");
+        const serverId = payload?.serverId;
+        if (typeof serverId === "string" && serverId.length > 0) {
+          router.push({
+            pathname: "/onboarding/link-existing-device",
+            params: { serverId },
+          });
+        } else {
+          router.push("/onboarding/link-existing-device");
+        }
+      },
+    }),
+  );
 }
 
 // Side-effect: register on first import.
