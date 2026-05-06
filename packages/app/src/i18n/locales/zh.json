@@ -57,7 +57,13 @@
     "pendingApprove": "批准",
     "pendingReject": "拒绝",
     "pendingRequestedAt": "请求时间",
-    "pendingRefreshFailed": "无法加载待审批的设备请求。"
+    "pendingRefreshFailed": "无法加载待审批的设备请求。",
+    "removeDevice": "移除设备",
+    "removing": "正在移除…",
+    "removeFailed": "无法移除设备",
+    "removeConfirmTitle": "确定移除「{{label}}」?",
+    "removeConfirmBody": "这台设备将失去对你账号的访问权限。你账号下其他设备会在几秒内同步看到此变更。如需重新加入,在另一台设备生成新的配对二维码即可。",
+    "removeConfirmAction": "移除"
   },
   "addDevice": {
     "title": "添加设备",

@@ -57,7 +57,13 @@
     "pendingApprove": "Approve",
     "pendingReject": "Reject",
     "pendingRequestedAt": "Requested",
-    "pendingRefreshFailed": "Couldn't load pending device requests."
+    "pendingRefreshFailed": "Couldn't load pending device requests.",
+    "removeDevice": "Remove device",
+    "removing": "Removing…",
+    "removeFailed": "Couldn't remove device",
+    "removeConfirmTitle": "Remove {{label}}?",
+    "removeConfirmBody": "This device will lose access to your account. Other devices under your identity will see the change within a few seconds. You can re-add it later by scanning a new device-link QR.",
+    "removeConfirmAction": "Remove"
   },
   "addDevice": {
     "title": "Add device",

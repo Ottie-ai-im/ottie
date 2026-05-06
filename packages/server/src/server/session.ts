@@ -2229,9 +2229,38 @@ export class Session {
         return this.handleDeviceLinkApproveRequest(msg);
       case "device/link/reject":
         return this.handleDeviceLinkRejectRequest(msg);
+      case "device/remove":
+        return this.handleDeviceRemoveRequest(msg);
       default:
         return undefined;
     }
+  }
+
+  private async handleDeviceRemoveRequest(
+    request: Extract<SessionInboundMessage, { type: "device/remove" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "device/remove/response",
+        payload: {
+          requestId: request.requestId,
+          removed: false,
+          devices: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.removeDevice(request.deviceId);
+    this.emit({
+      type: "device/remove/response",
+      payload: {
+        requestId: request.requestId,
+        removed: result.removed,
+        devices: result.devices ? [...result.devices] : null,
+        error: result.error,
+      },
+    });
   }
 
   private async handleDeviceLinkCandidatesRequest(

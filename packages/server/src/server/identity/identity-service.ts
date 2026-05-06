@@ -4,7 +4,11 @@ import type pino from "pino";
 import type { RelayConnectionHandler } from "../relay-transport.js";
 
 import { buildAuthorizedDevice, loadDeviceList, saveDeviceList } from "./device-list-store.js";
-import { applyDeviceListEvent, signDeviceAddedEvent } from "./device-list-event.js";
+import {
+  applyDeviceListEvent,
+  signDeviceAddedEvent,
+  signDeviceRemovedEvent,
+} from "./device-list-event.js";
 import { DeviceListEventStore } from "./device-list-event-store.js";
 import type { DeviceListEvent } from "./device-list-event-types.js";
 import { DeviceLinkPendingCandidateStore } from "./device-link-pending-candidate-store.js";
@@ -431,7 +435,7 @@ export class IdentityService {
 
     // 2. Self-device file (this device's own signing keypair, generated
     // locally during Phase 2.d sender, signed by the OLD device's root).
-    writeImportedSelfDevice(
+    const selfBundle = writeImportedSelfDevice(
       this.ottieHome,
       {
         v: 1,
@@ -448,13 +452,12 @@ export class IdentityService {
     saveDeviceList(this.ottieHome, list, this.logger);
 
     // 4. Sync in-memory state so subsequent RPCs see "loaded" without
-    // needing a daemon restart.
+    // needing a daemon restart. Phase 2.f/2.g need self-device in
+    // memory for outbound event signing, so cache the bundle here
+    // (not just the file write — the bundle carries the live KeyObject).
     this.state = { kind: "loaded", bundle: rootBundle };
     this.deviceList = list;
-    // We don't re-load self-device into memory — currently it's only
-    // consumed during cross-device sync flows that re-read the file
-    // when needed. ensureSelfDevice() does that for fresh installs.
-    // Future Phase 2.f will revisit if hot-loading is needed here.
+    this.selfDevice = selfBundle;
 
     this.logger.info(
       {
@@ -629,6 +632,97 @@ export class IdentityService {
       "Device-link candidate rejected",
     );
     return { rejected: true, error: null };
+  }
+
+  /**
+   * Phase 2.g: remove a device from the user's device list.
+   *
+   * Behavior:
+   *   - Refuses to remove THIS daemon's own self-device (would trip the
+   *     self-device safety re-add on next boot, and is the user's
+   *     responsibility — to revoke "this" device they should sign out
+   *     locally + uninstall, then have another device remove it).
+   *   - Removes from in-memory + on-disk devices.json.
+   *   - Emits a signed `device-removed` event into the local log.
+   *   - Broadcasts the event to all active peer-sync sessions so
+   *     the other daemons under this identity see the removal within
+   *     a heartbeat (Phase 2.f/3 broadcast pipeline).
+   *   - Closes the dropped peer's session (if any) so the relay
+   *     stops carrying their traffic to/from us.
+   *
+   * Returns { removed, devices, error }: `devices` is the new
+   * snapshot, or null on error.
+   */
+  removeDevice(deviceId: string): {
+    removed: boolean;
+    devices: readonly StoredDevice[] | null;
+    error: string | null;
+  } {
+    if (this.state.kind !== "loaded") {
+      return {
+        removed: false,
+        devices: null,
+        error: "Cannot remove device — root identity not loaded",
+      };
+    }
+    if (!this.deviceList) {
+      return {
+        removed: false,
+        devices: null,
+        error: "Cannot remove device — device list not initialized",
+      };
+    }
+    if (this.selfDeviceContext && deviceId === this.selfDeviceContext.serverId) {
+      return {
+        removed: false,
+        devices: null,
+        error:
+          "Refusing to remove this device's own record from itself. " +
+          "Use another device under the same identity to remove this one.",
+      };
+    }
+
+    const target = this.deviceList.devices.find((d) => d.deviceId === deviceId);
+    if (!target) {
+      return { removed: false, devices: null, error: "Device not in the device list" };
+    }
+
+    const updated: StoredDeviceList = {
+      v: 1,
+      devices: this.deviceList.devices.filter((d) => d.deviceId !== deviceId),
+    };
+    try {
+      saveDeviceList(this.ottieHome, updated, this.logger);
+    } catch (err) {
+      return {
+        removed: false,
+        devices: null,
+        error: `Failed to persist device list: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    this.deviceList = updated;
+
+    // Emit + broadcast the device-removed event. Peers apply
+    // idempotently and will drop the device from their own lists.
+    this.tryEmitDeviceRemovedEvent(deviceId);
+
+    // Close any active peer-sync session with the removed device —
+    // we no longer trust them, so stop talking. The dialer's per-peer
+    // state stays around, but next dial attempt will be against a
+    // peer that's no longer in the device list, so refreshTargets
+    // won't redial.
+    this.peerSessions.remove(deviceId);
+
+    this.logger.info(
+      {
+        deviceId,
+        deviceLabel: target.deviceLabel,
+        role: target.role,
+      },
+      "Device removed",
+    );
+
+    return { removed: true, devices: updated.devices, error: null };
   }
 
   // ----- Phase 2.f: device-list event log --------------------------------
@@ -809,10 +903,39 @@ export class IdentityService {
     }
   }
 
-  // tryEmitDeviceRemovedEvent (counterpart to tryEmitDeviceAddedEvent)
-  // lands in Phase 2.g when the "Remove device" UI/RPC arrives. Inbound
-  // device-removed events from peers already work via
-  // applyInboundDeviceListEvent.
+  /**
+   * Phase 2.g: counterpart to tryEmitDeviceAddedEvent. Signs a
+   * device-removed event with this daemon's self-device key, appends
+   * to the local log, and broadcasts to all peer sessions.
+   *
+   * Failure here is non-fatal — devices.json is already updated, the
+   * removal "took" locally, just won't propagate this round. Phase
+   * 2.f/3's catch-up replay will resync on next reconnect.
+   */
+  private tryEmitDeviceRemovedEvent(removedDeviceId: string): void {
+    if (!this.selfDevice || !this.selfDeviceContext) {
+      this.logger.warn(
+        { removedDeviceId },
+        "Cannot emit device-removed event — self-device not loaded",
+      );
+      return;
+    }
+    try {
+      const event = signDeviceRemovedEvent({
+        removedDeviceId,
+        sourceDeviceId: this.selfDeviceContext.serverId,
+        signPrivateKey: this.selfDevice.signPrivateKey,
+        seq: this.events.nextSelfSeq(this.selfDeviceContext.serverId),
+      });
+      this.events.append(event);
+      this.broadcastEvent(event);
+    } catch (err) {
+      this.logger.warn(
+        { err, removedDeviceId },
+        "Failed to emit device-removed event (non-fatal — device-list write already succeeded)",
+      );
+    }
+  }
 
   private sendThenClose(
     socket:

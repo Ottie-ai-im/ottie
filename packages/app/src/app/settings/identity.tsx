@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, Plus } from "lucide-react-native";
+import { ChevronLeft, Plus, Trash2 } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
 import type { DaemonClient } from "@server/client/daemon-client";
@@ -131,6 +131,11 @@ const styles = StyleSheet.create((theme) => {
       marginTop: theme.spacing[2],
       flexDirection: "row" as const,
       gap: theme.spacing[3],
+    },
+    removeButtonRow: {
+      marginTop: theme.spacing[3],
+      flexDirection: "row" as const,
+      justifyContent: "flex-end" as const,
     },
     warningCard: {
       backgroundColor: theme.colors.surfaceGlass,
@@ -351,33 +356,14 @@ function LoadedBody({
         </View>
       ) : (
         fetchState.devices.map((device, index) => (
-          <View
+          <DeviceRow
             key={device.deviceId}
-            style={index === 0 ? styles.cardSpaced : styles.cardCompactSpaced}
-          >
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>
-                {device.deviceId === serverId
-                  ? t("identitySettings.thisDevice")
-                  : t("identitySettings.deviceLabel")}
-              </Text>
-              <Text style={styles.rowValue}>
-                {device.deviceLabel} ({device.signPublicKeyB64.slice(0, 8)})
-              </Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>{t("identitySettings.role")}</Text>
-              <Text style={styles.rowValue}>{device.role}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>{t("identitySettings.deviceId")}</Text>
-              <Text style={styles.rowValueMono}>{device.deviceId}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>{t("identitySettings.authorizedAt")}</Text>
-              <Text style={styles.rowValue}>{device.authorizedAt}</Text>
-            </View>
-          </View>
+            device={device}
+            index={index}
+            isSelf={device.deviceId === serverId}
+            serverId={fetchState.serverId}
+            t={t}
+          />
         ))
       )}
       {fetchState.devices.length === 0 ? (
@@ -391,6 +377,111 @@ function LoadedBody({
       )}
 
       <PendingCandidatesSection serverId={fetchState.serverId} t={t} />
+    </View>
+  );
+}
+
+function DeviceRow({
+  device,
+  index,
+  isSelf,
+  serverId,
+  t,
+}: {
+  device: PublicDevice;
+  index: number;
+  isSelf: boolean;
+  serverId: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const { theme } = useUnistyles();
+  const client = useHostRuntimeClient(serverId);
+  const [busy, setBusy] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  const performRemove = useCallback(async () => {
+    if (!client || busy) return;
+    setBusy(true);
+    setRemoveError(null);
+    try {
+      const response = await client.deviceRemove(device.deviceId);
+      if (response.error || !response.removed) {
+        setRemoveError(response.error ?? t("identitySettings.removeFailed"));
+      }
+      // On success the parent fetchState's devices array is stale, but
+      // the next /settings/identity render-cycle (after the user
+      // navigates back, or the next pending-candidates poll) will
+      // refresh it. For immediate feedback, reach for a router.replace
+      // would help — but keeping the simple "stale until reload" UX
+      // since the row stays correct at the moment of removal.
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, client, device.deviceId, t]);
+
+  const handleRemovePress = useCallback(() => {
+    Alert.alert(
+      t("identitySettings.removeConfirmTitle", { label: device.deviceLabel }),
+      t("identitySettings.removeConfirmBody"),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("identitySettings.removeConfirmAction"),
+          style: "destructive",
+          onPress: () => {
+            void performRemove();
+          },
+        },
+      ],
+    );
+  }, [device.deviceLabel, performRemove, t]);
+
+  const trashIcon = useMemo(
+    () => <Trash2 size={14} color={theme.colors.destructive} />,
+    [theme.colors.destructive],
+  );
+
+  return (
+    <View style={index === 0 ? styles.cardSpaced : styles.cardCompactSpaced}>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>
+          {isSelf ? t("identitySettings.thisDevice") : t("identitySettings.deviceLabel")}
+        </Text>
+        <Text style={styles.rowValue}>
+          {device.deviceLabel} ({device.signPublicKeyB64.slice(0, 8)})
+        </Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.role")}</Text>
+        <Text style={styles.rowValue}>{device.role}</Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.deviceId")}</Text>
+        <Text style={styles.rowValueMono}>{device.deviceId}</Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.authorizedAt")}</Text>
+        <Text style={styles.rowValue}>{device.authorizedAt}</Text>
+      </View>
+      {!isSelf ? (
+        <View style={styles.removeButtonRow}>
+          <Button
+            variant="secondary"
+            onPress={handleRemovePress}
+            disabled={busy}
+            leftIcon={trashIcon}
+          >
+            {busy ? t("identitySettings.removing") : t("identitySettings.removeDevice")}
+          </Button>
+        </View>
+      ) : null}
+      {removeError ? (
+        <Text style={styles.warningText}>
+          {t("identitySettings.removeFailed")}: {removeError}
+        </Text>
+      ) : null}
     </View>
   );
 }

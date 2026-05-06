@@ -298,3 +298,25 @@ export const DeviceLinkRejectResponseSchema = z.object({
     error: z.string().nullable(),
   }),
 });
+
+// ----- device/remove (Phase 2.g) -----------------------------------------
+// Remove a peer device from THIS user's device list. Refused for self
+// (a daemon can't sign its own revocation — use another device).
+
+export const DeviceRemoveRequestSchema = z.object({
+  type: z.literal("device/remove"),
+  requestId: z.string(),
+  deviceId: z.string().min(1),
+});
+
+export const DeviceRemoveResponseSchema = z.object({
+  type: z.literal("device/remove/response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** True if the local device list lost the entry. */
+    removed: z.boolean(),
+    /** New device list snapshot, or null on error. */
+    devices: z.array(DeviceSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});

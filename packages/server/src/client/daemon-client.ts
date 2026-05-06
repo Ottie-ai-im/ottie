@@ -1620,6 +1620,31 @@ export class DaemonClient {
     });
   }
 
+  async deviceRemove(
+    deviceId: string,
+    params?: { requestId?: string; timeoutMs?: number },
+  ): Promise<{
+    removed: boolean;
+    devices: readonly import("../server/identity/identity-rpc-schemas.js").PublicDevice[] | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "device/remove", requestId, deviceId },
+      timeout: params?.timeoutMs ?? 10_000,
+      select: (msg) => {
+        if (msg.type !== "device/remove/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return {
+          removed: msg.payload.removed,
+          devices: msg.payload.devices,
+          error: msg.payload.error,
+        };
+      },
+    });
+  }
+
   // ============================================================================
   // Agent RPCs (requestId-correlated)
   // ============================================================================

@@ -489,3 +489,120 @@ describe("IdentityService — Phase 2.f device-list event log", () => {
     expect(reloaded.getDeviceList()).toHaveLength(2);
   });
 });
+
+describe("IdentityService.removeDevice — Phase 2.g", () => {
+  test("refuses to remove this daemon's own self-device", () => {
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_self", deviceLabel: "Self" },
+    });
+    svc.initialize("Wendell");
+
+    const selfDevice = svc.getSelfDevice();
+    expect(selfDevice?.deviceId).toBe("srv_self");
+    const result = svc.removeDevice("srv_self");
+    expect(result.removed).toBe(false);
+    expect(result.error).toMatch(/refusing to remove this device's own/i);
+    expect(svc.getDeviceList()).toHaveLength(1);
+  });
+
+  test("refuses to remove a deviceId that isn't in the list", () => {
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_self", deviceLabel: "Self" },
+    });
+    svc.initialize("Wendell");
+    const result = svc.removeDevice("dev_does_not_exist");
+    expect(result.removed).toBe(false);
+    expect(result.error).toMatch(/not in the device list/i);
+  });
+
+  test("refuses when identity is uninitialized", () => {
+    const svc = new IdentityService({ ottieHome: tmpHome, logger: SILENT_LOGGER });
+    const result = svc.removeDevice("anything");
+    expect(result.removed).toBe(false);
+    expect(result.error).toMatch(/root identity not loaded/i);
+  });
+
+  test("happy path: removes a peer device, persists devices.json, emits + broadcasts an event", () => {
+    // Set up Bob's daemon adopting Alice's identity, with Alice + Bob +
+    // Charlie all in the device list. Then Bob removes Charlie.
+    const cryptoMod = require("node:crypto") as typeof import("node:crypto");
+    const aliceHome = mkdtempSync(path.join(os.tmpdir(), "ottie-remove-alice-"));
+    const aliceRoot = createRootIdentity(aliceHome, "Alice");
+    rmSync(aliceHome, { recursive: true, force: true });
+
+    function buildSignedDevice(deviceId: string, label: string) {
+      const { publicKey, privateKey } = cryptoMod.generateKeyPairSync("ed25519");
+      const pub = (publicKey.export({ format: "jwk" }) as { x: string }).x;
+      const priv = (privateKey.export({ format: "jwk" }) as { d: string }).d;
+      const payload = [
+        "ottie-device-auth-v1",
+        deviceId,
+        pub,
+        "daemon",
+        new Date(1_700_000_000_000).toISOString(),
+      ].join("\n");
+      const sig = cryptoMod
+        .sign(null, Buffer.from(payload, "utf8"), aliceRoot.signPrivateKey)
+        .toString("base64")
+        .replace(/=+$/, "")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_");
+      return {
+        v: 1 as const,
+        deviceId,
+        deviceLabel: label,
+        role: "daemon" as const,
+        signPublicKeyB64: pub,
+        authorizedAt: new Date(1_700_000_000_000).toISOString(),
+        authorizationSignatureB64: sig,
+        privateKeyB64: priv,
+      };
+    }
+
+    const aliceDev = buildSignedDevice("dev_alice", "Alice's Mac");
+    const bobDev = buildSignedDevice("dev_bob", "Bob's Laptop");
+    const charlieDev = buildSignedDevice("dev_charlie", "Charlie's Pi");
+
+    const bob = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "dev_bob", deviceLabel: "Bob's Laptop" },
+    });
+    bob.adoptIdentityFromLink({
+      rootIdentity: aliceRoot.stored,
+      signedDevice: bobDev,
+      peerDevices: [aliceDev, bobDev, charlieDev],
+      signPrivateKeyB64: bobDev.privateKeyB64,
+    });
+    expect(bob.getDeviceList()).toHaveLength(3);
+    expect(bob.getDeviceListEvents()).toHaveLength(0);
+
+    const result = bob.removeDevice("dev_charlie");
+    expect(result.removed).toBe(true);
+    expect(result.error).toBeNull();
+    expect(result.devices).toHaveLength(2);
+    expect(result.devices?.map((d) => d.deviceId).sort()).toEqual(["dev_alice", "dev_bob"]);
+
+    // Local emit happened.
+    const events = bob.getDeviceListEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.kind).toBe("device-removed");
+    if (events[0]?.kind === "device-removed") {
+      expect(events[0].removedDeviceId).toBe("dev_charlie");
+      expect(events[0].sourceDeviceId).toBe("dev_bob");
+    }
+
+    // A fresh IdentityService on the same home reloads the smaller list.
+    const reloaded = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "dev_bob", deviceLabel: "Bob's Laptop" },
+    });
+    expect(reloaded.getDeviceList()).toHaveLength(2);
+    expect(reloaded.getDeviceList().some((d) => d.deviceId === "dev_charlie")).toBe(false);
+  });
+});
