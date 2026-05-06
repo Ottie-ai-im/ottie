@@ -127,6 +127,7 @@ import { createTerminalManager, type TerminalManager } from "../terminal/termina
 import { createConnectionOfferV2, encodeOfferToFragmentUrl } from "./connection-offer.js";
 import { generateLocalPairingOffer } from "./pairing-offer.js";
 import { loadOrCreateDaemonKeyPair } from "./daemon-keypair.js";
+import { IdentityService } from "./identity/identity-service.js";
 import { startRelayTransport, type RelayTransportController } from "./relay-transport.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
@@ -243,6 +244,12 @@ export async function createOttieDaemon(
 
   const serverId = getOrCreateServerId(config.ottieHome, { logger });
   const daemonKeyPair = await loadOrCreateDaemonKeyPair(config.ottieHome, logger);
+  // Root identity: load-or-detect-first-run. Construction logs the state.
+  // Consumers (WS RPC, CLI, app onboarding UI) are wired in subsequent
+  // Phase 1 commits; for now the service exists so bootstrap fails loudly
+  // on a corrupt identity file rather than silently regenerating.
+  const identityService = new IdentityService({ ottieHome: config.ottieHome, logger });
+  void identityService;
   let relayTransport: RelayTransportController | null = null;
 
   const staticDir = config.staticDir;
