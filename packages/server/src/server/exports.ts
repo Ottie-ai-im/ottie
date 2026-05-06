@@ -9,6 +9,10 @@ export {
   type RootIdentityBundle,
 } from "./identity/root-identity-store.js";
 export { type StoredRootIdentity } from "./identity/identity-types.js";
+export {
+  type IdentityStateOnWire,
+  type PublicRootIdentity,
+} from "./identity/identity-rpc-schemas.js";
 export { createRootLogger, type LogLevel, type LogFormat } from "./logger.js";
 export { loadPersistedConfig, type PersistedConfig } from "./persisted-config.js";
 export { generateLocalPairingOffer, type LocalPairingOffer } from "./pairing-offer.js";

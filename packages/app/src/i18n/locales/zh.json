@@ -22,6 +22,19 @@
     "paste": "粘贴",
     "copied": "已复制"
   },
+  "identity": {
+    "title": "怎么称呼你？",
+    "subtitle": "起一个昵称。加好友时朋友会看到这个名字。之后还能改。",
+    "displayNameLabel": "昵称",
+    "displayNamePlaceholder": "你的名字",
+    "displayNameHelper": "1–64 个字符",
+    "displayNameRequired": "请输入昵称",
+    "displayNameTooLong": "昵称过长（最多 64 个字符）",
+    "createButton": "创建账号",
+    "creating": "创建中…",
+    "loadFailed": "已有身份文件，但无法读取",
+    "loadFailedHelp": "$OTTIE_HOME/identity/root.json 可能损坏。请手动检查或删除该文件。"
+  },
   "welcome": {
     "title": "欢迎使用 Ottie",
     "subtitle": "连接你的电脑以开始使用",

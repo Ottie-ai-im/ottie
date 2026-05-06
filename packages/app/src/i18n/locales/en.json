@@ -22,6 +22,19 @@
     "paste": "Paste",
     "copied": "Copied"
   },
+  "identity": {
+    "title": "What should we call you?",
+    "subtitle": "Pick a display name. Your friends will see this when you add them. You can change it later.",
+    "displayNameLabel": "Display name",
+    "displayNamePlaceholder": "Your name",
+    "displayNameHelper": "1–64 characters",
+    "displayNameRequired": "Please enter a display name",
+    "displayNameTooLong": "Name is too long (max 64 characters)",
+    "createButton": "Create identity",
+    "creating": "Creating…",
+    "loadFailed": "Identity exists but could not be loaded",
+    "loadFailedHelp": "The identity file at $OTTIE_HOME/identity/root.json may be corrupt. Inspect or remove it manually."
+  },
   "welcome": {
     "title": "Welcome to Ottie",
     "subtitle": "Connect your computer to get started",
