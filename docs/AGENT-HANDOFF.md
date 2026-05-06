@@ -12,11 +12,13 @@ from here.
   `packages/app`, `packages/relay`, etc. GitHub: `Ottie-ai-im/ottie`.
 - **Side-quest in flight**: extend ottie into multi-user collab.
   Design doc: [`docs/MULTI-USER-COLLABORATION-DESIGN.md`](./MULTI-USER-COLLABORATION-DESIGN.md).
-- **Current state**: **Phases 1 + 2 fully complete** (identity +
-  device-linking + multi-daemon sync + remove device). 192 tests
-  green across 20 files. Pushed up through commit `ef63e9a4`.
-- **Next phase**: **Phase 3 — friend pairing + 1-to-1 chat**.
-  Detailed sub-task breakdown in design doc §17 (Phase 3 section).
+- **Current state**: **Phases 1 + 2 fully complete** + **Phase 3.a/0
+  done** (friend-pair offer schema + ECDH crypto core, pure fns).
+  212 tests green across 22 files in identity + relay-transport.
+- **Next phase**: **Phase 3.a/1 — receiver-side friend-pair pending
+  offer store + WS RPC `friend/pair/generate`**, mirroring
+  Phase 2.c's `device-link-pending-store` + `device/link/generate`.
+  Sub-task breakdown in design doc §17 (Phase 3 section).
 - **User**: Wendell. Native Mandarin speaker, talks to you in 中文.
   Wants direct answers + small commits + tests for everything. He
   pushed back hard once when I designed without reading existing
@@ -193,11 +195,12 @@ Phase 3 — friend pairing + 1-to-1 chat. **Read these first:**
 4. The Phase 2.d codebase (device-link-*) — Phase 3 reuses ~50% of
    this pattern. Don't reinvent; refactor when generalizable.
 
-Suggested first sub-commit: **Phase 3.a/0 — peer-pair offer schema +
-ECDH crypto core**. Pure functions only, no I/O, fully unit-tested.
-This was the proven pattern for Phase 2.d/0 + 2.e/0 + 2.f/0 + 2.f/2a
-and it always saved time downstream. See `device-link-redeem.ts`
-for the shape to mirror.
+Phase 3.a/0 is **DONE** — see `friend-pair-types.ts` +
+`friend-pair-redeem-types.ts` + `friend-pair-redeem.ts` + tests.
+Pure functions, SIGMA-I-style signed candidate. Mirror these for
+3.a/1 next: `friend-pair-pending-store.ts` (analog of
+`device-link-pending-store.ts` — generate offer, hold eph priv,
+TTL/cap, GC) + a `friend/pair/generate` WS RPC.
 
 **Don't**: jump straight to UI. Don't write transport before crypto.
 Don't change tech-stack invariants. Don't copy HuLa code. Don't

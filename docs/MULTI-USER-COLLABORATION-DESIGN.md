@@ -1001,24 +1001,28 @@ Two laptops + a phone (one daemon each) under one identity now:
    the same broadcast pipeline
 
 ### Phase 3 — friend pairing + 1-to-1 chat
-- ⏳ NOT STARTED — START HERE NEXT
+- ⏳ IN PROGRESS — 3.a/0 done; 3.a/1 next
 - ~50% reuse of Phase 2 crypto + transport (same Cloudflare relay,
   same NaCl box, same Ed25519, same SIGMA-I-style handshake but
   cross-identity instead of intra-identity)
-- New work breakdown (planned):
-  - 3.a/0 — peer-pair offer schema + ECDH crypto (analog of
-    device-link types). Pure functions + tests.
-  - 3.a/1 — receiver-side: accept incoming pair-offer, surface in
+- Sub-task status:
+  - ✅ 3.a/0 — friend-pair offer schema + ECDH crypto core
+    (`friend-pair-types.ts` + `friend-pair-redeem-types.ts` +
+    `friend-pair-redeem.ts` + tests). Pure functions, no I/O. The
+    candidate carries a SIGMA-I-style Ed25519 signature over
+    `(offer.nonce, offer.ephPub, candidate.ephPub)` made with the
+    responder's root sign key, defeating relay-side substitution.
+  - ⏳ 3.a/1 — receiver-side: accept incoming pair-offer, surface in
     "Pending friend requests" section of new `/settings/friends`
-  - 3.a/2 — sender-side: WS RPC `friend/pair/redeem` + UI to
+  - ⏳ 3.a/2 — sender-side: WS RPC `friend/pair/redeem` + UI to
     paste/scan a friend-pair link
-  - 3.a/3 — bilateral confirm: both sides see the other in their
+  - ⏳ 3.a/3 — bilateral confirm: both sides see the other in their
     friend list after both tap accept
-  - 3.b/0 — chat-room kind=p2p schema, Peer entity in store
-  - 3.b/1 — message send/receive over relay (live)
-  - 3.b/2 — Cloudflare KV inbox for offline delivery; recipient
+  - ⏳ 3.b/0 — chat-room kind=p2p schema, Peer entity in store
+  - ⏳ 3.b/1 — message send/receive over relay (live)
+  - ⏳ 3.b/2 — Cloudflare KV inbox for offline delivery; recipient
     pulls on connect with cursor
-  - 3.b/3 — read receipts + UI integration (chats list shows
+  - ⏳ 3.b/3 — read receipts + UI integration (chats list shows
     friends + agents side-by-side)
 
 ### Phase 4 — AI sharing
@@ -1034,8 +1038,8 @@ Two laptops + a phone (one daemon each) under one identity now:
   session timeout enforcement.
 
 ### Test infrastructure status
-- 192 tests across 20 files in the identity + relay-transport
-  suite, all green; 5 consecutive full-suite runs verified.
+- 212 tests across 22 files in the identity + relay-transport
+  suite, all green (192 from Phase 2 + 20 new from Phase 3.a/0).
 - `mock-relay.ts` — in-process Cloudflare adapter clone for
   spawning real WebSocket bridges in tests without wrangler-dev.
 - Real two-daemon e2e: `device-link-mock-relay.e2e.test.ts` covers
