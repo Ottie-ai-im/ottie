@@ -3,6 +3,12 @@ export { createOttieDaemon, type OttieDaemon, type OttieDaemonConfig } from "./b
 export { loadConfig, type CliConfigOverrides } from "./config.js";
 export { resolveOttieHome } from "./ottie-home.js";
 export { getOrCreateServerId } from "./server-id.js";
+export {
+  loadRootIdentity,
+  rootIdentityFilePath,
+  type RootIdentityBundle,
+} from "./identity/root-identity-store.js";
+export { type StoredRootIdentity } from "./identity/identity-types.js";
 export { createRootLogger, type LogLevel, type LogFormat } from "./logger.js";
 export { loadPersistedConfig, type PersistedConfig } from "./persisted-config.js";
 export { generateLocalPairingOffer, type LocalPairingOffer } from "./pairing-offer.js";
