@@ -1566,6 +1566,33 @@ export class DaemonClient {
     });
   }
 
+  async friendPairRedeem(args: {
+    deepLink: string;
+    requestId?: string;
+    /**
+     * Generous default — friend-pair redemption opens a relay socket to
+     * the originating daemon, sends a payload, and (in Phase 3.a/3)
+     * waits for the originating user to tap Approve. 5 minutes is
+     * roomy because the user-tap latency dominates.
+     */
+    timeoutMs?: number;
+  }): Promise<{
+    outcome: import("../server/identity/identity-rpc-schemas.js").FriendPairRedeemOutcome | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "friend/pair/redeem", requestId, deepLink: args.deepLink },
+      timeout: args.timeoutMs ?? 5 * 60_000,
+      select: (msg) => {
+        if (msg.type !== "friend/pair/redeem/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { outcome: msg.payload.outcome, error: msg.payload.error };
+      },
+    });
+  }
+
   async deviceLinkRedeem(args: {
     deepLink: string;
     deviceLabel: string;

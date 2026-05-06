@@ -969,16 +969,18 @@ export async function createOttieDaemon(
               relayEndpoint,
               serverId,
               daemonKeyPair: daemonKeyPair.keyPair,
-              // Connection handlers (Phase 2.d + 2.f/2):
+              // Connection handlers (Phase 2.d + 2.f/2 + 3.a/2):
               //   - "device-link:<nonce>" → device-link redemption (Phase 2.d)
               //   - "peer-sync:<nonce>"   → peer-daemon SIGMA-I session (Phase 2.f)
-              // Both ride the same Cloudflare Workers relay and route via
+              //   - "friend-pair:<nonce>" → friend-pair redemption (Phase 3.a/2)
+              // All three ride the same Cloudflare Workers relay and route via
               // relay-transport's connectionHandlers extension point.
               // peer-sync handler is null until self-device is loaded
               // (uninitialized identity has no signing key to handshake with).
               connectionHandlers: ((): RelayConnectionHandler[] => {
                 const handlers: RelayConnectionHandler[] = [
                   identityService.createDeviceLinkConnectionHandler(),
+                  identityService.createFriendPairConnectionHandler(),
                 ];
                 const peerSyncHandler = identityService.createPeerSyncConnectionHandler();
                 if (peerSyncHandler) handlers.push(peerSyncHandler);

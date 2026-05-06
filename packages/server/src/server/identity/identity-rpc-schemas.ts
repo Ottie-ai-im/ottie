@@ -347,6 +347,58 @@ export const FriendPairCancelResponseSchema = z.object({
   }),
 });
 
+// ----- friend/pair/redeem (Phase 3.a/2) ----------------------------------
+// Responder's daemon redeems a deep-link / QR offer:
+//   - decodes the offer
+//   - generates an ephemeral X25519 keypair
+//   - signs the canonical session payload with its root sign private key
+//   - encrypts a candidate-Friend payload with NaCl box
+//   - opens a one-shot relay WebSocket to the originating daemon
+//   - sends the envelope, awaits an ack-or-error reply
+// On accepted: caller gets candidate-received, continues to wait for the
+// Phase 3.a/3 approval reply on the same socket.
+
+export const FriendPairRedeemRequestSchema = z.object({
+  type: z.literal("friend/pair/redeem"),
+  requestId: z.string(),
+  /** Either a full deep-link string or just the base64url payload portion. */
+  deepLink: z.string().min(1),
+});
+
+export const FriendPairRedeemAcceptedSchema = z.object({
+  status: z.literal("candidate-received"),
+  /** Display name of the originating identity, for the "paired with <name>" UI. */
+  remoteDisplayName: z.string().min(1),
+  /** Originating root sign public key — anchor of trust for Phase 3.a/3. */
+  remoteRootSignPublicKeyB64: z.string().min(1),
+});
+
+export const FriendPairRedeemRejectedSchema = z.object({
+  status: z.literal("rejected"),
+  /**
+   * Coded error: see RedeemFriendPairOfferOutcome.errorCode in
+   * friend-pair-sender.ts.
+   */
+  errorCode: z.string().min(1),
+  errorMessage: z.string(),
+});
+
+export const FriendPairRedeemOutcomeSchema = z.discriminatedUnion("status", [
+  FriendPairRedeemAcceptedSchema,
+  FriendPairRedeemRejectedSchema,
+]);
+
+export const FriendPairRedeemResponseSchema = z.object({
+  type: z.literal("friend/pair/redeem/response"),
+  payload: z.object({
+    requestId: z.string(),
+    outcome: FriendPairRedeemOutcomeSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export type FriendPairRedeemOutcome = z.infer<typeof FriendPairRedeemOutcomeSchema>;
+
 // ----- device/remove (Phase 2.g) -----------------------------------------
 // Remove a peer device from THIS user's device list. Refused for self
 // (a daemon can't sign its own revocation — use another device).

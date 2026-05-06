@@ -13,16 +13,23 @@ from here.
 - **Side-quest in flight**: extend ottie into multi-user collab.
   Design doc: [`docs/MULTI-USER-COLLABORATION-DESIGN.md`](./MULTI-USER-COLLABORATION-DESIGN.md).
 - **Current state**: **Phases 1 + 2 fully complete** + **Phase 3.a/0
-  + 3.a/1 done** (friend-pair offer schema + ECDH crypto core +
-  pending-store + WS RPCs `friend/pair/generate` + `friend/pair/
-  cancel`). 235 tests green across 23 files in identity + relay-
-  transport.
-- **Next phase**: **Phase 3.a/2 — receiver-side friend-pair handler
-  (relay → decrypt → pending-candidate store) + sender-side WS RPC
-  `friend/pair/redeem`**, mirroring Phase 2.d/2 + 2.d/3. The
-  existing `connectionHandlers` extension on relay-transport (added
-  in Phase 2.d/1) is reusable; just add a new handler with the
-  `"friend-pair:"` prefix. Sub-task breakdown in design doc §17.
+  + 3.a/1 + 3.a/2 done** (friend-pair offer schema + ECDH crypto +
+  pending-store + receiver handler + pending-candidate-store +
+  sender + WS RPCs generate/cancel/redeem; bootstrap registers
+  the friend-pair handler). 262 tests green across 26 files in
+  identity + relay-transport (3 consecutive stability runs).
+- **Next phase**: **Phase 3.a/3 — approve flow + Peer store +
+  bilateral confirm + UI**. Need:
+  - Peer schema + `peer-store.ts` (analog of `device-list-store.ts`)
+    persisting `$OTTIE_HOME/identity/peers.json`.
+  - Approve crypto core (sign Bob's root pubkey, encrypt reply over
+    same shared key) — analog of `device-link-approve.ts`.
+  - Approve through socket: WS RPCs `friend/pair/candidates` +
+    `friend/pair/approve` + `friend/pair/reject`.
+  - Bob-side: extend `friend-pair-sender.ts` to read approval
+    envelope + `IdentityService.adoptPeerFromApproval`.
+  - UI bundle: Add Friend QR screen, Paste-link screen,
+    `/settings/friends` (replaces or complements identity page).
 - **User**: Wendell. Native Mandarin speaker, talks to you in 中文.
   Wants direct answers + small commits + tests for everything. He
   pushed back hard once when I designed without reading existing

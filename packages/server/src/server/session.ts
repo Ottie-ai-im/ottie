@@ -2235,6 +2235,8 @@ export class Session {
         return this.handleFriendPairGenerateRequest(msg);
       case "friend/pair/cancel":
         return this.handleFriendPairCancelRequest(msg);
+      case "friend/pair/redeem":
+        return this.handleFriendPairRedeemRequest(msg);
       default:
         return undefined;
     }
@@ -2490,6 +2492,65 @@ export class Session {
       type: "friend/pair/cancel/response",
       payload: { requestId: request.requestId, cancelled, error: null },
     });
+  }
+
+  private async handleFriendPairRedeemRequest(
+    request: Extract<SessionInboundMessage, { type: "friend/pair/redeem" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "friend/pair/redeem/response",
+        payload: {
+          requestId: request.requestId,
+          outcome: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+
+    try {
+      const outcome = await this.identityService.redeemFriendPairOffer({
+        deepLinkOrOffer: request.deepLink,
+      });
+      if (outcome.status === "candidate-received") {
+        this.emit({
+          type: "friend/pair/redeem/response",
+          payload: {
+            requestId: request.requestId,
+            outcome: {
+              status: "candidate-received",
+              remoteDisplayName: outcome.offer.displayName,
+              remoteRootSignPublicKeyB64: outcome.offer.rootSignPublicKeyB64,
+            },
+            error: null,
+          },
+        });
+      } else {
+        this.emit({
+          type: "friend/pair/redeem/response",
+          payload: {
+            requestId: request.requestId,
+            outcome: {
+              status: "rejected",
+              errorCode: outcome.errorCode,
+              errorMessage: outcome.errorMessage,
+            },
+            error: null,
+          },
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit({
+        type: "friend/pair/redeem/response",
+        payload: {
+          requestId: request.requestId,
+          outcome: null,
+          error: message,
+        },
+      });
+    }
   }
 
   private async handleDeviceLinkRedeemRequest(

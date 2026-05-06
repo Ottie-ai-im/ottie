@@ -7,6 +7,8 @@ import {
   FriendPairCancelResponseSchema,
   FriendPairGenerateRequestSchema,
   FriendPairGenerateResponseSchema,
+  FriendPairRedeemRequestSchema,
+  FriendPairRedeemResponseSchema,
   IdentityGetRequestSchema,
   IdentityGetResponseSchema,
   IdentityInitializeRequestSchema,
@@ -339,5 +341,70 @@ describe("friend/pair/cancel request/response schemas (Phase 3.a/1)", () => {
       },
     };
     expect(FriendPairCancelResponseSchema.parse(wire)).toEqual(wire);
+  });
+});
+
+describe("friend/pair/redeem request/response schemas (Phase 3.a/2)", () => {
+  test("request roundtrips with a deep link", () => {
+    const wire = {
+      type: "friend/pair/redeem",
+      requestId: "req-fp-r-1",
+      deepLink: "ottie://friend-pair#payload=abc",
+    };
+    expect(FriendPairRedeemRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("request rejects empty deepLink", () => {
+    expect(() =>
+      FriendPairRedeemRequestSchema.parse({
+        type: "friend/pair/redeem",
+        requestId: "r",
+        deepLink: "",
+      }),
+    ).toThrow();
+  });
+
+  test("response candidate-received outcome roundtrips", () => {
+    const wire = {
+      type: "friend/pair/redeem/response",
+      payload: {
+        requestId: "req-fp-r-1",
+        outcome: {
+          status: "candidate-received" as const,
+          remoteDisplayName: "Alice",
+          remoteRootSignPublicKeyB64: "x".repeat(43),
+        },
+        error: null,
+      },
+    };
+    expect(FriendPairRedeemResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response rejected outcome roundtrips", () => {
+    const wire = {
+      type: "friend/pair/redeem/response",
+      payload: {
+        requestId: "req-fp-r-1",
+        outcome: {
+          status: "rejected" as const,
+          errorCode: "no_offer",
+          errorMessage: "The friend-pair link has expired or already been used",
+        },
+        error: null,
+      },
+    };
+    expect(FriendPairRedeemResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response allows null outcome with error string (service unavailable)", () => {
+    const wire = {
+      type: "friend/pair/redeem/response",
+      payload: {
+        requestId: "req-fp-r-1",
+        outcome: null,
+        error: "Identity service is not available on this daemon",
+      },
+    };
+    expect(FriendPairRedeemResponseSchema.parse(wire)).toEqual(wire);
   });
 });

@@ -27,10 +27,17 @@ import {
   type RedeemDeviceLinkOfferInput,
   type RedeemDeviceLinkOfferOutcome,
 } from "./device-link-sender.js";
+import { FriendPairPendingCandidateStore } from "./friend-pair-pending-candidate-store.js";
 import {
   FriendPairPendingStore,
   type CreatePendingFriendPairOfferResult,
 } from "./friend-pair-pending-store.js";
+import { createFriendPairConnectionHandler } from "./friend-pair-receiver.js";
+import {
+  redeemFriendPairOffer,
+  type RedeemFriendPairOfferInput,
+  type RedeemFriendPairOfferOutcome,
+} from "./friend-pair-sender.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
 import type { PendingDeviceLinkCandidateOnWire } from "./identity-rpc-schemas.js";
 import {
@@ -106,6 +113,7 @@ export class IdentityService {
   private readonly pendingDeviceLinks: DeviceLinkPendingStore;
   private readonly pendingCandidates: DeviceLinkPendingCandidateStore;
   private readonly pendingFriendPairs: FriendPairPendingStore;
+  private readonly pendingFriendPairCandidates: FriendPairPendingCandidateStore;
   private readonly events: DeviceListEventStore;
   private readonly peerSessions: PeerSessionRegistry;
   private peerDialer: PeerSyncDialer | null = null;
@@ -121,6 +129,7 @@ export class IdentityService {
     this.pendingDeviceLinks = new DeviceLinkPendingStore(options.logger);
     this.pendingCandidates = new DeviceLinkPendingCandidateStore(options.logger);
     this.pendingFriendPairs = new FriendPairPendingStore(options.logger);
+    this.pendingFriendPairCandidates = new FriendPairPendingCandidateStore(options.logger);
     this.events = DeviceListEventStore.loadOrCreate(options.ottieHome, options.logger);
     this.peerSessions = new PeerSessionRegistry(options.logger);
     this.state = this.loadInitialState();
@@ -289,6 +298,64 @@ export class IdentityService {
    */
   getPendingFriendPairStore(): FriendPairPendingStore {
     return this.pendingFriendPairs;
+  }
+
+  /**
+   * Phase 3.a/2: relay-side handler that decrypts + signature-checks
+   * incoming friend-candidate records and parks them in the friend-
+   * pair candidate store for Phase 3.a/3 to surface as a "pair with
+   * this person?" prompt. Bootstrap registers this handler with
+   * relay-transport's `connectionHandlers` array.
+   */
+  createFriendPairConnectionHandler(): RelayConnectionHandler {
+    return createFriendPairConnectionHandler({
+      pendingOffers: this.pendingFriendPairs,
+      pendingCandidates: this.pendingFriendPairCandidates,
+    });
+  }
+
+  /**
+   * Test/diagnostic helper for the Phase 3.a/2 receiver wiring. Phase
+   * 3.a/3 will consume entries from this store via the approval flow.
+   */
+  getPendingFriendPairCandidateStore(): FriendPairPendingCandidateStore {
+    return this.pendingFriendPairCandidates;
+  }
+
+  /**
+   * Phase 3.a/2 (sender side): the responder's daemon redeems a
+   * friend-pair deep-link scanned/pasted by the user. Builds a
+   * candidate signed with this daemon's root key, opens a one-shot
+   * relay WebSocket to the originating daemon, sends the redemption
+   * envelope, awaits an ack-or-error.
+   *
+   * Requires the daemon's root identity to be loaded — friends are
+   * keyed by root pubkey, so a daemon without an identity has nothing
+   * to introduce itself with.
+   *
+   * Phase 3.a/3 will extend the returned outcome handling to read the
+   * approval reply on the same socket and persist a Peer record.
+   */
+  async redeemFriendPairOffer(
+    input: Omit<
+      RedeemFriendPairOfferInput,
+      "logger" | "selfRootSignPublicKeyB64" | "selfRootSignPrivateKey" | "selfDisplayName"
+    >,
+  ): Promise<RedeemFriendPairOfferOutcome> {
+    if (this.state.kind !== "loaded") {
+      return {
+        status: "rejected",
+        errorCode: "identity_uninitialized",
+        errorMessage: "Cannot redeem friend-pair offer — root identity not loaded",
+      };
+    }
+    return redeemFriendPairOffer({
+      ...input,
+      selfRootSignPublicKeyB64: this.state.bundle.stored.signPublicKeyB64,
+      selfRootSignPrivateKey: this.state.bundle.signPrivateKey,
+      selfDisplayName: this.state.bundle.stored.displayName,
+      logger: this.logger,
+    });
   }
 
   /**

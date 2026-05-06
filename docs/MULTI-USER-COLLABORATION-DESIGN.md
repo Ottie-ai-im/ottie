@@ -1017,8 +1017,15 @@ Two laptops + a phone (one daemon each) under one identity now:
     generate` and `friend/pair/cancel`. `IdentityService.generate
     FriendPairOffer` / `cancelFriendPairOffer`. DaemonClient methods.
     Cross-identity analog of Phase 2.c.
-  - ⏳ 3.a/2 — sender-side: WS RPC `friend/pair/redeem` + UI to
-    paste/scan a friend-pair link
+  - ✅ 3.a/2 — receiver-side handler + sender-side redeem.
+    `friend-pair-pending-candidate-store.ts` (parked candidates,
+    8-cap, 10-min TTL). `friend-pair-receiver.ts` (relay handler
+    for `friend-pair:<nonce>` prefix; SIGMA-I sig check + self-
+    pairing rejection). `friend-pair-sender.ts` (WS to originator,
+    sends signed redemption, awaits ack). WS RPC `friend/pair/
+    redeem` + DaemonClient method. Bootstrap registers the new
+    handler alongside device-link + peer-sync. Cross-identity
+    analog of Phase 2.d/2 + 2.d/3.
   - ⏳ 3.a/3 — bilateral confirm: both sides see the other in their
     friend list after both tap accept
   - ⏳ 3.b/0 — chat-room kind=p2p schema, Peer entity in store
@@ -1041,9 +1048,11 @@ Two laptops + a phone (one daemon each) under one identity now:
   session timeout enforcement.
 
 ### Test infrastructure status
-- 235 tests across 23 files in the identity + relay-transport
-  suite, all green (192 from Phase 2 + 20 from Phase 3.a/0
-  + 23 from Phase 3.a/1: 14 pending-store + 9 RPC-schema).
+- 262 tests across 26 files in the identity + relay-transport
+  suite, all green (192 from Phase 2 + 20 from 3.a/0 + 23 from
+  3.a/1 + 27 from 3.a/2: 8 pending-candidate-store + 10
+  receiver + 4 sender + 5 RPC-schema). Stability check: 3
+  consecutive runs all 262/262 passed.
 - `mock-relay.ts` — in-process Cloudflare adapter clone for
   spawning real WebSocket bridges in tests without wrangler-dev.
 - Real two-daemon e2e: `device-link-mock-relay.e2e.test.ts` covers
