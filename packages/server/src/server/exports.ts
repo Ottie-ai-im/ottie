@@ -14,6 +14,11 @@ export {
   type PublicDevice,
   type PublicRootIdentity,
 } from "./identity/identity-rpc-schemas.js";
+export {
+  type DeviceLinkOffer,
+  encodeDeviceLinkOffer,
+  decodeDeviceLinkOffer,
+} from "./identity/device-link-types.js";
 export { createRootLogger, type LogLevel, type LogFormat } from "./logger.js";
 export { loadPersistedConfig, type PersistedConfig } from "./persisted-config.js";
 export { generateLocalPairingOffer, type LocalPairingOffer } from "./pairing-offer.js";

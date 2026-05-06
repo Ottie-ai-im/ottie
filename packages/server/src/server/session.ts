@@ -2217,9 +2217,89 @@ export class Session {
         return this.handleIdentityInitializeRequest(msg);
       case "device/list":
         return this.handleDeviceListRequest(msg);
+      case "device/link/generate":
+        return this.handleDeviceLinkGenerateRequest(msg);
+      case "device/link/cancel":
+        return this.handleDeviceLinkCancelRequest(msg);
       default:
         return undefined;
     }
+  }
+
+  private async handleDeviceLinkGenerateRequest(
+    request: Extract<SessionInboundMessage, { type: "device/link/generate" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "device/link/generate/response",
+        payload: {
+          requestId: request.requestId,
+          offer: null,
+          deepLink: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+
+    try {
+      const result = this.identityService.generateDeviceLinkOffer({ ttlMs: request.ttlMs });
+      if (!result) {
+        this.emit({
+          type: "device/link/generate/response",
+          payload: {
+            requestId: request.requestId,
+            offer: null,
+            deepLink: null,
+            error:
+              "Cannot generate device-link offer — identity not loaded, " +
+              "self-device not configured, or relay endpoint missing",
+          },
+        });
+        return;
+      }
+      this.emit({
+        type: "device/link/generate/response",
+        payload: {
+          requestId: request.requestId,
+          offer: result.pending.offer,
+          deepLink: result.deepLink,
+          error: null,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit({
+        type: "device/link/generate/response",
+        payload: {
+          requestId: request.requestId,
+          offer: null,
+          deepLink: null,
+          error: message,
+        },
+      });
+    }
+  }
+
+  private async handleDeviceLinkCancelRequest(
+    request: Extract<SessionInboundMessage, { type: "device/link/cancel" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "device/link/cancel/response",
+        payload: {
+          requestId: request.requestId,
+          cancelled: false,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const cancelled = this.identityService.cancelDeviceLinkOffer(request.nonceB64);
+    this.emit({
+      type: "device/link/cancel/response",
+      payload: { requestId: request.requestId, cancelled, error: null },
+    });
   }
 
   private async handleDeviceListRequest(

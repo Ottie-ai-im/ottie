@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DeviceLinkOfferSchema } from "./device-link-types.js";
 import { DeviceSchema } from "./device-types.js";
 import { type StoredRootIdentity } from "./identity-types.js";
 
@@ -102,6 +103,52 @@ export const DevicesListResponseSchema = z.object({
   payload: z.object({
     requestId: z.string(),
     devices: z.array(DeviceSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- device/link/generate (Phase 2.c) ----------------------------------
+// Existing device asks the daemon to create a one-time device-link offer
+// the user will display (as a QR or copy-link) for the new device to scan.
+
+export const DeviceLinkGenerateRequestSchema = z.object({
+  type: z.literal("device/link/generate"),
+  requestId: z.string(),
+  /**
+   * Optional TTL override in milliseconds. Defaults to 10 minutes server-
+   * side. Bounded by the daemon to keep offers short-lived; a UI shouldn't
+   * normally pass anything here.
+   */
+  ttlMs: z.number().int().positive().optional(),
+});
+
+export const DeviceLinkGenerateResponseSchema = z.object({
+  type: z.literal("device/link/generate/response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** The wire-shape offer; null when the daemon refused to create one. */
+    offer: DeviceLinkOfferSchema.nullable(),
+    /** Encoded `ottie://device-link#payload=…` deep link for QR / clipboard. */
+    deepLink: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- device/link/cancel (Phase 2.c) ------------------------------------
+// User backs out of "Add device". Drops the pending offer so its nonce
+// can't be redeemed even if the QR was photographed.
+
+export const DeviceLinkCancelRequestSchema = z.object({
+  type: z.literal("device/link/cancel"),
+  requestId: z.string(),
+  nonceB64: z.string().min(1),
+});
+
+export const DeviceLinkCancelResponseSchema = z.object({
+  type: z.literal("device/link/cancel/response"),
+  payload: z.object({
+    requestId: z.string(),
+    cancelled: z.boolean(),
     error: z.string().nullable(),
   }),
 });

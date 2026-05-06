@@ -1,6 +1,10 @@
 import type pino from "pino";
 
 import { buildAuthorizedDevice, loadDeviceList, saveDeviceList } from "./device-list-store.js";
+import {
+  DeviceLinkPendingStore,
+  type CreatePendingOfferResult,
+} from "./device-link-pending-store.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
 import {
   createRootIdentity,
@@ -40,6 +44,13 @@ export interface IdentityServiceOptions {
    * root-identity behavior can leave it out.
    */
   selfDeviceContext?: SelfDeviceContext;
+  /**
+   * Phase 2.c: relay host:port that gets embedded into device-link offers
+   * so the new device knows where to send its candidate Device record.
+   * Optional because tests and CLI-only paths don't need to generate
+   * offers; when omitted, `generateDeviceLinkOffer()` returns null.
+   */
+  relayEndpoint?: string;
 }
 
 export interface SelfDeviceContext {
@@ -58,6 +69,8 @@ export class IdentityService {
   private readonly ottieHome: string;
   private readonly logger: pino.Logger;
   private readonly selfDeviceContext: SelfDeviceContext | null;
+  private readonly relayEndpoint: string | null;
+  private readonly pendingDeviceLinks: DeviceLinkPendingStore;
   private state: IdentityState;
   private selfDevice: SelfDeviceBundle | null = null;
   private deviceList: StoredDeviceList | null = null;
@@ -66,6 +79,8 @@ export class IdentityService {
     this.ottieHome = options.ottieHome;
     this.logger = options.logger;
     this.selfDeviceContext = options.selfDeviceContext ?? null;
+    this.relayEndpoint = options.relayEndpoint ?? null;
+    this.pendingDeviceLinks = new DeviceLinkPendingStore(options.logger);
     this.state = this.loadInitialState();
     if (this.state.kind === "loaded" && this.selfDeviceContext) {
       // Existing daemons that pre-date Phase 2.a have a root identity but no
@@ -157,6 +172,45 @@ export class IdentityService {
    */
   getDeviceList(): readonly StoredDevice[] {
     return this.deviceList?.devices ?? [];
+  }
+
+  /**
+   * Phase 2.c: generate a one-time device-link offer for adding a new
+   * device under this identity. The caller (UI / CLI) renders the
+   * `deepLink` as a QR code plus copy-link affordance for the new device
+   * to scan. Returns null when prerequisites aren't met (no identity
+   * loaded, no selfDeviceContext, or no relayEndpoint configured).
+   */
+  generateDeviceLinkOffer(
+    options: { ttlMs?: number; nowMs?: number } = {},
+  ): CreatePendingOfferResult | null {
+    if (!this.selfDeviceContext) return null;
+    if (!this.relayEndpoint) return null;
+    if (this.state.kind !== "loaded") return null;
+    return this.pendingDeviceLinks.create({
+      serverId: this.selfDeviceContext.serverId,
+      rootSignPublicKeyB64: this.state.bundle.stored.signPublicKeyB64,
+      displayName: this.state.bundle.stored.displayName,
+      relayEndpoint: this.relayEndpoint,
+      ttlMs: options.ttlMs,
+      nowMs: options.nowMs,
+    });
+  }
+
+  /**
+   * Cancel an outstanding device-link offer (user backs out of the
+   * "Add device" flow). Returns true if there was something to cancel.
+   */
+  cancelDeviceLinkOffer(nonceB64: string): boolean {
+    return this.pendingDeviceLinks.cancel(nonceB64);
+  }
+
+  /**
+   * Test/diagnostic helper. Phase 2.d will not consume this — redemption
+   * goes through a different path involving the relay-routed handshake.
+   */
+  getPendingDeviceLinkStore(): DeviceLinkPendingStore {
+    return this.pendingDeviceLinks;
   }
 
   // ----- private: self-device + device-list lifecycle ---------------------

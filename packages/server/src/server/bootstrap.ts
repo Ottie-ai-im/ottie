@@ -248,6 +248,11 @@ export async function createOttieDaemon(
   // Phase 2.a: selfDeviceContext makes the service responsible for the
   // daemon's own Device record (role="daemon", deviceId=serverId). On
   // first boot the self-device keypair is generated and signed by root.
+  // Phase 2.c: relayEndpoint gets baked into device-link offers so the
+  // new device knows where to reach this one. Public endpoint preferred
+  // over the daemon's local listen address (the new device is remote).
+  const identityRelayEndpoint =
+    config.relayPublicEndpoint ?? config.relayEndpoint ?? "relay.claws.company:443";
   const identityService = new IdentityService({
     ottieHome: config.ottieHome,
     logger,
@@ -255,6 +260,7 @@ export async function createOttieDaemon(
       serverId,
       deviceLabel: getHostname() || serverId,
     },
+    relayEndpoint: identityRelayEndpoint,
   });
   let relayTransport: RelayTransportController | null = null;
 

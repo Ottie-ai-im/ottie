@@ -28,6 +28,10 @@ import {
   ChatStatusEventSchema,
 } from "../server/chat/chat-rpc-schemas.js";
 import {
+  DeviceLinkCancelRequestSchema,
+  DeviceLinkCancelResponseSchema,
+  DeviceLinkGenerateRequestSchema,
+  DeviceLinkGenerateResponseSchema,
   DevicesListRequestSchema,
   DevicesListResponseSchema,
   IdentityGetRequestSchema,
@@ -2047,6 +2051,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   IdentityGetRequestSchema,
   IdentityInitializeRequestSchema,
   DevicesListRequestSchema,
+  DeviceLinkGenerateRequestSchema,
+  DeviceLinkCancelRequestSchema,
   ScheduleCreateRequestSchema,
   ScheduleListRequestSchema,
   ScheduleInspectRequestSchema,
@@ -3670,6 +3676,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   IdentityGetResponseSchema,
   IdentityInitializeResponseSchema,
   DevicesListResponseSchema,
+  DeviceLinkGenerateResponseSchema,
+  DeviceLinkCancelResponseSchema,
   ScheduleCreateResponseSchema,
   ScheduleListResponseSchema,
   ScheduleInspectResponseSchema,
