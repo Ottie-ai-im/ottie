@@ -8,8 +8,7 @@ import { Portal } from "@gorhom/portal";
 import React, { createContext, useContext, useImperativeHandle } from "react";
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import type { ElementRef } from "react";
-import { Modal, Pressable, View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { Modal } from "react-native";
 import { isWeb } from "@/constants/platform";
 import { GlassSurface } from "./glass-surface";
 
@@ -24,23 +23,13 @@ export type IsolatedBottomSheetModalRef = GorhomBottomSheetModalMethods;
 
 const IsolatedBottomSheetScopeContext = createContext(false);
 
-const styles = StyleSheet.create((theme) => ({
-  webOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  webBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  webSheet: {
-    width: "90%",
-    maxWidth: 500,
-    maxHeight: "80%",
-    overflow: "hidden",
-  },
-}));
+const WEB_GLASS_STYLE = {
+  margin: "auto",
+  width: "90%",
+  maxWidth: 500,
+  maxHeight: "80%",
+  overflow: "hidden",
+} as const;
 
 function DefaultIsolatedSheetBackground({ style }: BottomSheetBackgroundProps) {
   return <GlassSurface radius="sheet" strong style={style} />;
@@ -54,6 +43,7 @@ export const IsolatedBottomSheetModal = forwardRef<
   const { children, ...bottomSheetProps } = props;
 
   const [webVisible, setWebVisible] = useState(false);
+  const handleWebRequestClose = useCallback(() => setWebVisible(false), []);
 
   useImperativeHandle(
     ref,
@@ -79,6 +69,28 @@ export const IsolatedBottomSheetModal = forwardRef<
     [],
   );
 
+  if (isWeb) {
+    if (!webVisible) return null;
+    // Web fallback Modal cannot consume the BottomSheet render-function form
+    // (it receives { data } from a parent BottomSheetList, which has no web
+    // equivalent). Skip rendering in that case rather than crashing JSX.
+    if (typeof children === "function") return null;
+    return (
+      <Modal
+        transparent
+        visible={webVisible}
+        animationType="fade"
+        onRequestClose={handleWebRequestClose}
+      >
+        <GlassSurface radius="sheet" strong style={WEB_GLASS_STYLE}>
+          <IsolatedBottomSheetScopeContext.Provider value={true}>
+            {children}
+          </IsolatedBottomSheetScopeContext.Provider>
+        </GlassSurface>
+      </Modal>
+    );
+  }
+
   const scopedChildren =
     typeof children === "function" ? (
       (input: { data?: unknown }) => (
@@ -91,32 +103,6 @@ export const IsolatedBottomSheetModal = forwardRef<
         {children}
       </IsolatedBottomSheetScopeContext.Provider>
     );
-
-  if (isWeb) {
-    if (!webVisible) return null;
-    return (
-      <Modal
-        transparent
-        visible={webVisible}
-        animationType="fade"
-        onRequestClose={() => setWebVisible(false)}
-      >
-        <GlassSurface
-          radius="sheet"
-          strong
-          style={{
-            margin: "auto",
-            width: "90%",
-            maxWidth: 500,
-            maxHeight: "80%",
-            overflow: "hidden",
-          }}
-        >
-          {scopedChildren}
-        </GlassSurface>
-      </Modal>
-    );
-  }
 
   const modal = (
     <GorhomBottomSheetModal
