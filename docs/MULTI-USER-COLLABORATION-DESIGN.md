@@ -1012,8 +1012,11 @@ Two laptops + a phone (one daemon each) under one identity now:
     candidate carries a SIGMA-I-style Ed25519 signature over
     `(offer.nonce, offer.ephPub, candidate.ephPub)` made with the
     responder's root sign key, defeating relay-side substitution.
-  - ⏳ 3.a/1 — receiver-side: accept incoming pair-offer, surface in
-    "Pending friend requests" section of new `/settings/friends`
+  - ✅ 3.a/1 — friend-pair offer generation
+    (`friend-pair-pending-store.ts` + tests). WS RPCs `friend/pair/
+    generate` and `friend/pair/cancel`. `IdentityService.generate
+    FriendPairOffer` / `cancelFriendPairOffer`. DaemonClient methods.
+    Cross-identity analog of Phase 2.c.
   - ⏳ 3.a/2 — sender-side: WS RPC `friend/pair/redeem` + UI to
     paste/scan a friend-pair link
   - ⏳ 3.a/3 — bilateral confirm: both sides see the other in their
@@ -1038,8 +1041,9 @@ Two laptops + a phone (one daemon each) under one identity now:
   session timeout enforcement.
 
 ### Test infrastructure status
-- 212 tests across 22 files in the identity + relay-transport
-  suite, all green (192 from Phase 2 + 20 new from Phase 3.a/0).
+- 235 tests across 23 files in the identity + relay-transport
+  suite, all green (192 from Phase 2 + 20 from Phase 3.a/0
+  + 23 from Phase 3.a/1: 14 pending-store + 9 RPC-schema).
 - `mock-relay.ts` — in-process Cloudflare adapter clone for
   spawning real WebSocket bridges in tests without wrangler-dev.
 - Real two-daemon e2e: `device-link-mock-relay.e2e.test.ts` covers

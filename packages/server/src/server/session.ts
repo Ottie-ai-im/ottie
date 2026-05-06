@@ -2231,6 +2231,10 @@ export class Session {
         return this.handleDeviceLinkRejectRequest(msg);
       case "device/remove":
         return this.handleDeviceRemoveRequest(msg);
+      case "friend/pair/generate":
+        return this.handleFriendPairGenerateRequest(msg);
+      case "friend/pair/cancel":
+        return this.handleFriendPairCancelRequest(msg);
       default:
         return undefined;
     }
@@ -2408,6 +2412,82 @@ export class Session {
     const cancelled = this.identityService.cancelDeviceLinkOffer(request.nonceB64);
     this.emit({
       type: "device/link/cancel/response",
+      payload: { requestId: request.requestId, cancelled, error: null },
+    });
+  }
+
+  private async handleFriendPairGenerateRequest(
+    request: Extract<SessionInboundMessage, { type: "friend/pair/generate" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "friend/pair/generate/response",
+        payload: {
+          requestId: request.requestId,
+          offer: null,
+          deepLink: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+
+    try {
+      const result = this.identityService.generateFriendPairOffer({ ttlMs: request.ttlMs });
+      if (!result) {
+        this.emit({
+          type: "friend/pair/generate/response",
+          payload: {
+            requestId: request.requestId,
+            offer: null,
+            deepLink: null,
+            error:
+              "Cannot generate friend-pair offer — identity not loaded, " +
+              "self-device not configured, or relay endpoint missing",
+          },
+        });
+        return;
+      }
+      this.emit({
+        type: "friend/pair/generate/response",
+        payload: {
+          requestId: request.requestId,
+          offer: result.pending.offer,
+          deepLink: result.deepLink,
+          error: null,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit({
+        type: "friend/pair/generate/response",
+        payload: {
+          requestId: request.requestId,
+          offer: null,
+          deepLink: null,
+          error: message,
+        },
+      });
+    }
+  }
+
+  private async handleFriendPairCancelRequest(
+    request: Extract<SessionInboundMessage, { type: "friend/pair/cancel" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "friend/pair/cancel/response",
+        payload: {
+          requestId: request.requestId,
+          cancelled: false,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const cancelled = this.identityService.cancelFriendPairOffer(request.nonceB64);
+    this.emit({
+      type: "friend/pair/cancel/response",
       payload: { requestId: request.requestId, cancelled, error: null },
     });
   }

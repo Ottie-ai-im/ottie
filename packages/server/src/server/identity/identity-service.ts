@@ -27,6 +27,10 @@ import {
   type RedeemDeviceLinkOfferInput,
   type RedeemDeviceLinkOfferOutcome,
 } from "./device-link-sender.js";
+import {
+  FriendPairPendingStore,
+  type CreatePendingFriendPairOfferResult,
+} from "./friend-pair-pending-store.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
 import type { PendingDeviceLinkCandidateOnWire } from "./identity-rpc-schemas.js";
 import {
@@ -101,6 +105,7 @@ export class IdentityService {
   private readonly relayEndpoint: string | null;
   private readonly pendingDeviceLinks: DeviceLinkPendingStore;
   private readonly pendingCandidates: DeviceLinkPendingCandidateStore;
+  private readonly pendingFriendPairs: FriendPairPendingStore;
   private readonly events: DeviceListEventStore;
   private readonly peerSessions: PeerSessionRegistry;
   private peerDialer: PeerSyncDialer | null = null;
@@ -115,6 +120,7 @@ export class IdentityService {
     this.relayEndpoint = options.relayEndpoint ?? null;
     this.pendingDeviceLinks = new DeviceLinkPendingStore(options.logger);
     this.pendingCandidates = new DeviceLinkPendingCandidateStore(options.logger);
+    this.pendingFriendPairs = new FriendPairPendingStore(options.logger);
     this.events = DeviceListEventStore.loadOrCreate(options.ottieHome, options.logger);
     this.peerSessions = new PeerSessionRegistry(options.logger);
     this.state = this.loadInitialState();
@@ -239,6 +245,50 @@ export class IdentityService {
    */
   cancelDeviceLinkOffer(nonceB64: string): boolean {
     return this.pendingDeviceLinks.cancel(nonceB64);
+  }
+
+  /**
+   * Phase 3.a/1: generate a one-time friend-pair offer for adding an
+   * external peer (a different identity / different user) as a friend.
+   * Cross-identity analog of `generateDeviceLinkOffer`. The deep-link
+   * is rendered as a QR + "copy link" affordance for the friend to
+   * scan in person. Returns null when prerequisites aren't met (no
+   * identity loaded, no selfDeviceContext, no relayEndpoint configured).
+   *
+   * The pending offer's ephemeral private key stays in
+   * `pendingFriendPairs` until the friend's daemon redeems it through
+   * the relay-routed handler (Phase 3.a/2).
+   */
+  generateFriendPairOffer(
+    options: { ttlMs?: number; nowMs?: number } = {},
+  ): CreatePendingFriendPairOfferResult | null {
+    if (!this.selfDeviceContext) return null;
+    if (!this.relayEndpoint) return null;
+    if (this.state.kind !== "loaded") return null;
+    return this.pendingFriendPairs.create({
+      serverId: this.selfDeviceContext.serverId,
+      rootSignPublicKeyB64: this.state.bundle.stored.signPublicKeyB64,
+      displayName: this.state.bundle.stored.displayName,
+      relayEndpoint: this.relayEndpoint,
+      ttlMs: options.ttlMs,
+      nowMs: options.nowMs,
+    });
+  }
+
+  /**
+   * Cancel an outstanding friend-pair offer (user backs out of the
+   * "Add friend" flow). Returns true if there was something to cancel.
+   */
+  cancelFriendPairOffer(nonceB64: string): boolean {
+    return this.pendingFriendPairs.cancel(nonceB64);
+  }
+
+  /**
+   * Test/diagnostic helper. Phase 3.a/2 will not consume this — redemption
+   * goes through a different path involving the relay-routed handshake.
+   */
+  getPendingFriendPairStore(): FriendPairPendingStore {
+    return this.pendingFriendPairs;
   }
 
   /**

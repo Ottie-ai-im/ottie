@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { DeviceLinkOfferSchema } from "./device-link-types.js";
 import { DeviceSchema } from "./device-types.js";
+import { FriendPairOfferSchema } from "./friend-pair-types.js";
 import { type StoredRootIdentity } from "./identity-types.js";
 
 // Pure-zod schemas (no node:fs / node:crypto imports) so this module — and the
@@ -295,6 +296,53 @@ export const DeviceLinkRejectResponseSchema = z.object({
   payload: z.object({
     requestId: z.string(),
     rejected: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- friend/pair/generate (Phase 3.a/1) --------------------------------
+// Cross-identity analog of device/link/generate. Originating user (Alice)
+// asks the daemon to create a one-time friend-pair offer she'll display
+// (as a QR or copy-link) for a friend (Bob) to scan in person.
+
+export const FriendPairGenerateRequestSchema = z.object({
+  type: z.literal("friend/pair/generate"),
+  requestId: z.string(),
+  /**
+   * Optional TTL override in milliseconds. Defaults to 10 minutes server-
+   * side. Bounded by the daemon to keep offers short-lived; a UI shouldn't
+   * normally pass anything here.
+   */
+  ttlMs: z.number().int().positive().optional(),
+});
+
+export const FriendPairGenerateResponseSchema = z.object({
+  type: z.literal("friend/pair/generate/response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** The wire-shape offer; null when the daemon refused to create one. */
+    offer: FriendPairOfferSchema.nullable(),
+    /** Encoded `ottie://friend-pair#payload=…` deep link for QR / clipboard. */
+    deepLink: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- friend/pair/cancel (Phase 3.a/1) ----------------------------------
+// User backs out of "Add friend". Drops the pending offer so its nonce
+// can't be redeemed even if the QR was photographed.
+
+export const FriendPairCancelRequestSchema = z.object({
+  type: z.literal("friend/pair/cancel"),
+  requestId: z.string(),
+  nonceB64: z.string().min(1),
+});
+
+export const FriendPairCancelResponseSchema = z.object({
+  type: z.literal("friend/pair/cancel/response"),
+  payload: z.object({
+    requestId: z.string(),
+    cancelled: z.boolean(),
     error: z.string().nullable(),
   }),
 });

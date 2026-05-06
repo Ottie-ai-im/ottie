@@ -1519,6 +1519,53 @@ export class DaemonClient {
     });
   }
 
+  async friendPairGenerate(params?: {
+    requestId?: string;
+    timeoutMs?: number;
+    ttlMs?: number;
+  }): Promise<{
+    offer: import("../server/identity/friend-pair-types.js").FriendPairOffer | null;
+    deepLink: string | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "friend/pair/generate",
+        requestId,
+        ...(params?.ttlMs !== undefined ? { ttlMs: params.ttlMs } : {}),
+      },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "friend/pair/generate/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return {
+          offer: msg.payload.offer,
+          deepLink: msg.payload.deepLink,
+          error: msg.payload.error,
+        };
+      },
+    });
+  }
+
+  async friendPairCancel(
+    nonceB64: string,
+    params?: { requestId?: string; timeoutMs?: number },
+  ): Promise<{ cancelled: boolean; error: string | null }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "friend/pair/cancel", requestId, nonceB64 },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "friend/pair/cancel/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { cancelled: msg.payload.cancelled, error: msg.payload.error };
+      },
+    });
+  }
+
   async deviceLinkRedeem(args: {
     deepLink: string;
     deviceLabel: string;

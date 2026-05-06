@@ -3,6 +3,10 @@ import { describe, expect, test } from "vitest";
 import {
   DevicesListRequestSchema,
   DevicesListResponseSchema,
+  FriendPairCancelRequestSchema,
+  FriendPairCancelResponseSchema,
+  FriendPairGenerateRequestSchema,
+  FriendPairGenerateResponseSchema,
   IdentityGetRequestSchema,
   IdentityGetResponseSchema,
   IdentityInitializeRequestSchema,
@@ -236,5 +240,104 @@ describe("device/list request/response schemas (Phase 2.b)", () => {
       },
     };
     expect(() => DevicesListResponseSchema.parse(wire)).toThrow();
+  });
+});
+
+describe("friend/pair/generate request/response schemas (Phase 3.a/1)", () => {
+  test("request roundtrips without ttlMs", () => {
+    const wire = { type: "friend/pair/generate", requestId: "req-fp-1" };
+    expect(FriendPairGenerateRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("request roundtrips with ttlMs override", () => {
+    const wire = { type: "friend/pair/generate", requestId: "req-fp-1", ttlMs: 60_000 };
+    expect(FriendPairGenerateRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("request rejects non-positive ttlMs", () => {
+    expect(() =>
+      FriendPairGenerateRequestSchema.parse({
+        type: "friend/pair/generate",
+        requestId: "req-fp-1",
+        ttlMs: 0,
+      }),
+    ).toThrow();
+  });
+
+  test("response success roundtrips with offer + deepLink", () => {
+    const wire = {
+      type: "friend/pair/generate/response",
+      payload: {
+        requestId: "req-fp-1",
+        offer: {
+          v: 1,
+          kind: "friend-pair",
+          serverId: "srv_alice",
+          rootSignPublicKeyB64: "x".repeat(43),
+          displayName: "Alice",
+          ephPublicKeyB64: "y".repeat(43),
+          nonceB64: "z".repeat(43),
+          exp: "2030-01-01T00:00:00.000Z",
+          relayEndpoint: "relay.claws.company:443",
+        },
+        deepLink: "ottie://friend-pair#payload=abc",
+        error: null,
+      },
+    };
+    expect(FriendPairGenerateResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response allows null offer + null deepLink with error string", () => {
+    const wire = {
+      type: "friend/pair/generate/response",
+      payload: {
+        requestId: "req-fp-1",
+        offer: null,
+        deepLink: null,
+        error: "Identity service is not available on this daemon",
+      },
+    };
+    expect(FriendPairGenerateResponseSchema.parse(wire)).toEqual(wire);
+  });
+});
+
+describe("friend/pair/cancel request/response schemas (Phase 3.a/1)", () => {
+  test("request roundtrips", () => {
+    const wire = {
+      type: "friend/pair/cancel",
+      requestId: "req-fp-c-1",
+      nonceB64: "n".repeat(32),
+    };
+    expect(FriendPairCancelRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("request rejects empty nonce", () => {
+    expect(() =>
+      FriendPairCancelRequestSchema.parse({
+        type: "friend/pair/cancel",
+        requestId: "req-fp-c-1",
+        nonceB64: "",
+      }),
+    ).toThrow();
+  });
+
+  test("response roundtrips on success", () => {
+    const wire = {
+      type: "friend/pair/cancel/response",
+      payload: { requestId: "req-fp-c-1", cancelled: true, error: null },
+    };
+    expect(FriendPairCancelResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response roundtrips on failure", () => {
+    const wire = {
+      type: "friend/pair/cancel/response",
+      payload: {
+        requestId: "req-fp-c-1",
+        cancelled: false,
+        error: "Identity service is not available on this daemon",
+      },
+    };
+    expect(FriendPairCancelResponseSchema.parse(wire)).toEqual(wire);
   });
 });

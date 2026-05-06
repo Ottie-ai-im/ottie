@@ -13,12 +13,16 @@ from here.
 - **Side-quest in flight**: extend ottie into multi-user collab.
   Design doc: [`docs/MULTI-USER-COLLABORATION-DESIGN.md`](./MULTI-USER-COLLABORATION-DESIGN.md).
 - **Current state**: **Phases 1 + 2 fully complete** + **Phase 3.a/0
-  done** (friend-pair offer schema + ECDH crypto core, pure fns).
-  212 tests green across 22 files in identity + relay-transport.
-- **Next phase**: **Phase 3.a/1 — receiver-side friend-pair pending
-  offer store + WS RPC `friend/pair/generate`**, mirroring
-  Phase 2.c's `device-link-pending-store` + `device/link/generate`.
-  Sub-task breakdown in design doc §17 (Phase 3 section).
+  + 3.a/1 done** (friend-pair offer schema + ECDH crypto core +
+  pending-store + WS RPCs `friend/pair/generate` + `friend/pair/
+  cancel`). 235 tests green across 23 files in identity + relay-
+  transport.
+- **Next phase**: **Phase 3.a/2 — receiver-side friend-pair handler
+  (relay → decrypt → pending-candidate store) + sender-side WS RPC
+  `friend/pair/redeem`**, mirroring Phase 2.d/2 + 2.d/3. The
+  existing `connectionHandlers` extension on relay-transport (added
+  in Phase 2.d/1) is reusable; just add a new handler with the
+  `"friend-pair:"` prefix. Sub-task breakdown in design doc §17.
 - **User**: Wendell. Native Mandarin speaker, talks to you in 中文.
   Wants direct answers + small commits + tests for everything. He
   pushed back hard once when I designed without reading existing
