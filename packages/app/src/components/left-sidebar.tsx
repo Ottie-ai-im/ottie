@@ -1,8 +1,9 @@
 import { router, usePathname, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { MobileTabBar, type MobileTab } from "@/components/mobile-tab-bar";
+import { TopRightAddMenu } from "@/components/top-right-add-menu";
 import { buildHostCommunityRoute, buildHostDevicesRoute } from "@/utils/host-routes";
-import { MessagesSquare, Plus } from "lucide-react-native";
+import { MessagesSquare } from "lucide-react-native";
 import {
   type Dispatch,
   memo,
@@ -17,9 +18,7 @@ import {
 } from "react";
 import {
   Platform,
-  Pressable,
   StyleSheet as RNStyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -36,8 +35,6 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
-import { Shortcut } from "@/components/ui/shortcut";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HEADER_TOP_PADDING_MOBILE, useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import { BlurView } from "expo-blur";
@@ -46,7 +43,6 @@ import { useGlobalDragStore } from "@/stores/global-drag-store";
 import { buildHostWorkspaceOpenRoute, buildHostNewWorkspaceRoute } from "@/utils/host-routes";
 import { useSidebarAnimation } from "@/contexts/sidebar-animation-context";
 import { useOpenProjectPicker } from "@/hooks/use-open-project-picker";
-import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { useSidebarShortcutModel } from "@/hooks/use-sidebar-shortcut-model";
 import {
   type SidebarProjectEntry,
@@ -393,53 +389,6 @@ function HostSwitchOption({
   );
 }
 
-function FooterIconButton({
-  onPress,
-  testID,
-  accessibilityLabel,
-  icon: Icon,
-  theme,
-}: {
-  onPress: () => void;
-  testID: string;
-  accessibilityLabel: string;
-  icon: typeof Plus;
-  theme: SidebarTheme;
-}) {
-  return (
-    <Pressable
-      style={styles.footerIconButton}
-      testID={testID}
-      nativeID={testID}
-      collapsable={false}
-      accessible
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      onPress={onPress}
-    >
-      {({ hovered }) => (
-        <Icon
-          size={theme.iconSize.md}
-          color={hovered ? theme.colors.foreground : theme.colors.foregroundMuted}
-        />
-      )}
-    </Pressable>
-  );
-}
-
-function AddProjectTooltipContent({
-  newAgentKeys,
-}: {
-  newAgentKeys: ReturnType<typeof useShortcutKeys>;
-}) {
-  return (
-    <View style={styles.tooltipRow}>
-      <Text style={styles.tooltipText}>Add project</Text>
-      {newAgentKeys ? <Shortcut chord={newAgentKeys} /> : null}
-    </View>
-  );
-}
-
 function MobileSidebar({
   theme,
   activeServerId,
@@ -488,17 +437,15 @@ function MobileSidebar({
     closeToAgent();
   }, [closeToAgent, gestureAnimatingRef]);
 
+  // Phase 2.c-ui: the chats-tab "+" button now opens the same 5-item add
+  // menu the sessions-screen header uses (newChat / scanToPair / joinHost /
+  // createWorkspace / addDevice). Single-purpose buttons in two places led
+  // to a discoverability gap — Add device wasn't reachable from this entry
+  // even though it was the more natural surface to look. handleOpenProject
+  // is still wired through chat.add.createWorkspace inside the menu.
   const mobileChatsTrailing = useMemo(
-    () => (
-      <FooterIconButton
-        onPress={handleOpenProject}
-        testID="sidebar-add-project"
-        accessibilityLabel="Add project"
-        icon={Plus}
-        theme={theme}
-      />
-    ),
-    [handleOpenProject, theme],
+    () => <TopRightAddMenu serverId={activeServerId ?? undefined} testID="sidebar-add-menu" />,
+    [activeServerId],
   );
 
   const handleMobileTabSelect = useCallback(
@@ -755,26 +702,10 @@ function DesktopSidebar({
   // Hide the chat sessions panel on top-level non-chat destinations
   // (extensions / activity / devices / settings) so the page gets full width.
   const isNonChatRoute = /\/(community|devices|usage|settings)(\/|$)/.test(pathname);
-  const newAgentKeys = useShortcutKeys("new-agent");
   const padding = useWindowControlsPadding("sidebar");
   const desktopChatsTrailing = useMemo(
-    () => (
-      <Tooltip delayDuration={300}>
-        <TooltipTrigger asChild>
-          <FooterIconButton
-            onPress={handleOpenProject}
-            testID="sidebar-add-project"
-            accessibilityLabel="Add project"
-            icon={Plus}
-            theme={theme}
-          />
-        </TooltipTrigger>
-        <TooltipContent side="bottom" align="end" offset={6}>
-          <AddProjectTooltipContent newAgentKeys={newAgentKeys} />
-        </TooltipContent>
-      </Tooltip>
-    ),
-    [handleOpenProject, newAgentKeys, theme],
+    () => <TopRightAddMenu serverId={activeServerId ?? undefined} testID="sidebar-add-menu" />,
+    [activeServerId],
   );
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const setSidebarWidth = usePanelStore((state) => state.setSidebarWidth);
@@ -963,14 +894,6 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     flexShrink: 0,
   },
-  footerIconButton: {
-    width: 28,
-    height: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[1],
-  },
   hostPickerList: {
     gap: theme.spacing[2],
   },
@@ -998,14 +921,5 @@ const styles = StyleSheet.create((theme) => ({
   hostPickerCancelText: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
-  },
-  tooltipRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-  },
-  tooltipText: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.popoverForeground,
   },
 }));
