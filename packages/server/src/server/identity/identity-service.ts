@@ -8,6 +8,8 @@ import { applyDeviceListEvent, signDeviceAddedEvent } from "./device-list-event.
 import { DeviceListEventStore } from "./device-list-event-store.js";
 import type { DeviceListEvent } from "./device-list-event-types.js";
 import { DeviceLinkPendingCandidateStore } from "./device-link-pending-candidate-store.js";
+import { PeerSessionRegistry } from "./peer-session-registry.js";
+import { createPeerSyncConnectionHandler } from "./peer-sync-receiver.js";
 import {
   DeviceLinkPendingStore,
   type CreatePendingOfferResult,
@@ -94,6 +96,7 @@ export class IdentityService {
   private readonly pendingDeviceLinks: DeviceLinkPendingStore;
   private readonly pendingCandidates: DeviceLinkPendingCandidateStore;
   private readonly events: DeviceListEventStore;
+  private readonly peerSessions: PeerSessionRegistry;
   private state: IdentityState;
   private selfDevice: SelfDeviceBundle | null = null;
   private deviceList: StoredDeviceList | null = null;
@@ -106,6 +109,7 @@ export class IdentityService {
     this.pendingDeviceLinks = new DeviceLinkPendingStore(options.logger);
     this.pendingCandidates = new DeviceLinkPendingCandidateStore(options.logger);
     this.events = DeviceListEventStore.loadOrCreate(options.ottieHome, options.logger);
+    this.peerSessions = new PeerSessionRegistry(options.logger);
     this.state = this.loadInitialState();
     if (this.state.kind === "loaded" && this.selfDeviceContext) {
       // Existing daemons that pre-date Phase 2.a have a root identity but no
@@ -249,6 +253,35 @@ export class IdentityService {
       pendingOffers: this.pendingDeviceLinks,
       pendingCandidates: this.pendingCandidates,
     });
+  }
+
+  /**
+   * Phase 2.f/2b: relay-side handler that runs the SIGMA-I responder
+   * side of peer-sync. Returns null if prerequisites aren't met
+   * (uninitialized identity, no self-device, etc.) — bootstrap should
+   * skip registering it in that case to avoid attaching stale state.
+   *
+   * The handler's lifetime is tied to relay-transport; sessions inside
+   * the registry are cleared when their sockets close.
+   */
+  createPeerSyncConnectionHandler(): RelayConnectionHandler | null {
+    if (!this.selfDevice || !this.selfDeviceContext) return null;
+    return createPeerSyncConnectionHandler({
+      selfDeviceId: this.selfDeviceContext.serverId,
+      selfSignPrivateKey: this.selfDevice.signPrivateKey,
+      getLocalDeviceList: () => this.deviceList?.devices ?? [],
+      sessions: this.peerSessions,
+      applyInboundEvent: (event) => {
+        // Re-use the same idempotent + signature-checking apply path
+        // that everything else funnels through.
+        this.applyInboundDeviceListEvent(event);
+      },
+    });
+  }
+
+  /** Phase 2.f/2b+: snapshot of active peer sessions for diagnostics + Phase 2.f/3 broadcast. */
+  getPeerSessions(): readonly import("./peer-session-registry.js").PeerSession[] {
+    return this.peerSessions.list();
   }
 
   /**

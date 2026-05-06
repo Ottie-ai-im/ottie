@@ -128,7 +128,11 @@ import { createConnectionOfferV2, encodeOfferToFragmentUrl } from "./connection-
 import { generateLocalPairingOffer } from "./pairing-offer.js";
 import { loadOrCreateDaemonKeyPair } from "./daemon-keypair.js";
 import { IdentityService } from "./identity/identity-service.js";
-import { startRelayTransport, type RelayTransportController } from "./relay-transport.js";
+import {
+  startRelayTransport,
+  type RelayConnectionHandler,
+  type RelayTransportController,
+} from "./relay-transport.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
@@ -965,10 +969,21 @@ export async function createOttieDaemon(
               relayEndpoint,
               serverId,
               daemonKeyPair: daemonKeyPair.keyPair,
-              // Phase 2.d: route "device-link:<nonce>" connections to the
-              // identity-service's redemption handler instead of the
-              // default agent-control attach flow.
-              connectionHandlers: [identityService.createDeviceLinkConnectionHandler()],
+              // Connection handlers (Phase 2.d + 2.f/2):
+              //   - "device-link:<nonce>" → device-link redemption (Phase 2.d)
+              //   - "peer-sync:<nonce>"   → peer-daemon SIGMA-I session (Phase 2.f)
+              // Both ride the same Cloudflare Workers relay and route via
+              // relay-transport's connectionHandlers extension point.
+              // peer-sync handler is null until self-device is loaded
+              // (uninitialized identity has no signing key to handshake with).
+              connectionHandlers: ((): RelayConnectionHandler[] => {
+                const handlers: RelayConnectionHandler[] = [
+                  identityService.createDeviceLinkConnectionHandler(),
+                ];
+                const peerSyncHandler = identityService.createPeerSyncConnectionHandler();
+                if (peerSyncHandler) handlers.push(peerSyncHandler);
+                return handlers;
+              })(),
             });
           }
         };
