@@ -453,6 +453,47 @@ have any AI configured (so any of them can render the modal) and (b)
 once the owner picks, lock the session to that specific daemon for
 its whole lifetime.
 
+#### 7.5.1 Where the modal renders (Q1: decided)
+
+**Every online owner-device that has any AI configured shows the
+modal simultaneously.** Whichever device the owner picks up first
+handles the decision; the other devices' modals dismiss automatically
+once the choice is broadcast over the multi-device sync layer (§5.5).
+
+Rationale: optimizes for "owner picks up nearest screen and
+responds". Avoids guessing "which device is the user holding right
+now". Scales naturally — a 3-device user gets 3 chances to notice;
+a 1-device user gets 1.
+
+#### 7.5.2 Cancel UX (Q2: decided)
+
+If the owner taps Cancel on either modal:
+- Friend sees: **"Wendell declined the request"** (explicit, present
+  tense)
+- NOT: "Wendell isn't available right now" (intentionally rejecting
+  ambiguity — better to be honest than passive-aggressive)
+- NOT: silent timeout (leaving the friend hanging with a spinner is
+  worse than a clear no)
+
+Same rendering applies if the owner ignores both modals past a 60-
+second timeout — friend sees "no answer", which is functionally a
+decline.
+
+#### 7.5.3 Switching mid-session (Q3: decided)
+
+Once a share session is locked to a daemon (after step 2 confirm),
+**the owner cannot reroute it to a different daemon mid-session**.
+To change which daemon handles the share, the owner must:
+1. Tap "End session" on the active banner
+2. Wait for the friend to send a fresh share request
+3. Pick a different daemon in the new step-1 modal
+
+Rationale: a mid-session switch would force the friend's UI to
+re-render the active conversation under a different "AI identity",
+which is confusing and erodes the simple mental model of "I'm
+talking to Wendell's Codex right now". Phase 5+ can revisit if real
+demand surfaces.
+
 ---
 
 ## 8. Relay Changes
@@ -779,7 +820,7 @@ CLAUDE.md gets a parallel one-paragraph addition under "Project" pointing to thi
 
 **Q6 — Identity backup / recovery?** If user loses all their devices, they lose their identity. **Confirmed: accepted for Phase 1.** No recovery flow; user has to start fresh and re-add friends. Phase 6+ adds seed-phrase recovery.
 
-**Q7 — Multi-daemon-per-user?** **Confirmed: supported.** A user can run multiple daemons (laptop + home server). First-online handles incoming AI share requests; others observe and stay in sync via the multi-device sync layer (§5.5). Detailed routing tie-breaks TBD when actually building Phase 4.
+**Q7 — Multi-daemon-per-user?** **Confirmed: supported.** A user can run multiple daemons (laptop + home server). Per-share routing decided explicitly per-request via the two-step modal (§7.5); see §7.5.1–7.5.3 for the modal-rendering / cancel / mid-session-switch decisions.
 
 **Q8 — Naming convention?** **Confirmed:** 中文 → "账号" (account); English → "identity".
 
@@ -823,3 +864,158 @@ Approval gate (filled in upon move from Draft to Approved):
 - [ ] DATA_MODEL.md proposed appendix landed.
 - [x] Backward-compatibility matrix for old mobile clients vs new daemons audited (CLAUDE.md WS rule) — all new fields `.optional()`, no required additions, no narrowed types.
 - [ ] Phase 1 ready to start.
+
+---
+
+## 16. Concept Clarifications (avoid these confusions)
+
+These are mental models that have come up during planning that
+are NOT what the design says. Pinned here so future me / future
+maintainers don't drift.
+
+### 16.1 Multi-device ≠ "千军万马"(army of devices)
+
+**Wrong mental model:** "I have 3 daemons → I can offer 3× the AI
+capacity to friends" or "more devices = more reach for sharing".
+
+**Correct mental model:** Multi-device is **one person, multiple
+screens** — same as logging into WeChat on phone + laptop + iPad. A
+friend adds **you** (the identity), not your specific device. They
+see one Wendell. Your devices are interchangeable interfaces onto
+the same identity.
+
+For AI sharing:
+- A friend's request lands on **one specific daemon** (the one you
+  pick in the §7.5 modal). The other daemons don't help carry the
+  load — they just sync state.
+- "More devices" gives you redundancy ("if my laptop is closed, my
+  home server is still online to handle Bob's request") + UI
+  ubiquity ("I can hit Approve from whichever screen I'm at"), NOT
+  parallelism.
+- The AI itself runs on whichever single daemon has it configured
+  with API keys, and that daemon's CPU/quota is what Bob actually
+  uses.
+
+### 16.2 Adding friends has nothing to do with how many devices you have
+
+A 1-device user and a 100-device user can add the same number of
+friends with the same UX. Friend-pair is **identity-to-identity**:
+the QR carries the root pubkey, not any device-specific data. Once
+paired, your full device list (Phase 2.f sync) makes the friend
+visible on all your devices automatically.
+
+### 16.3 Daemons sync, but they don't pool
+
+Phase 2.f is "every daemon under one identity sees the same device
+list, friend list, and chat history" — so you can switch screens
+freely. It is NOT "every daemon shares its compute / API quota /
+configured AIs into a common pool". An AI is bound to the daemon it
+was configured on, full stop.
+
+---
+
+## 17. Implementation Status (current as of last commit)
+
+Snapshot so a fresh planning session can pick up without re-reading
+git log. Update on every phase boundary.
+
+### Phase 1 — identity foundation
+- ✅ COMPLETE
+- root identity (Ed25519) created on first run, persisted to
+  `$OTTIE_HOME/identity/root.json`
+- self-device record + devices.json seeded on first boot
+- WS RPCs: `identity/get`, `identity/initialize`, `device/list`
+- CLI: `ottie identity show`
+- App: first-run onboarding screen, `/settings/identity` read-only
+  view, ProfileButton entry
+
+### Phase 2.a–c — device-link offer generation + UI plumbing
+- ✅ COMPLETE
+- `device-link-pending-store.ts`: in-memory pending offers, X25519
+  ephemeral keypairs, 8-offer cap, 10-min TTL
+- WS RPCs: `device/link/generate`, `device/link/cancel`
+- App: `/onboarding/add-device` QR + copy-link screen, wired into
+  the chats `+` menu
+
+### Phase 2.d — device-link redemption (new device → old device)
+- ✅ COMPLETE (4 sub-commits)
+- 2.d/0: candidate schema + ECDH + NaCl box crypto core (pure fns)
+- 2.d/1: `connectionHandlers` extension point on relay-transport
+- 2.d/2: receiver-side handler + `pending-candidate-store.ts`
+- 2.d/3: sender-side `redeemDeviceLinkOffer` + WS RPC
+  `device/link/redeem` + DaemonClient method
+
+### Phase 2.e — approval + signing + persistence (old device → new)
+- ✅ COMPLETE (3 sub-commits)
+- 2.e/0: approve crypto core (signs candidate with root,
+  encrypts reply via same ECDH key from Phase 2.d)
+- 2.e/1: approve/reject through the same Phase 2.d socket; sender
+  outcome shape grows `status: "linked"` carrying root identity +
+  signed device + peer-list snapshot
+- 2.e/2: `adoptIdentityFromLink` writes root.json +
+  self-device.json + devices.json on the new device, in-memory
+  state syncs to "loaded" without restart
+
+### Phase 2.d/e UI
+- ✅ COMPLETE
+- `/onboarding/link-existing-device` paste-link form
+- `/settings/identity` "Pending device requests" section, polls
+  every 3s, Approve/Reject buttons
+
+### Phase 2.f — multi-daemon device-list sync
+- 🔄 IN PROGRESS (4 of 6 sub-commits done)
+- ✅ 2.f/0: event sign/verify/apply pure functions (DeviceListEvent
+  schema with kind=added/removed, Ed25519 sig by source self-device,
+  per-source seq, idempotent merge with replay protection)
+- ✅ 2.f/1: events log persisted to events.json,
+  `IdentityService.tryEmitDeviceAddedEvent` after approve, inbound
+  apply path
+- ✅ 2.f/2a: SIGMA-I peer-sync handshake crypto (sign ephPubKey
+  under long-term key, mutual auth, ECDH session key)
+- ✅ 2.f/2b: receiver-side `connectionHandler` for `peer-sync:`
+  prefix + `PeerSessionRegistry`, wired through bootstrap
+- ⏳ 2.f/2c: dialer — scan devices.json on boot, dial each peer
+  daemon over relay
+- ⏳ 2.f/3: outbound broadcast — when local emit fires, fan out
+  the encrypted event to every active peer session
+
+### Phase 2.g — remove device + revocation
+- ⏳ NOT STARTED
+- Will add: "Remove device" button in `/settings/identity`,
+  outbound `device-removed` event emit, peer-side apply
+
+### Phase 3 — friend pairing + 1-to-1 chat
+- ⏳ NOT STARTED
+- Same crypto pattern as Phase 2.d but cross-identity (peer-pair
+  offer, both-sides-accept). Reuses Phase 2.f's relay machinery
+  for sync.
+
+### Phase 4 — AI sharing
+- ⏳ NOT STARTED
+- §7.5 modal flow decided. Per-share two-step gate (no auto, no
+  per-friend defaults).
+
+### Phase 5 — polish
+- ⏳ NOT STARTED
+- Block, display name update propagation, limits-exhaustion UI,
+  session timeout enforcement.
+
+### Test infrastructure status
+- 175+ tests across ~18 files, all green (with one occasional
+  vitest-parallel flake on the mock-relay e2e; passes on isolated
+  runs)
+- `mock-relay.ts` — in-process Cloudflare adapter clone for
+  spawning real WebSocket bridges in tests without wrangler-dev
+- Real two-daemon e2e: `device-link-mock-relay.e2e.test.ts` covers
+  the Phase 2.d/2.e happy path through real `ws` sockets
+
+### Tech-stack invariants (do not change without re-deciding)
+- Cloudflare Workers relay (free tier suffices for personal-scale)
+- NaCl box (Curve25519 + XSalsa20-Poly1305) for application-layer
+  encryption everywhere; SIGMA-I for peer-sync handshake
+- Ed25519 for all signatures (root, self-device, events, peer-hello)
+- JWK base64url for raw 32-byte key serialization on disk
+- One identity = N daemons, N can include zero (pure-client phone)
+  but at least one daemon must be online to send messages
+- Open-source under AGPL-3.0; user explicitly OK with license
+  traction
