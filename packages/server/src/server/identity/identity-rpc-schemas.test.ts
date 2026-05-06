@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  DevicesListRequestSchema,
+  DevicesListResponseSchema,
   IdentityGetRequestSchema,
   IdentityGetResponseSchema,
   IdentityInitializeRequestSchema,
@@ -9,7 +11,18 @@ import {
   PublicRootIdentitySchema,
   toPublicRootIdentity,
 } from "./identity-rpc-schemas.js";
+import type { StoredDevice } from "./device-types.js";
 import type { StoredRootIdentity } from "./identity-types.js";
+
+const DEVICE_FIXTURE: StoredDevice = {
+  v: 1,
+  deviceId: "srv_fixture_1",
+  deviceLabel: "Fixture-MacBook",
+  role: "daemon",
+  signPublicKeyB64: "z".repeat(43),
+  authorizedAt: "2026-05-05T12:00:00.000Z",
+  authorizationSignatureB64: "sig_".padEnd(86, "x"),
+};
 
 const STORED_FIXTURE: StoredRootIdentity = {
   v: 1,
@@ -168,5 +181,60 @@ describe("IdentityInitialize request/response schemas", () => {
       },
     };
     expect(IdentityInitializeResponseSchema.parse(wire)).toEqual(wire);
+  });
+});
+
+describe("device/list request/response schemas (Phase 2.b)", () => {
+  test("request roundtrips", () => {
+    const wire = { type: "device/list", requestId: "req-d-1" };
+    expect(DevicesListRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response roundtrips with single-device list", () => {
+    const wire = {
+      type: "device/list/response",
+      payload: {
+        requestId: "req-d-1",
+        devices: [DEVICE_FIXTURE],
+        error: null,
+      },
+    };
+    expect(DevicesListResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response roundtrips with empty list", () => {
+    const wire = {
+      type: "device/list/response",
+      payload: {
+        requestId: "req-d-1",
+        devices: [],
+        error: null,
+      },
+    };
+    expect(DevicesListResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response allows null devices with error (service unavailable)", () => {
+    const wire = {
+      type: "device/list/response",
+      payload: {
+        requestId: "req-d-1",
+        devices: null,
+        error: "Identity service is not available on this daemon",
+      },
+    };
+    expect(DevicesListResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("rejects device with missing required field", () => {
+    const wire = {
+      type: "device/list/response",
+      payload: {
+        requestId: "req-d-1",
+        devices: [{ ...DEVICE_FIXTURE, signPublicKeyB64: undefined }],
+        error: null,
+      },
+    };
+    expect(() => DevicesListResponseSchema.parse(wire)).toThrow();
   });
 });

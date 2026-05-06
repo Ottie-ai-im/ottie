@@ -2215,9 +2215,37 @@ export class Session {
         return this.handleIdentityGetRequest(msg);
       case "identity/initialize":
         return this.handleIdentityInitializeRequest(msg);
+      case "device/list":
+        return this.handleDeviceListRequest(msg);
       default:
         return undefined;
     }
+  }
+
+  private async handleDeviceListRequest(
+    request: Extract<SessionInboundMessage, { type: "device/list" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "device/list/response",
+        payload: {
+          requestId: request.requestId,
+          devices: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+
+    const devices = this.identityService.getDeviceList();
+    this.emit({
+      type: "device/list/response",
+      payload: {
+        requestId: request.requestId,
+        devices: [...devices],
+        error: null,
+      },
+    });
   }
 
   private async handleIdentityGetRequest(

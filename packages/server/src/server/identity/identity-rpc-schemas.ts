@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DeviceSchema } from "./device-types.js";
 import { type StoredRootIdentity } from "./identity-types.js";
 
 // Pure-zod schemas (no node:fs / node:crypto imports) so this module — and the
@@ -82,3 +83,25 @@ export function toPublicRootIdentity(stored: StoredRootIdentity): PublicRootIden
     createdAt: stored.createdAt,
   };
 }
+
+// ----- device/list (Phase 2.b) -------------------------------------------
+// Wire shape reuses DeviceSchema directly — the on-disk record is already
+// public-only (no private key), so no projection layer is needed.
+// device-types.ts is itself pure-zod and Metro-bundleable.
+
+export { DeviceSchema };
+export type { StoredDevice as PublicDevice } from "./device-types.js";
+
+export const DevicesListRequestSchema = z.object({
+  type: z.literal("device/list"),
+  requestId: z.string(),
+});
+
+export const DevicesListResponseSchema = z.object({
+  type: z.literal("device/list/response"),
+  payload: z.object({
+    requestId: z.string(),
+    devices: z.array(DeviceSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});

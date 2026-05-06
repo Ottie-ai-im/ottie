@@ -6,17 +6,26 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft } from "lucide-react-native";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
-import type { IdentityStateOnWire } from "@server/server/identity/identity-rpc-schemas";
+import type {
+  IdentityStateOnWire,
+  PublicDevice,
+} from "@server/server/identity/identity-rpc-schemas";
 import type { HostProfile } from "@/types/host-connection";
 
-// Phase 1.f — read-only "My identity & devices" page. For now there is only
-// one device per identity (the daemon hosting it), so the device list is
-// implicitly a single row. Phase 2 will introduce real device-link flows
-// and turn this into the canonical multi-device manager.
+// Phase 1.f — read-only "My identity & devices" page.
+// Phase 2.b adds: device list comes from the new device/list RPC instead of
+// being a single hardcoded "this device" row. Phase 2.c+ will add the
+// "Add device" affordance and remove-device action.
 
 type FetchState =
   | { phase: "loading" }
-  | { phase: "loaded"; state: IdentityStateOnWire; serverId: string; serverLabel: string }
+  | {
+      phase: "loaded";
+      state: IdentityStateOnWire;
+      serverId: string;
+      serverLabel: string;
+      devices: PublicDevice[];
+    }
   | { phase: "no-host" }
   | { phase: "error"; message: string };
 
@@ -85,6 +94,7 @@ const styles = StyleSheet.create((theme) => {
     sectionTitleSpaced: { ...sectionTitle, marginTop: theme.spacing[6] },
     card,
     cardSpaced: { ...card, marginTop: theme.spacing[2] },
+    cardCompactSpaced: { ...card, marginTop: theme.spacing[3] },
     row: {
       gap: theme.spacing[1],
     },
@@ -159,15 +169,28 @@ export default function IdentitySettingsRoute() {
     void (async () => {
       let next: FetchState;
       try {
-        const response = await client.identityGet();
-        if (response.error || !response.state) {
-          next = { phase: "error", message: response.error ?? t("identity.loadFailed") };
+        // Fan out identity/get + device/list in parallel — both are tiny,
+        // and parallel cuts the visible loading window roughly in half on
+        // slow connections (relay latency dominates).
+        const [identityResponse, devicesResponse] = await Promise.all([
+          client.identityGet(),
+          client.devicesList(),
+        ]);
+        if (identityResponse.error || !identityResponse.state) {
+          next = {
+            phase: "error",
+            message: identityResponse.error ?? t("identity.loadFailed"),
+          };
         } else {
+          // device/list errors are non-fatal here — we still want to render
+          // the identity card. Empty array is the graceful fallback.
+          const devices = devicesResponse.devices ?? [];
           next = {
             phase: "loaded",
-            state: response.state,
+            state: identityResponse.state,
             serverId: primaryHost.serverId,
             serverLabel: primaryHost.label,
+            devices,
           };
         }
       } catch (err) {
@@ -286,16 +309,51 @@ function LoadedBody({
       </View>
 
       <Text style={styles.sectionTitleSpaced}>{t("identitySettings.devicesSection")}</Text>
-      <View style={styles.cardSpaced}>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>{t("identitySettings.thisDevice")}</Text>
-          <Text style={styles.rowValue}>{serverLabel}</Text>
+      {fetchState.devices.length === 0 ? (
+        // Phase 1 daemons that haven't migrated to a Phase 2.a self-device yet
+        // (or daemons running an older binary that doesn't expose device/list).
+        // Fall back to the "this device" view we used in Phase 1.f.
+        <View style={styles.cardSpaced}>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>{t("identitySettings.thisDevice")}</Text>
+            <Text style={styles.rowValue}>{serverLabel}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>{t("identitySettings.serverId")}</Text>
+            <Text style={styles.rowValueMono}>{serverId}</Text>
+          </View>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>{t("identitySettings.serverId")}</Text>
-          <Text style={styles.rowValueMono}>{serverId}</Text>
-        </View>
-      </View>
+      ) : (
+        fetchState.devices.map((device, index) => (
+          <View
+            key={device.deviceId}
+            style={index === 0 ? styles.cardSpaced : styles.cardCompactSpaced}
+          >
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>
+                {device.deviceId === serverId
+                  ? t("identitySettings.thisDevice")
+                  : t("identitySettings.deviceLabel")}
+              </Text>
+              <Text style={styles.rowValue}>
+                {device.deviceLabel} ({device.signPublicKeyB64.slice(0, 8)})
+              </Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>{t("identitySettings.role")}</Text>
+              <Text style={styles.rowValue}>{device.role}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>{t("identitySettings.deviceId")}</Text>
+              <Text style={styles.rowValueMono}>{device.deviceId}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>{t("identitySettings.authorizedAt")}</Text>
+              <Text style={styles.rowValue}>{device.authorizedAt}</Text>
+            </View>
+          </View>
+        ))
+      )}
       <Text style={styles.helperSpaced}>{t("identitySettings.devicesComingSoon")}</Text>
     </View>
   );

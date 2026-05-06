@@ -1455,6 +1455,23 @@ export class DaemonClient {
     });
   }
 
+  async devicesList(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    devices: import("../server/identity/identity-rpc-schemas.js").PublicDevice[] | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "device/list", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "device/list/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { devices: msg.payload.devices, error: msg.payload.error };
+      },
+    });
+  }
+
   // ============================================================================
   // Agent RPCs (requestId-correlated)
   // ============================================================================

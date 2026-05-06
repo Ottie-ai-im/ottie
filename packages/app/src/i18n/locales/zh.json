@@ -45,7 +45,11 @@
     "createdAt": "创建时间",
     "devicesSection": "设备",
     "thisDevice": "这台设备",
+    "deviceLabel": "设备",
+    "deviceId": "设备 ID",
     "serverId": "服务器 ID",
+    "role": "角色",
+    "authorizedAt": "授权时间",
     "devicesComingSoon": "添加其他设备的功能即将推出。"
   },
   "welcome": {

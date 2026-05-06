@@ -11,6 +11,7 @@ export {
 export { type StoredRootIdentity } from "./identity/identity-types.js";
 export {
   type IdentityStateOnWire,
+  type PublicDevice,
   type PublicRootIdentity,
 } from "./identity/identity-rpc-schemas.js";
 export { createRootLogger, type LogLevel, type LogFormat } from "./logger.js";

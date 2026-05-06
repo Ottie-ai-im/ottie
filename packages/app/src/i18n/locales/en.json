@@ -45,7 +45,11 @@
     "createdAt": "Created",
     "devicesSection": "Devices",
     "thisDevice": "This device",
+    "deviceLabel": "Device",
+    "deviceId": "Device ID",
     "serverId": "Server ID",
+    "role": "Role",
+    "authorizedAt": "Authorized",
     "devicesComingSoon": "Linking additional devices is coming soon."
   },
   "welcome": {
