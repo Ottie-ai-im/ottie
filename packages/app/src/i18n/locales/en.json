@@ -50,7 +50,19 @@
     "serverId": "Server ID",
     "role": "Role",
     "authorizedAt": "Authorized",
+    "addDevice": "Add device",
     "devicesComingSoon": "Linking additional devices is coming soon."
+  },
+  "addDevice": {
+    "title": "Add device",
+    "subtitle": "Open Ottie on your other Mac and scan this QR. The link expires in 10 minutes.",
+    "qrAccessibility": "QR code containing a one-time device-link payload",
+    "expiresAt": "Expires at {{exp}}",
+    "linkLabel": "Or paste this link",
+    "copyLink": "Copy link",
+    "copied": "Copied",
+    "regenerate": "Generate new",
+    "genericError": "Could not generate a device-link offer. Please try again."
   },
   "welcome": {
     "title": "Welcome to Ottie",

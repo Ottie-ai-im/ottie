@@ -50,7 +50,19 @@
     "serverId": "服务器 ID",
     "role": "角色",
     "authorizedAt": "授权时间",
+    "addDevice": "添加设备",
     "devicesComingSoon": "添加其他设备的功能即将推出。"
+  },
+  "addDevice": {
+    "title": "添加设备",
+    "subtitle": "在你的另一台电脑上打开 Ottie 并扫描此二维码。链接 10 分钟内有效。",
+    "qrAccessibility": "包含一次性设备配对凭据的二维码",
+    "expiresAt": "{{exp}} 失效",
+    "linkLabel": "或粘贴此链接",
+    "copyLink": "复制链接",
+    "copied": "已复制",
+    "regenerate": "重新生成",
+    "genericError": "无法生成设备配对凭据,请重试。"
   },
   "welcome": {
     "title": "欢迎使用 Ottie",

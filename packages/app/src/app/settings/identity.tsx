@@ -4,7 +4,8 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft } from "lucide-react-native";
+import { ChevronLeft, Plus } from "lucide-react-native";
+import { Button } from "@/components/ui/button";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
 import type {
   IdentityStateOnWire,
@@ -118,6 +119,10 @@ const styles = StyleSheet.create((theme) => {
     },
     helper,
     helperSpaced: { ...helper, marginTop: theme.spacing[2] },
+    addDeviceButtonRow: {
+      marginTop: theme.spacing[3],
+      flexDirection: "row" as const,
+    },
     warningCard: {
       backgroundColor: theme.colors.surfaceGlass,
       borderRadius: theme.borderRadius.field,
@@ -265,7 +270,19 @@ function LoadedBody({
   fetchState: Extract<FetchState, { phase: "loaded" }>;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
+  const { theme } = useUnistyles();
+  const router = useRouter();
   const { state, serverId, serverLabel } = fetchState;
+  const handleAddDevice = useCallback(() => {
+    router.push({
+      pathname: "/onboarding/add-device",
+      params: { serverId: fetchState.serverId },
+    });
+  }, [router, fetchState.serverId]);
+  const addDeviceIcon = useMemo(
+    () => <Plus size={16} color={theme.colors.palette.white} />,
+    [theme.colors.palette.white],
+  );
 
   if (state.kind === "uninitialized") {
     return (
@@ -354,7 +371,15 @@ function LoadedBody({
           </View>
         ))
       )}
-      <Text style={styles.helperSpaced}>{t("identitySettings.devicesComingSoon")}</Text>
+      {fetchState.devices.length === 0 ? (
+        <Text style={styles.helperSpaced}>{t("identitySettings.devicesComingSoon")}</Text>
+      ) : (
+        <View style={styles.addDeviceButtonRow}>
+          <Button variant="default" onPress={handleAddDevice} leftIcon={addDeviceIcon}>
+            {t("identitySettings.addDevice")}
+          </Button>
+        </View>
+      )}
     </View>
   );
 }

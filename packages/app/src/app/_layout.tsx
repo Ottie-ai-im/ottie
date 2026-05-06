@@ -878,6 +878,7 @@ function RootStack() {
       <Stack.Protected guard={storeReady}>
         <Stack.Screen name="welcome" />
         <Stack.Screen name="onboarding/identity" />
+        <Stack.Screen name="onboarding/add-device" />
         <Stack.Screen name="settings/index" />
         <Stack.Screen name="settings/[section]" />
         <Stack.Screen name="settings/identity" />
