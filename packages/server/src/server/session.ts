@@ -2237,6 +2237,14 @@ export class Session {
         return this.handleFriendPairCancelRequest(msg);
       case "friend/pair/redeem":
         return this.handleFriendPairRedeemRequest(msg);
+      case "friend/pair/candidates":
+        return this.handleFriendPairCandidatesRequest(msg);
+      case "friend/pair/approve":
+        return this.handleFriendPairApproveRequest(msg);
+      case "friend/pair/reject":
+        return this.handleFriendPairRejectRequest(msg);
+      case "friend/list":
+        return this.handleFriendListRequest(msg);
       default:
         return undefined;
     }
@@ -2513,16 +2521,12 @@ export class Session {
       const outcome = await this.identityService.redeemFriendPairOffer({
         deepLinkOrOffer: request.deepLink,
       });
-      if (outcome.status === "candidate-received") {
+      if (outcome.status === "paired") {
         this.emit({
           type: "friend/pair/redeem/response",
           payload: {
             requestId: request.requestId,
-            outcome: {
-              status: "candidate-received",
-              remoteDisplayName: outcome.offer.displayName,
-              remoteRootSignPublicKeyB64: outcome.offer.rootSignPublicKeyB64,
-            },
+            outcome: { status: "paired", peer: outcome.peer },
             error: null,
           },
         });
@@ -2551,6 +2555,96 @@ export class Session {
         },
       });
     }
+  }
+
+  private async handleFriendPairCandidatesRequest(
+    request: Extract<SessionInboundMessage, { type: "friend/pair/candidates" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "friend/pair/candidates/response",
+        payload: {
+          requestId: request.requestId,
+          candidates: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const candidates = this.identityService.listPendingFriendPairCandidates();
+    this.emit({
+      type: "friend/pair/candidates/response",
+      payload: { requestId: request.requestId, candidates: [...candidates], error: null },
+    });
+  }
+
+  private async handleFriendPairApproveRequest(
+    request: Extract<SessionInboundMessage, { type: "friend/pair/approve" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "friend/pair/approve/response",
+        payload: {
+          requestId: request.requestId,
+          approved: false,
+          peers: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.approveFriendPair(request.nonceB64);
+    this.emit({
+      type: "friend/pair/approve/response",
+      payload: {
+        requestId: request.requestId,
+        approved: result.approved,
+        peers: result.peers ? [...result.peers] : null,
+        error: result.error,
+      },
+    });
+  }
+
+  private async handleFriendPairRejectRequest(
+    request: Extract<SessionInboundMessage, { type: "friend/pair/reject" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "friend/pair/reject/response",
+        payload: {
+          requestId: request.requestId,
+          rejected: false,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.rejectFriendPair(request.nonceB64, request.reason);
+    this.emit({
+      type: "friend/pair/reject/response",
+      payload: { requestId: request.requestId, rejected: result.rejected, error: result.error },
+    });
+  }
+
+  private async handleFriendListRequest(
+    request: Extract<SessionInboundMessage, { type: "friend/list" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "friend/list/response",
+        payload: {
+          requestId: request.requestId,
+          peers: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const peers = this.identityService.getPeerList();
+    this.emit({
+      type: "friend/list/response",
+      payload: { requestId: request.requestId, peers: [...peers], error: null },
+    });
   }
 
   private async handleDeviceLinkRedeemRequest(

@@ -27,6 +27,7 @@ import {
   type RedeemDeviceLinkOfferInput,
   type RedeemDeviceLinkOfferOutcome,
 } from "./device-link-sender.js";
+import { approveFriendPairCandidate, rejectFriendPairCandidate } from "./friend-pair-approve.js";
 import { FriendPairPendingCandidateStore } from "./friend-pair-pending-candidate-store.js";
 import {
   FriendPairPendingStore,
@@ -38,6 +39,8 @@ import {
   type RedeemFriendPairOfferInput,
   type RedeemFriendPairOfferOutcome,
 } from "./friend-pair-sender.js";
+import { loadPeerList, savePeerList, upsertPeer } from "./peer-store.js";
+import type { StoredPeer, StoredPeerList } from "./peer-types.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
 import type { PendingDeviceLinkCandidateOnWire } from "./identity-rpc-schemas.js";
 import {
@@ -120,6 +123,7 @@ export class IdentityService {
   private state: IdentityState;
   private selfDevice: SelfDeviceBundle | null = null;
   private deviceList: StoredDeviceList | null = null;
+  private peerList: StoredPeerList | null = null;
 
   constructor(options: IdentityServiceOptions) {
     this.ottieHome = options.ottieHome;
@@ -138,6 +142,20 @@ export class IdentityService {
       // self-device file. Migrate them in-place by generating + signing the
       // self-device on first boot under the new build.
       this.ensureSelfDevice(this.state.bundle);
+    }
+    // Phase 3.a/3: peers.json is optional. Missing means "no friends yet".
+    // Corrupt means we refuse to boot the friend list — surface to logs but
+    // don't block daemon startup; non-friend code paths still work.
+    if (this.state.kind === "loaded") {
+      try {
+        this.peerList = loadPeerList(this.ottieHome, this.logger) ?? { v: 1, peers: [] };
+      } catch (err) {
+        this.logger.error(
+          { err, ottieHome: this.ottieHome },
+          "peers.json failed to load — friend list disabled until manually inspected",
+        );
+        this.peerList = null;
+      }
     }
   }
 
@@ -201,6 +219,11 @@ export class IdentityService {
     if (this.selfDeviceContext) {
       this.ensureSelfDevice(bundle);
     }
+    // Phase 3.a/3: seed an empty peer list so approveFriendPair etc.
+    // don't trip on `peerList === null` immediately after initialize.
+    if (!this.peerList) {
+      this.peerList = { v: 1, peers: [] };
+    }
     return bundle;
   }
 
@@ -223,6 +246,15 @@ export class IdentityService {
    */
   getDeviceList(): readonly StoredDevice[] {
     return this.deviceList?.devices ?? [];
+  }
+
+  /**
+   * Phase 3.a/3: returns the friend list (peers under different root
+   * identities). Empty array when no identity is loaded or peers.json
+   * failed to load.
+   */
+  getPeerList(): readonly StoredPeer[] {
+    return this.peerList?.peers ?? [];
   }
 
   /**
@@ -323,18 +355,16 @@ export class IdentityService {
   }
 
   /**
-   * Phase 3.a/2 (sender side): the responder's daemon redeems a
-   * friend-pair deep-link scanned/pasted by the user. Builds a
+   * Phase 3.a/2 + 3.a/3 (sender side): the responder's daemon redeems
+   * a friend-pair deep-link scanned/pasted by the user. Builds a
    * candidate signed with this daemon's root key, opens a one-shot
    * relay WebSocket to the originating daemon, sends the redemption
-   * envelope, awaits an ack-or-error.
+   * envelope, awaits the originator's approval reply, and on
+   * "paired" persists a Peer record for the originator into peers.json.
    *
    * Requires the daemon's root identity to be loaded — friends are
    * keyed by root pubkey, so a daemon without an identity has nothing
    * to introduce itself with.
-   *
-   * Phase 3.a/3 will extend the returned outcome handling to read the
-   * approval reply on the same socket and persist a Peer record.
    */
   async redeemFriendPairOffer(
     input: Omit<
@@ -349,13 +379,216 @@ export class IdentityService {
         errorMessage: "Cannot redeem friend-pair offer — root identity not loaded",
       };
     }
-    return redeemFriendPairOffer({
+    const outcome = await redeemFriendPairOffer({
       ...input,
       selfRootSignPublicKeyB64: this.state.bundle.stored.signPublicKeyB64,
       selfRootSignPrivateKey: this.state.bundle.signPrivateKey,
       selfDisplayName: this.state.bundle.stored.displayName,
       logger: this.logger,
     });
+    if (outcome.status !== "paired") return outcome;
+
+    // Persist the new peer record on disk + sync in-memory state.
+    try {
+      this.adoptPeerFromApproval(outcome.peer);
+      return outcome;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error({ err }, "Friend-pair adopt-peer failed");
+      return {
+        status: "rejected",
+        errorCode: "adopt_peer_failed",
+        errorMessage: `Paired with the other side, but failed to persist locally: ${message}`,
+      };
+    }
+  }
+
+  /**
+   * Phase 3.a/3: write a freshly-paired Peer record on Bob's side
+   * after the redeem flow returned status="paired". Idempotent — re-
+   * pairing an existing friend updates the displayName / sig but
+   * doesn't duplicate the entry.
+   *
+   * Throws if peers.json is in a "load-failed" state (corrupt) — the
+   * caller should surface that so the user can decide to wipe the
+   * file.
+   */
+  adoptPeerFromApproval(peer: StoredPeer): void {
+    if (!this.peerList) {
+      throw new Error(
+        "Cannot persist peer — peer list is in load-failed state. Inspect peers.json manually.",
+      );
+    }
+    const updated = upsertPeer(this.peerList, peer);
+    savePeerList(this.ottieHome, updated, this.logger);
+    this.peerList = updated;
+    this.logger.info(
+      {
+        peerDisplayName: peer.peerDisplayName,
+        peerRootPubKeyPrefix: peer.peerRootSignPublicKeyB64.slice(0, 8),
+        totalPeers: updated.peers.length,
+      },
+      "Adopted peer from friend-pair approval",
+    );
+  }
+
+  /**
+   * Phase 3.a/3: list pending friend-pair candidates the user's UI
+   * should surface in "Pending friend requests". Cross-identity analog
+   * of `listPendingDeviceLinkCandidates`. Each entry has just enough
+   * metadata for the UI; secrets stay daemon-side.
+   */
+  listPendingFriendPairCandidates(): readonly {
+    nonceB64: string;
+    peerDisplayName: string;
+    peerRootSignPublicKeyB64: string;
+    generatedAt: string;
+    receivedAt: string;
+    expiresAtMs: number;
+  }[] {
+    return this.pendingFriendPairCandidates.list().map((record) => ({
+      nonceB64: record.nonceB64,
+      peerDisplayName: record.candidate.displayName,
+      peerRootSignPublicKeyB64: record.candidate.rootSignPublicKeyB64,
+      generatedAt: record.candidate.generatedAt,
+      receivedAt: new Date(record.receivedAtMs).toISOString(),
+      expiresAtMs: record.expiresAtMs,
+    }));
+  }
+
+  /**
+   * Phase 3.a/3: approve a parked friend-pair candidate. Signs the
+   * authorization payload with the root identity, encrypts an approval
+   * reply, sends it over the still-open Phase 3.a/2 socket, persists a
+   * `Peer` entry on this side, then closes the socket.
+   *
+   * Result.approved is `true` on the happy path. `false` (with `error`)
+   * means: candidate not found / expired / responder went offline
+   * before the reply could be delivered / disk write failed.
+   */
+  approveFriendPair(nonceB64: string): {
+    approved: boolean;
+    peers: readonly StoredPeer[] | null;
+    error: string | null;
+  } {
+    if (this.state.kind !== "loaded") {
+      return {
+        approved: false,
+        peers: null,
+        error: "Cannot approve friend-pair — root identity not loaded",
+      };
+    }
+    if (!this.peerList) {
+      return {
+        approved: false,
+        peers: null,
+        error: "Cannot approve friend-pair — peer list is in load-failed state",
+      };
+    }
+
+    const record = this.pendingFriendPairCandidates.consume(nonceB64);
+    if (!record) {
+      return {
+        approved: false,
+        peers: null,
+        error: "Friend-pair candidate not found, already consumed, or expired",
+      };
+    }
+
+    let result;
+    try {
+      result = approveFriendPairCandidate({
+        candidate: record.candidate,
+        offer: record.offer,
+        ephPrivateKeyB64: record.ephPrivateKeyB64,
+        candidateEphPublicKeyB64: record.candidateEphPublicKeyB64,
+        rootIdentity: this.state.bundle,
+      });
+    } catch (err) {
+      return {
+        approved: false,
+        peers: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    // Persist the new Peer BEFORE talking to the responder. If disk
+    // fails we bail without telling the responder "approved" — they'll
+    // see the socket close and surface the error.
+    const updated = upsertPeer(this.peerList, result.selfPeer);
+    try {
+      savePeerList(this.ottieHome, updated, this.logger);
+    } catch (err) {
+      this.closeReplySocket(record.replySocket, 1011, "save_failed");
+      return {
+        approved: false,
+        peers: null,
+        error: `Failed to persist peer list: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    this.peerList = updated;
+
+    // Send the encrypted approval reply, then close the socket cleanly.
+    const sent = this.sendThenClose(record.replySocket, JSON.stringify(result.envelope));
+    if (!sent) {
+      this.logger.warn(
+        { noncePrefix: nonceB64.slice(0, 8) },
+        "friend_pair_approve_reply_send_failed_socket_dead",
+      );
+      // The Peer IS persisted on this side — the responder just won't
+      // have heard about it. They'll see the socket close and surface
+      // an error to their UI; user can re-pair if needed.
+      return {
+        approved: true,
+        peers: updated.peers,
+        error:
+          "Approved and saved locally, but the other side was already offline — " +
+          "tell them to re-scan",
+      };
+    }
+
+    this.logger.info(
+      {
+        peerDisplayName: result.selfPeer.peerDisplayName,
+        peerRootPubKeyPrefix: result.selfPeer.peerRootSignPublicKeyB64.slice(0, 8),
+      },
+      "Friend-pair candidate approved and reply sent",
+    );
+
+    return { approved: true, peers: updated.peers, error: null };
+  }
+
+  /**
+   * Phase 3.a/3: reject a parked friend-pair candidate. Sends an
+   * encrypted "rejected" envelope back to the responder so they know
+   * the user said no, then closes the socket. Does NOT touch
+   * peers.json.
+   */
+  rejectFriendPair(nonceB64: string, reason?: string): { rejected: boolean; error: string | null } {
+    const record = this.pendingFriendPairCandidates.consume(nonceB64);
+    if (!record) {
+      return {
+        rejected: false,
+        error: "Friend-pair candidate not found, already consumed, or expired",
+      };
+    }
+    const { envelope } = rejectFriendPairCandidate({
+      ephPrivateKeyB64: record.ephPrivateKeyB64,
+      candidateEphPublicKeyB64: record.candidateEphPublicKeyB64,
+      ...(reason ? { rejectionReason: reason } : {}),
+    });
+    const sent = this.sendThenClose(record.replySocket, JSON.stringify(envelope));
+    if (!sent) {
+      return {
+        rejected: true,
+        error: "Rejection recorded locally, but the other side was already offline",
+      };
+    }
+    this.logger.info(
+      { noncePrefix: nonceB64.slice(0, 8), reason },
+      "Friend-pair candidate rejected",
+    );
+    return { rejected: true, error: null };
   }
 
   /**
@@ -575,6 +808,11 @@ export class IdentityService {
     this.state = { kind: "loaded", bundle: rootBundle };
     this.deviceList = list;
     this.selfDevice = selfBundle;
+    // Phase 3.a/3: seed an empty peer list so friend-pair flows work
+    // without a daemon restart after device-link adoption.
+    if (!this.peerList) {
+      this.peerList = { v: 1, peers: [] };
+    }
 
     this.logger.info(
       {

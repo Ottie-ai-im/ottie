@@ -1571,9 +1571,9 @@ export class DaemonClient {
     requestId?: string;
     /**
      * Generous default — friend-pair redemption opens a relay socket to
-     * the originating daemon, sends a payload, and (in Phase 3.a/3)
-     * waits for the originating user to tap Approve. 5 minutes is
-     * roomy because the user-tap latency dominates.
+     * the originating daemon, sends a payload, and waits for the
+     * originating user to tap Approve. 5 minutes is roomy because the
+     * user-tap latency dominates.
      */
     timeoutMs?: number;
   }): Promise<{
@@ -1589,6 +1589,89 @@ export class DaemonClient {
         if (msg.type !== "friend/pair/redeem/response") return null;
         if (msg.payload.requestId !== requestId) return null;
         return { outcome: msg.payload.outcome, error: msg.payload.error };
+      },
+    });
+  }
+
+  async friendPairCandidates(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    candidates:
+      | readonly import("../server/identity/identity-rpc-schemas.js").PendingFriendPairCandidateOnWire[]
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "friend/pair/candidates", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "friend/pair/candidates/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { candidates: msg.payload.candidates, error: msg.payload.error };
+      },
+    });
+  }
+
+  async friendPairApprove(
+    nonceB64: string,
+    params?: { requestId?: string; timeoutMs?: number },
+  ): Promise<{
+    approved: boolean;
+    peers: readonly import("../server/identity/peer-types.js").StoredPeer[] | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "friend/pair/approve", requestId, nonceB64 },
+      timeout: params?.timeoutMs ?? 10_000,
+      select: (msg) => {
+        if (msg.type !== "friend/pair/approve/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return {
+          approved: msg.payload.approved,
+          peers: msg.payload.peers,
+          error: msg.payload.error,
+        };
+      },
+    });
+  }
+
+  async friendPairReject(
+    nonceB64: string,
+    params?: { requestId?: string; timeoutMs?: number; reason?: string },
+  ): Promise<{ rejected: boolean; error: string | null }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "friend/pair/reject",
+        requestId,
+        nonceB64,
+        ...(params?.reason ? { reason: params.reason } : {}),
+      },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "friend/pair/reject/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { rejected: msg.payload.rejected, error: msg.payload.error };
+      },
+    });
+  }
+
+  async friendList(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    peers: readonly import("../server/identity/peer-types.js").StoredPeer[] | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "friend/list", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "friend/list/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { peers: msg.payload.peers, error: msg.payload.error };
       },
     });
   }

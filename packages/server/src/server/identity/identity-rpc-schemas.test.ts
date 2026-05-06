@@ -3,12 +3,20 @@ import { describe, expect, test } from "vitest";
 import {
   DevicesListRequestSchema,
   DevicesListResponseSchema,
+  FriendListRequestSchema,
+  FriendListResponseSchema,
+  FriendPairApproveRequestSchema,
+  FriendPairApproveResponseSchema,
   FriendPairCancelRequestSchema,
   FriendPairCancelResponseSchema,
+  FriendPairCandidatesRequestSchema,
+  FriendPairCandidatesResponseSchema,
   FriendPairGenerateRequestSchema,
   FriendPairGenerateResponseSchema,
   FriendPairRedeemRequestSchema,
   FriendPairRedeemResponseSchema,
+  FriendPairRejectRequestSchema,
+  FriendPairRejectResponseSchema,
   IdentityGetRequestSchema,
   IdentityGetResponseSchema,
   IdentityInitializeRequestSchema,
@@ -364,15 +372,22 @@ describe("friend/pair/redeem request/response schemas (Phase 3.a/2)", () => {
     ).toThrow();
   });
 
-  test("response candidate-received outcome roundtrips", () => {
+  test("response paired outcome roundtrips", () => {
     const wire = {
       type: "friend/pair/redeem/response",
       payload: {
         requestId: "req-fp-r-1",
         outcome: {
-          status: "candidate-received" as const,
-          remoteDisplayName: "Alice",
-          remoteRootSignPublicKeyB64: "x".repeat(43),
+          status: "paired" as const,
+          peer: {
+            v: 1 as const,
+            peerRootSignPublicKeyB64: "x".repeat(43),
+            peerDisplayName: "Alice",
+            pairedAt: "2026-05-05T12:00:00.000Z",
+            status: "active" as const,
+            pairingNonceB64: "n".repeat(43),
+            authorizationSignatureB64: "sig_".padEnd(86, "z"),
+          },
         },
         error: null,
       },
@@ -406,5 +421,167 @@ describe("friend/pair/redeem request/response schemas (Phase 3.a/2)", () => {
       },
     };
     expect(FriendPairRedeemResponseSchema.parse(wire)).toEqual(wire);
+  });
+});
+
+const PEER_FIXTURE = {
+  v: 1 as const,
+  peerRootSignPublicKeyB64: "x".repeat(43),
+  peerDisplayName: "Alice",
+  pairedAt: "2026-05-05T12:00:00.000Z",
+  status: "active" as const,
+  pairingNonceB64: "n".repeat(43),
+  authorizationSignatureB64: "sig_".padEnd(86, "z"),
+};
+
+describe("friend/pair/candidates request/response schemas (Phase 3.a/3)", () => {
+  test("request roundtrips", () => {
+    const wire = { type: "friend/pair/candidates", requestId: "req-fpc-1" };
+    expect(FriendPairCandidatesRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response with non-empty candidates", () => {
+    const wire = {
+      type: "friend/pair/candidates/response",
+      payload: {
+        requestId: "req-fpc-1",
+        candidates: [
+          {
+            nonceB64: "n".repeat(43),
+            peerDisplayName: "Bob",
+            peerRootSignPublicKeyB64: "x".repeat(43),
+            generatedAt: "2026-05-05T12:00:00.000Z",
+            receivedAt: "2026-05-05T12:00:01.000Z",
+            expiresAtMs: 1_900_000_000_000,
+          },
+        ],
+        error: null,
+      },
+    };
+    expect(FriendPairCandidatesResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response with null candidates + error string", () => {
+    const wire = {
+      type: "friend/pair/candidates/response",
+      payload: {
+        requestId: "req-fpc-1",
+        candidates: null,
+        error: "Identity service is not available on this daemon",
+      },
+    };
+    expect(FriendPairCandidatesResponseSchema.parse(wire)).toEqual(wire);
+  });
+});
+
+describe("friend/pair/approve request/response schemas (Phase 3.a/3)", () => {
+  test("request roundtrips", () => {
+    const wire = {
+      type: "friend/pair/approve",
+      requestId: "req-fpa-1",
+      nonceB64: "n".repeat(43),
+    };
+    expect(FriendPairApproveRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response success roundtrips with peer list", () => {
+    const wire = {
+      type: "friend/pair/approve/response",
+      payload: {
+        requestId: "req-fpa-1",
+        approved: true,
+        peers: [PEER_FIXTURE],
+        error: null,
+      },
+    };
+    expect(FriendPairApproveResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response failure (false approved + null peers + error)", () => {
+    const wire = {
+      type: "friend/pair/approve/response",
+      payload: {
+        requestId: "req-fpa-1",
+        approved: false,
+        peers: null,
+        error: "Friend-pair candidate not found, already consumed, or expired",
+      },
+    };
+    expect(FriendPairApproveResponseSchema.parse(wire)).toEqual(wire);
+  });
+});
+
+describe("friend/pair/reject request/response schemas (Phase 3.a/3)", () => {
+  test("request roundtrips with reason", () => {
+    const wire = {
+      type: "friend/pair/reject",
+      requestId: "req-fprj-1",
+      nonceB64: "n".repeat(43),
+      reason: "I don't recognize this person",
+    };
+    expect(FriendPairRejectRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("request roundtrips without reason", () => {
+    const wire = {
+      type: "friend/pair/reject",
+      requestId: "req-fprj-1",
+      nonceB64: "n".repeat(43),
+    };
+    expect(FriendPairRejectRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("rejects an over-long reason", () => {
+    expect(() =>
+      FriendPairRejectRequestSchema.parse({
+        type: "friend/pair/reject",
+        requestId: "r",
+        nonceB64: "n".repeat(43),
+        reason: "x".repeat(201),
+      }),
+    ).toThrow();
+  });
+
+  test("response roundtrips on success", () => {
+    const wire = {
+      type: "friend/pair/reject/response",
+      payload: { requestId: "req-fprj-1", rejected: true, error: null },
+    };
+    expect(FriendPairRejectResponseSchema.parse(wire)).toEqual(wire);
+  });
+});
+
+describe("friend/list request/response schemas (Phase 3.a/3)", () => {
+  test("request roundtrips", () => {
+    const wire = { type: "friend/list", requestId: "req-fl-1" };
+    expect(FriendListRequestSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response with non-empty peers", () => {
+    const wire = {
+      type: "friend/list/response",
+      payload: { requestId: "req-fl-1", peers: [PEER_FIXTURE], error: null },
+    };
+    expect(FriendListResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response with empty peers (fresh install)", () => {
+    const wire = {
+      type: "friend/list/response",
+      payload: { requestId: "req-fl-1", peers: [], error: null },
+    };
+    expect(FriendListResponseSchema.parse(wire)).toEqual(wire);
+  });
+
+  test("response with null peers + error string", () => {
+    const wire = {
+      type: "friend/list/response",
+      payload: {
+        requestId: "req-fl-1",
+        peers: null,
+        error: "Identity service is not available on this daemon",
+      },
+    };
+    expect(FriendListResponseSchema.parse(wire)).toEqual(wire);
   });
 });

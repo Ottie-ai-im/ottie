@@ -4,6 +4,7 @@ import { DeviceLinkOfferSchema } from "./device-link-types.js";
 import { DeviceSchema } from "./device-types.js";
 import { FriendPairOfferSchema } from "./friend-pair-types.js";
 import { type StoredRootIdentity } from "./identity-types.js";
+import { PeerSchema } from "./peer-types.js";
 
 // Pure-zod schemas (no node:fs / node:crypto imports) so this module — and the
 // shared messages.ts that re-exports it — can be bundled by Metro for the
@@ -365,12 +366,10 @@ export const FriendPairRedeemRequestSchema = z.object({
   deepLink: z.string().min(1),
 });
 
-export const FriendPairRedeemAcceptedSchema = z.object({
-  status: z.literal("candidate-received"),
-  /** Display name of the originating identity, for the "paired with <name>" UI. */
-  remoteDisplayName: z.string().min(1),
-  /** Originating root sign public key — anchor of trust for Phase 3.a/3. */
-  remoteRootSignPublicKeyB64: z.string().min(1),
+export const FriendPairRedeemPairedSchema = z.object({
+  status: z.literal("paired"),
+  /** The freshly-paired Peer record, public-only (no secrets). */
+  peer: PeerSchema,
 });
 
 export const FriendPairRedeemRejectedSchema = z.object({
@@ -384,7 +383,7 @@ export const FriendPairRedeemRejectedSchema = z.object({
 });
 
 export const FriendPairRedeemOutcomeSchema = z.discriminatedUnion("status", [
-  FriendPairRedeemAcceptedSchema,
+  FriendPairRedeemPairedSchema,
   FriendPairRedeemRejectedSchema,
 ]);
 
@@ -398,6 +397,103 @@ export const FriendPairRedeemResponseSchema = z.object({
 });
 
 export type FriendPairRedeemOutcome = z.infer<typeof FriendPairRedeemOutcomeSchema>;
+
+// ----- friend/pair/candidates (Phase 3.a/3) ------------------------------
+// Originator's UI lists currently-pending friend-pair candidates so the
+// user can pick one to approve or reject. Wire shape is intentionally
+// MINIMAL — the ephPrivateKey + candidate signature live daemon-side only.
+
+export const PendingFriendPairCandidateOnWireSchema = z.object({
+  /** offer.nonceB64; lookup key for approve/reject. */
+  nonceB64: z.string().min(1),
+  /** What the responder calls themselves. */
+  peerDisplayName: z.string().min(1),
+  /**
+   * Responder's claimed root sign public key. UI shows the first 4 hex
+   * chars after the displayName per design doc Q4 ("名字 (a3f9)").
+   */
+  peerRootSignPublicKeyB64: z.string().min(1),
+  /** ISO timestamp when the responder generated the candidate. */
+  generatedAt: z.string(),
+  /** ISO timestamp when this daemon received the candidate. */
+  receivedAt: z.string(),
+  /** Wall-clock ms when this candidate stops being approvable. */
+  expiresAtMs: z.number(),
+});
+
+export type PendingFriendPairCandidateOnWire = z.infer<
+  typeof PendingFriendPairCandidateOnWireSchema
+>;
+
+export const FriendPairCandidatesRequestSchema = z.object({
+  type: z.literal("friend/pair/candidates"),
+  requestId: z.string(),
+});
+
+export const FriendPairCandidatesResponseSchema = z.object({
+  type: z.literal("friend/pair/candidates/response"),
+  payload: z.object({
+    requestId: z.string(),
+    candidates: z.array(PendingFriendPairCandidateOnWireSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- friend/pair/approve (Phase 3.a/3) ---------------------------------
+
+export const FriendPairApproveRequestSchema = z.object({
+  type: z.literal("friend/pair/approve"),
+  requestId: z.string(),
+  nonceB64: z.string().min(1),
+});
+
+export const FriendPairApproveResponseSchema = z.object({
+  type: z.literal("friend/pair/approve/response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** True if the encrypted reply was sent and the peer landed in peers.json. */
+    approved: z.boolean(),
+    /** Resulting peers.json snapshot. */
+    peers: z.array(PeerSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- friend/pair/reject (Phase 3.a/3) ----------------------------------
+
+export const FriendPairRejectRequestSchema = z.object({
+  type: z.literal("friend/pair/reject"),
+  requestId: z.string(),
+  nonceB64: z.string().min(1),
+  /** Optional reason shown on the responder's screen. */
+  reason: z.string().max(200).optional(),
+});
+
+export const FriendPairRejectResponseSchema = z.object({
+  type: z.literal("friend/pair/reject/response"),
+  payload: z.object({
+    requestId: z.string(),
+    rejected: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- friend/list (Phase 3.a/3) -----------------------------------------
+// Read-only: surface the persisted peer list in the user's UI.
+
+export const FriendListRequestSchema = z.object({
+  type: z.literal("friend/list"),
+  requestId: z.string(),
+});
+
+export const FriendListResponseSchema = z.object({
+  type: z.literal("friend/list/response"),
+  payload: z.object({
+    requestId: z.string(),
+    peers: z.array(PeerSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
 
 // ----- device/remove (Phase 2.g) -----------------------------------------
 // Remove a peer device from THIS user's device list. Refused for self

@@ -4,14 +4,23 @@ import type pino from "pino";
 
 import { buildRelayWebSocketUrl } from "../../shared/daemon-endpoints.js";
 
+import {
+  decryptFriendPairApprovalEnvelope,
+  verifyFriendPairApproval,
+} from "./friend-pair-approve.js";
+import {
+  FriendPairApprovalEnvelopeSchema,
+  type FriendPairApprovalReply,
+} from "./friend-pair-approve-types.js";
 import { buildFriendPairRedemption } from "./friend-pair-redeem.js";
 import type { FriendCandidate, FriendPairRedemption } from "./friend-pair-redeem-types.js";
 import { decodeFriendPairOffer, type FriendPairOffer } from "./friend-pair-types.js";
+import type { StoredPeer } from "./peer-types.js";
 
 /**
- * Phase 3.a/2 — sender side of the friend-pair handshake. Runs on the
- * responder's daemon (Bob). Cross-identity analog of `device-link-
- * sender.ts`. The flow:
+ * Phase 3.a/2 + 3.a/3 — sender side of the friend-pair handshake. Runs
+ * on the responder's daemon (Bob). Cross-identity analog of
+ * `device-link-sender.ts`. The flow:
  *
  *   1. User pastes the deep-link string (or scans the QR — same thing).
  *   2. Bob's daemon decodes the offer, generates a fresh ephemeral
@@ -22,24 +31,33 @@ import { decodeFriendPairOffer, type FriendPairOffer } from "./friend-pair-types
  *      `connectionId="friend-pair:<nonceB64>"` so Alice's
  *      `connectionHandlers` dispatcher routes it to the friend-pair
  *      receiver.
- *   4. Bob's daemon sends one JSON frame and awaits an ack-or-error.
- *   5. On `{type:"candidate-received"}`: success — caller now waits
- *      for Phase 3.a/3's approval reply on the SAME socket.
- *   6. On `{type:"error", code:"..."}`: caller surfaces the error
- *      string to the UI ("offer expired", "self-pairing", "decrypt
- *      failed", "no offer", "bad signature", …).
+ *   4. Bob's daemon sends one JSON frame and awaits a 2-stage reply:
+ *      - Stage 1: `{type:"candidate-received"}` ack — Alice's UI now
+ *        shows "Bob wants to pair with you. Approve / Reject?"
+ *      - Stage 2: `FriendPairApprovalEnvelope` — encrypted under the
+ *        same shared key. Decrypted into a `FriendPairApprovalReply`
+ *        with status="approved" or status="rejected".
  *
- * Phase 3.a/2 settles after the ack — the approval-reply path is
- * built in Phase 3.a/3. Until then the socket stays open per the
- * receiver-side contract (Alice's UI must show "Pending friend
- * request" and let her tap Approve/Reject).
+ *   On approved: caller gets the resolved `Peer` record describing
+ *   Alice (signed by her root over the canonical authorization payload),
+ *   ready to upsert into the local peers.json.
+ *
+ *   On rejected (by user): status="rejected" with errorCode="user_rejected"
+ *   and an optional human-readable rejectionReason.
+ *
+ *   Any error short-circuits: receiver-side errors during stage 1
+ *   (`no_offer`, `decrypt_failed`, `nonce_mismatch`, `bad_schema`, …),
+ *   or local-sender errors at any point (`offer_expired`, `send_failed`,
+ *   `timeout`, `connection_closed`, `socket_error`,
+ *   `approval_decrypt_failed`, `approval_schema_invalid`,
+ *   `approval_signature_invalid`).
  *
  * Pure, no I/O outside the WebSocket itself. The socket is created
  * through a factory parameter so tests can drive the handshake
  * without a real relay.
  */
 
-const REDEEM_TIMEOUT_MS = 5 * 60_000; // 5 minutes — Phase 3.a/3 waits for user-tap approval
+const REDEEM_TIMEOUT_MS = 5 * 60_000;
 
 export interface FriendPairRedeemSocket {
   send(data: string): void;
@@ -55,18 +73,16 @@ export type FriendPairRedeemSocketFactory = (url: string) => FriendPairRedeemSoc
 export type RedeemFriendPairOfferOutcome =
   | {
       /**
-       * Alice's daemon parked the candidate. The user-tap approval is
-       * Phase 3.a/3 — Phase 3.a/2 stops here. The socket is still open
-       * on both sides (mirroring device-link's two-stage protocol);
-       * callers may keep the returned `pendingApprovalSocket` reference
-       * to read the approval envelope when 3.a/3 lands.
+       * Alice's daemon approved the pairing. Bob's caller now has a
+       * complete `Peer` record (signed by Alice's root over the
+       * canonical authorization payload) ready to persist into his
+       * own peers.json. The candidate echo + offer are returned for
+       * caller logging / UI ("paired with <displayName>").
        */
-      readonly status: "candidate-received";
+      readonly status: "paired";
       readonly candidate: FriendCandidate;
       readonly offer: FriendPairOffer;
-      readonly redemption: FriendPairRedemption;
-      readonly localEphPrivateKeyB64: string;
-      readonly pendingApprovalSocket: FriendPairRedeemSocket;
+      readonly peer: StoredPeer;
     }
   | {
       readonly status: "rejected";
@@ -74,10 +90,12 @@ export type RedeemFriendPairOfferOutcome =
        * Coded reason. Receiver-side codes
        * (`no_offer`, `decrypt_failed`, `nonce_mismatch`, `bad_schema`,
        * `bad_json`, `bad_frame`, `too_large`, `bad_signature`,
-       * `self_pairing`), or local-sender codes (`offer_expired`,
+       * `self_pairing`), local-sender codes (`offer_expired`,
        * `build_failed`, `send_failed`, `timeout`, `connection_closed`,
        * `socket_error`, `bad_response_frame`, `bad_response_json`,
-       * `unexpected_response`).
+       * `unexpected_response`), approval-stage codes
+       * (`approval_decrypt_failed`, `approval_schema_invalid`,
+       * `approval_signature_invalid`), or `user_rejected`.
        */
       readonly errorCode: string;
       readonly errorMessage: string;
@@ -157,8 +175,9 @@ export async function redeemFriendPairOffer(
   return new Promise<RedeemFriendPairOfferOutcome>((resolve) => {
     const socket = factory(url);
     let settled = false;
+    let ackReceived = false;
 
-    const settleAndClose = (outcome: RedeemFriendPairOfferOutcome): void => {
+    const settle = (outcome: RedeemFriendPairOfferOutcome): void => {
       if (settled) return;
       settled = true;
       try {
@@ -169,18 +188,10 @@ export async function redeemFriendPairOffer(
       resolve(outcome);
     };
 
-    const settleKeepingSocketOpen = (outcome: RedeemFriendPairOfferOutcome): void => {
-      if (settled) return;
-      settled = true;
-      // Don't close — Phase 3.a/3 reads the approval envelope on this
-      // same socket.
-      resolve(outcome);
-    };
-
     const timeoutHandle = setTimeout(() => {
       if (settled) return;
       log?.warn({ timeoutMs }, "friend_pair_sender_timeout");
-      settleAndClose({
+      settle({
         status: "rejected",
         errorCode: "timeout",
         errorMessage: `Friend-pair redemption timed out after ${timeoutMs}ms`,
@@ -199,7 +210,7 @@ export async function redeemFriendPairOffer(
       } catch (err) {
         cleanup();
         log?.warn({ err }, "friend_pair_sender_send_failed");
-        settleAndClose({
+        settle({
           status: "rejected",
           errorCode: "send_failed",
           errorMessage: err instanceof Error ? err.message : String(err),
@@ -207,48 +218,25 @@ export async function redeemFriendPairOffer(
       }
     });
 
+    // Two-stage protocol from the receiver:
+    //   Stage 1: {type:"candidate-received"} ack — flips ackReceived = true,
+    //            we keep listening on the same socket.
+    //   Stage 2: FriendPairApprovalEnvelope (kind:"friend-pair-approval-
+    //            envelope") — decrypted into the final approved/rejected reply.
+    //   At either stage, an {type:"error", code:"..."} frame short-circuits
+    //   the flow with a rejected outcome.
     socket.on("message", (raw) => {
-      const text = decodeMessage(raw);
-      if (text === null) {
+      const parseOutcome = parseIncomingFrame(raw);
+      if (parseOutcome.kind === "error") {
         cleanup();
-        settleAndClose({
-          status: "rejected",
-          errorCode: "bad_response_frame",
-          errorMessage: "Receiver sent a non-text response frame",
-        });
+        settle(parseOutcome.outcome);
         return;
       }
+      const reply = parseOutcome.reply;
 
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        cleanup();
-        settleAndClose({
-          status: "rejected",
-          errorCode: "bad_response_json",
-          errorMessage: "Receiver sent malformed JSON",
-        });
-        return;
-      }
-
-      const reply = parsed as { type?: unknown; code?: unknown; kind?: unknown };
-
-      if (reply.type === "candidate-received") {
-        cleanup();
+      if (!ackReceived && reply.type === "candidate-received") {
+        ackReceived = true;
         log?.info("friend_pair_sender_ack_received");
-        // Settle WITHOUT closing — the socket continues to receive the
-        // approval envelope when Phase 3.a/3 lands. Caller is expected
-        // to either wire up its own approval-envelope listener, or just
-        // close it themselves if they're a one-shot test.
-        settleKeepingSocketOpen({
-          status: "candidate-received",
-          candidate: built.candidate,
-          offer: built.offer,
-          redemption: built.redemption,
-          localEphPrivateKeyB64: built.localSecrets.ephPrivateKeyB64,
-          pendingApprovalSocket: socket,
-        });
         return;
       }
 
@@ -256,7 +244,7 @@ export async function redeemFriendPairOffer(
         cleanup();
         const code = typeof reply.code === "string" ? reply.code : "unknown";
         log?.warn({ code }, "friend_pair_sender_rejected_by_receiver");
-        settleAndClose({
+        settle({
           status: "rejected",
           errorCode: code,
           errorMessage: humanizeReceiverError(code),
@@ -264,8 +252,20 @@ export async function redeemFriendPairOffer(
         return;
       }
 
+      if (reply.kind === "friend-pair-approval-envelope") {
+        cleanup();
+        settle(
+          handleApprovalEnvelope({
+            parsed: parseOutcome.parsed,
+            built,
+            log,
+          }),
+        );
+        return;
+      }
+
       cleanup();
-      settleAndClose({
+      settle({
         status: "rejected",
         errorCode: "unexpected_response",
         errorMessage: `Receiver sent an unexpected message type: ${String(
@@ -279,7 +279,7 @@ export async function redeemFriendPairOffer(
       cleanup();
       const reasonText = reason?.toString?.() ?? "";
       log?.warn({ code, reason: reasonText }, "friend_pair_sender_socket_closed_early");
-      settleAndClose({
+      settle({
         status: "rejected",
         errorCode: "connection_closed",
         errorMessage: reasonText.length > 0 ? reasonText : `WebSocket closed with code ${code}`,
@@ -290,13 +290,143 @@ export async function redeemFriendPairOffer(
       if (settled) return;
       cleanup();
       log?.warn({ err }, "friend_pair_sender_socket_error");
-      settleAndClose({
+      settle({
         status: "rejected",
         errorCode: "socket_error",
         errorMessage: err.message,
       });
     });
   });
+}
+
+interface ParsedReply {
+  type?: unknown;
+  code?: unknown;
+  kind?: unknown;
+}
+
+type ParseFrameOutcome =
+  | { kind: "ok"; parsed: unknown; reply: ParsedReply }
+  | { kind: "error"; outcome: RedeemFriendPairOfferOutcome };
+
+function parseIncomingFrame(raw: unknown): ParseFrameOutcome {
+  const text = decodeMessage(raw);
+  if (text === null) {
+    return {
+      kind: "error",
+      outcome: {
+        status: "rejected",
+        errorCode: "bad_response_frame",
+        errorMessage: "Receiver sent a non-text response frame",
+      },
+    };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return {
+      kind: "error",
+      outcome: {
+        status: "rejected",
+        errorCode: "bad_response_json",
+        errorMessage: "Receiver sent malformed JSON",
+      },
+    };
+  }
+  return { kind: "ok", parsed, reply: parsed as ParsedReply };
+}
+
+interface BuiltRedemptionLike {
+  candidate: FriendCandidate;
+  offer: FriendPairOffer;
+  localSecrets: { ephPrivateKeyB64: string };
+}
+
+function handleApprovalEnvelope(args: {
+  parsed: unknown;
+  built: BuiltRedemptionLike;
+  log: pino.Logger | undefined;
+}): RedeemFriendPairOfferOutcome {
+  const { parsed, built, log } = args;
+  const validated = FriendPairApprovalEnvelopeSchema.safeParse(parsed);
+  if (!validated.success) {
+    return {
+      status: "rejected",
+      errorCode: "approval_schema_invalid",
+      errorMessage: "Approval envelope failed schema validation",
+    };
+  }
+
+  let approvalReply: FriendPairApprovalReply;
+  try {
+    approvalReply = decryptFriendPairApprovalEnvelope({
+      envelope: validated.data,
+      candidateEphPrivateKeyB64: built.localSecrets.ephPrivateKeyB64,
+      offerEphPublicKeyB64: built.offer.ephPublicKeyB64,
+    });
+  } catch (err) {
+    log?.warn({ err }, "friend_pair_sender_approval_decrypt_failed");
+    return {
+      status: "rejected",
+      errorCode: "approval_decrypt_failed",
+      errorMessage: err instanceof Error ? err.message : "Failed to decrypt approval envelope",
+    };
+  }
+
+  if (approvalReply.status !== "approved") {
+    log?.info({ reason: approvalReply.rejectionReason }, "friend_pair_sender_user_rejected");
+    return {
+      status: "rejected",
+      errorCode: "user_rejected",
+      errorMessage:
+        approvalReply.rejectionReason && approvalReply.rejectionReason.length > 0
+          ? approvalReply.rejectionReason
+          : "The other side declined the pair",
+    };
+  }
+
+  // Verify Alice's signature against the offer Bob originally scanned.
+  // A failure here means either a serious bug or an active attacker
+  // somewhere — the relay can't see plaintext, but verifying defensively
+  // costs nothing.
+  const sigOutcome = verifyFriendPairApproval({
+    reply: approvalReply,
+    expectedOriginatorRootSignPublicKeyB64: built.offer.rootSignPublicKeyB64,
+    responderRootSignPublicKeyB64: built.candidate.rootSignPublicKeyB64,
+    pairingNonceB64: built.offer.nonceB64,
+  });
+  if (!sigOutcome.ok) {
+    log?.warn({ reason: sigOutcome.reason }, "friend_pair_sender_approval_sig_invalid");
+    return {
+      status: "rejected",
+      errorCode: "approval_signature_invalid",
+      errorMessage: sigOutcome.reason,
+    };
+  }
+
+  const peer: StoredPeer = {
+    v: 1,
+    peerRootSignPublicKeyB64: approvalReply.originatorRootSignPublicKeyB64,
+    peerDisplayName: approvalReply.originatorDisplayName,
+    pairedAt: approvalReply.approvedAt,
+    status: "active",
+    pairingNonceB64: built.offer.nonceB64,
+    authorizationSignatureB64: approvalReply.authorizationSignatureB64,
+  };
+  log?.info(
+    {
+      peerDisplayName: peer.peerDisplayName,
+      peerRootPubKeyPrefix: peer.peerRootSignPublicKeyB64.slice(0, 8),
+    },
+    "friend_pair_sender_paired",
+  );
+  return {
+    status: "paired",
+    candidate: built.candidate,
+    offer: built.offer,
+    peer,
+  };
 }
 
 function decodeMessage(raw: unknown): string | null {

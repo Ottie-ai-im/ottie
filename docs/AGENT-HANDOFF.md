@@ -12,24 +12,30 @@ from here.
   `packages/app`, `packages/relay`, etc. GitHub: `Ottie-ai-im/ottie`.
 - **Side-quest in flight**: extend ottie into multi-user collab.
   Design doc: [`docs/MULTI-USER-COLLABORATION-DESIGN.md`](./MULTI-USER-COLLABORATION-DESIGN.md).
-- **Current state**: **Phases 1 + 2 fully complete** + **Phase 3.a/0
-  + 3.a/1 + 3.a/2 done** (friend-pair offer schema + ECDH crypto +
-  pending-store + receiver handler + pending-candidate-store +
-  sender + WS RPCs generate/cancel/redeem; bootstrap registers
-  the friend-pair handler). 262 tests green across 26 files in
-  identity + relay-transport (3 consecutive stability runs).
-- **Next phase**: **Phase 3.a/3 — approve flow + Peer store +
-  bilateral confirm + UI**. Need:
-  - Peer schema + `peer-store.ts` (analog of `device-list-store.ts`)
-    persisting `$OTTIE_HOME/identity/peers.json`.
-  - Approve crypto core (sign Bob's root pubkey, encrypt reply over
-    same shared key) — analog of `device-link-approve.ts`.
-  - Approve through socket: WS RPCs `friend/pair/candidates` +
-    `friend/pair/approve` + `friend/pair/reject`.
-  - Bob-side: extend `friend-pair-sender.ts` to read approval
-    envelope + `IdentityService.adoptPeerFromApproval`.
-  - UI bundle: Add Friend QR screen, Paste-link screen,
-    `/settings/friends` (replaces or complements identity page).
+- **Current state**: **Phases 1 + 2 fully complete** + **Phase 3.a
+  server-side fully complete** (3.a/0 crypto + 3.a/1 offer gen +
+  3.a/2 receiver/sender + 3.a/3a Peer store + approve crypto +
+  3.a/3b bilateral confirm wired). 300 tests green across 29 files
+  in identity + relay-transport (5 consecutive stability runs).
+  Real-WebSocket two-daemon e2e
+  (`friend-pair-mock-relay.e2e.test.ts`) shows the full pair flow
+  (Alice generates → Bob redeems → Alice approves → both store
+  Peer entries → both reload from disk).
+- **Next phase**: **Phase 3.a UI bundle** (mirrors 42c2d5e4
+  device-link 2.d/e UI commit pattern). Need:
+  - `/onboarding/add-friend` QR + copy-link screen (analog of
+    `add-device.tsx`).
+  - `/onboarding/redeem-friend-link` paste-link screen (analog of
+    `link-existing-device.tsx`).
+  - "Pending friend requests" section on `/settings/identity` (or
+    a new `/settings/friends` page) with Approve/Reject buttons,
+    poll every 3s — analog of the existing
+    `PendingCandidatesSection`.
+  - Friend list display once paired (peers.json content, status
+    badge active/blocked/removed).
+  - Bilingual i18n strings in
+    `packages/app/src/i18n/locales/{en,zh}.json`.
+  - Optional: end-to-end click-through flow once UI lands.
 - **User**: Wendell. Native Mandarin speaker, talks to you in 中文.
   Wants direct answers + small commits + tests for everything. He
   pushed back hard once when I designed without reading existing

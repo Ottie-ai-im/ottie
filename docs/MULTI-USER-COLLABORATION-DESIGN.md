@@ -1026,8 +1026,25 @@ Two laptops + a phone (one daemon each) under one identity now:
     redeem` + DaemonClient method. Bootstrap registers the new
     handler alongside device-link + peer-sync. Cross-identity
     analog of Phase 2.d/2 + 2.d/3.
-  - ⏳ 3.a/3 — bilateral confirm: both sides see the other in their
-    friend list after both tap accept
+  - ✅ 3.a/3a — Peer schema + peers.json store + approve crypto
+    core. `peer-types.ts` (StoredPeer + peerAuthorizationPayload),
+    `peer-store.ts` (load/save/upsert/remove with mode 0o600),
+    `friend-pair-approve-types.ts` (FriendPairApprovalReply +
+    Envelope schemas), `friend-pair-approve.ts` (approve / reject
+    / decrypt / verify). Reuses Phase 3.a/2's shared key — no
+    fresh ECDH on the reply.
+  - ✅ 3.a/3b — bilateral confirm wired through the daemon. The
+    sender now waits for the approval envelope (no longer settles
+    on the candidate-received ack). IdentityService gains
+    `getPeerList`, `listPendingFriendPairCandidates`,
+    `approveFriendPair`, `rejectFriendPair`, `adoptPeerFromApproval`.
+    `redeemFriendPairOffer` persists the resolved Peer on
+    "paired". WS RPCs added: `friend/pair/candidates`,
+    `friend/pair/approve`, `friend/pair/reject`, `friend/list`.
+    The redeem outcome on the wire became `{status: "paired", peer}`
+    or `{status: "rejected", errorCode, errorMessage}`. Mock-relay
+    e2e (`friend-pair-mock-relay.e2e.test.ts`) verifies the full
+    two-daemon happy path + rejection through real WebSockets.
   - ⏳ 3.b/0 — chat-room kind=p2p schema, Peer entity in store
   - ⏳ 3.b/1 — message send/receive over relay (live)
   - ⏳ 3.b/2 — Cloudflare KV inbox for offline delivery; recipient
@@ -1048,11 +1065,11 @@ Two laptops + a phone (one daemon each) under one identity now:
   session timeout enforcement.
 
 ### Test infrastructure status
-- 262 tests across 26 files in the identity + relay-transport
+- 300 tests across 29 files in the identity + relay-transport
   suite, all green (192 from Phase 2 + 20 from 3.a/0 + 23 from
-  3.a/1 + 27 from 3.a/2: 8 pending-candidate-store + 10
-  receiver + 4 sender + 5 RPC-schema). Stability check: 3
-  consecutive runs all 262/262 passed.
+  3.a/1 + 27 from 3.a/2 + 21 from 3.a/3a + 17 from 3.a/3b
+  including a real-WebSocket e2e). Stability check: 5 consecutive
+  runs all 300/300 passed.
 - `mock-relay.ts` — in-process Cloudflare adapter clone for
   spawning real WebSocket bridges in tests without wrangler-dev.
 - Real two-daemon e2e: `device-link-mock-relay.e2e.test.ts` covers
