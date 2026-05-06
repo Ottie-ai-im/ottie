@@ -188,6 +188,11 @@ export function useKeyboardShortcuts({
             id: "sidebar.toggle.right",
             scope: "sidebar",
           });
+        case "chat.search.toggle":
+          return keyboardActionDispatcher.dispatch({
+            id: "chat.search.toggle",
+            scope: "global",
+          });
         case "workspace.pane.split.right":
         case "workspace.pane.split.down":
         case "workspace.pane.focus.left":

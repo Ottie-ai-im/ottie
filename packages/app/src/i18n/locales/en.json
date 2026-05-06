@@ -365,7 +365,12 @@
     "emptyHint": "Type a message below — Ottie sends it to your local OpenClaw Gateway.",
     "thinking": "OpenClaw is thinking…",
     "placeholder": "Message OpenClaw…",
-    "send": "Send"
+    "send": "Send",
+    "searchPlaceholder": "Search this conversation…",
+    "searchClose": "Close search",
+    "searchEmpty": "No matches in this conversation.",
+    "searchMatchCount_one": "{{count}} match",
+    "searchMatchCount_other": "{{count}} matches"
   },
   "usage": {
     "title": "Usage",

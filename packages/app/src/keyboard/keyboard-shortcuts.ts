@@ -627,6 +627,37 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     },
   },
 
+  // --- Chat search ---
+  // Override the browser/system "find in page" so the chat panel can search
+  // its own message history instead. Only fires when a chat panel registers
+  // a handler — outside chat the keystroke falls through to the default.
+  {
+    id: "chat-search-toggle-cmd-f-mac",
+    action: "chat.search.toggle",
+    combo: "Cmd+F",
+    when: { mac: true, commandCenter: false },
+    preventDefault: true,
+    help: {
+      id: "chat-search",
+      section: "panels",
+      label: "Search in chat",
+      keys: ["mod", "F"],
+    },
+  },
+  {
+    id: "chat-search-toggle-ctrl-f-non-mac",
+    action: "chat.search.toggle",
+    combo: "Ctrl+F",
+    when: { mac: false, commandCenter: false, terminal: false },
+    preventDefault: true,
+    help: {
+      id: "chat-search",
+      section: "panels",
+      label: "Search in chat",
+      keys: ["mod", "F"],
+    },
+  },
+
   // --- Sidebar toggles ---
   {
     id: "sidebar-toggle-left-mac-cmd-b",

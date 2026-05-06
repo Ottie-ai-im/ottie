@@ -30,7 +30,8 @@ export type KeyboardActionId =
   | "workspace.terminal.new"
   | "sidebar.toggle.right"
   | "worktree.new"
-  | "worktree.archive";
+  | "worktree.archive"
+  | "chat.search.toggle";
 
 export type KeyboardActionDefinition =
   | { id: "agent.interrupt"; scope: KeyboardActionScope }
@@ -59,7 +60,8 @@ export type KeyboardActionDefinition =
   | { id: "workspace.terminal.new"; scope: KeyboardActionScope }
   | { id: "sidebar.toggle.right"; scope: KeyboardActionScope }
   | { id: "worktree.new"; scope: KeyboardActionScope }
-  | { id: "worktree.archive"; scope: KeyboardActionScope };
+  | { id: "worktree.archive"; scope: KeyboardActionScope }
+  | { id: "chat.search.toggle"; scope: KeyboardActionScope };
 
 export interface KeyboardActionHandler {
   handlerId: string;

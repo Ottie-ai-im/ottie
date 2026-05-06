@@ -365,7 +365,12 @@
     "emptyHint": "在下方输入框打字——Ottie 会把消息发到本地 OpenClaw Gateway。",
     "thinking": "OpenClaw 正在思考…",
     "placeholder": "给 OpenClaw 发消息…",
-    "send": "发送"
+    "send": "发送",
+    "searchPlaceholder": "在当前对话中搜索…",
+    "searchClose": "关闭搜索",
+    "searchEmpty": "当前对话中没有匹配项。",
+    "searchMatchCount_one": "{{count}} 条匹配",
+    "searchMatchCount_other": "{{count}} 条匹配"
   },
   "usage": {
     "title": "用量",

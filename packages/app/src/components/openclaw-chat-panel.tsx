@@ -10,9 +10,10 @@ import {
 } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { Send } from "lucide-react-native";
+import { ArrowUp, Search, X } from "lucide-react-native";
 
 import { useOpenclawAgents } from "@/hooks/use-openclaw-chat";
+import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import {
   useOpenclawChatStore,
@@ -56,7 +57,45 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
   const agentId = conversation.selectedAgentId;
 
   const [draft, setDraft] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const scrollRef = useRef<ScrollView | null>(null);
+  const searchInputRef = useRef<TextInput | null>(null);
+
+  // Cmd+F / Ctrl+F toggles the search bar. Registering only while this panel
+  // is mounted means the shortcut falls through to the browser/OS elsewhere.
+  const handleSearchShortcut = useCallback(() => {
+    setSearchOpen((prev) => !prev);
+    return true;
+  }, []);
+  useKeyboardActionHandler({
+    handlerId: `openclaw-chat-search:${serverId ?? "none"}`,
+    actions: ["chat.search.toggle"] as const,
+    enabled: true,
+    priority: 100,
+    handle: handleSearchShortcut,
+  });
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (searchOpen) {
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    } else {
+      setSearchQuery("");
+    }
+  }, [searchOpen]);
+
+  const trimmedQuery = searchQuery.trim();
+  const filteredTurns = useMemo(() => {
+    if (!searchOpen || !trimmedQuery) return turns;
+    const needle = trimmedQuery.toLowerCase();
+    return turns.filter((turn) => turn.text.toLowerCase().includes(needle));
+  }, [turns, searchOpen, trimmedQuery]);
+  const isSearchActive = searchOpen && trimmedQuery.length > 0;
+  const showNoMatches = isSearchActive && filteredTurns.length === 0;
 
   const setAgentId = useCallback(
     (id: string | null) => {
@@ -168,6 +207,38 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
         </View>
       ) : null}
 
+      {searchOpen ? (
+        <View style={styles.searchBar}>
+          <Search size={16} color={theme.colors.foregroundMuted} />
+          <TextInput
+            ref={searchInputRef}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={t("openclaw.searchPlaceholder")}
+            placeholderTextColor={theme.colors.foregroundMuted}
+            style={styles.searchInput}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+            testID="openclaw-search-input"
+          />
+          {isSearchActive ? (
+            <Text style={styles.searchCount}>
+              {t("openclaw.searchMatchCount", { count: filteredTurns.length })}
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={closeSearch}
+            accessibilityRole="button"
+            accessibilityLabel={t("openclaw.searchClose")}
+            style={styles.searchClose}
+            testID="openclaw-search-close"
+          >
+            <X size={16} color={theme.colors.foregroundMuted} />
+          </Pressable>
+        </View>
+      ) : null}
+
       <ScrollView ref={scrollRef} style={styles.log} contentContainerStyle={styles.logContent}>
         {turns.length === 0 ? (
           <View style={styles.emptyState}>
@@ -175,7 +246,12 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
             <Text style={styles.emptyHint}>{t("openclaw.emptyHint")}</Text>
           </View>
         ) : null}
-        {turns.map((turn) => (
+        {showNoMatches ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyHint}>{t("openclaw.searchEmpty")}</Text>
+          </View>
+        ) : null}
+        {filteredTurns.map((turn) => (
           <View
             key={turn.id}
             style={[
@@ -199,7 +275,7 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
             </Text>
           </View>
         ))}
-        {isPending ? (
+        {isPending && !searchOpen ? (
           <View style={[styles.bubble, styles.bubbleAssistant]}>
             <Text style={[styles.bubbleText, styles.bubbleTextMuted]}>
               {t("openclaw.thinking")}
@@ -232,7 +308,7 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
           accessibilityLabel={t("openclaw.send")}
           testID="openclaw-composer-send"
         >
-          <Send size={18} color={theme.colors.accentForeground} />
+          <ArrowUp size={18} color={theme.colors.accentForeground} />
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -272,6 +348,35 @@ const styles = StyleSheet.create((theme) => ({
   agentChipTextActive: {
     color: theme.colors.accentForeground,
     fontWeight: theme.fontWeight.medium,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderGlass,
+    backgroundColor: theme.colors.surface0,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foreground,
+    paddingVertical: 0,
+  },
+  searchCount: {
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.foregroundMuted,
+  },
+  searchClose: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.full,
   },
   log: {
     flex: 1,
