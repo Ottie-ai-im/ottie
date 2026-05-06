@@ -198,6 +198,8 @@ import type { SpeechReadinessSnapshot, SpeechReadinessState } from "./speech/spe
 import type pino from "pino";
 import { resolveClientMessageId } from "./client-message-id.js";
 import { ChatServiceError, FileBackedChatService } from "./chat/chat-service.js";
+import { IdentityService } from "./identity/identity-service.js";
+import { toPublicRootIdentity as toPublicIdentity } from "./identity/identity-rpc-schemas.js";
 import { notifyChatMentions } from "./chat/chat-mentions.js";
 import type { ChatSubscriptionManager } from "./chat/chat-subscription-manager.js";
 import { LoopService } from "./loop-service.js";
@@ -642,6 +644,13 @@ export interface SessionOptions {
   workspaceRegistry: WorkspaceRegistry;
   chatService: FileBackedChatService;
   chatSubscriptionManager: ChatSubscriptionManager;
+  /**
+   * Phase 1.g — root identity. Optional for backward compat with existing
+   * test instantiations and old daemons that haven't constructed the service
+   * yet; when omitted, the identity/* RPCs return a structured "unavailable"
+   * error rather than crashing.
+   */
+  identityService?: IdentityService;
   scheduleService: ScheduleService;
   loopService: LoopService;
   checkoutDiffManager: CheckoutDiffManager;
@@ -829,6 +838,7 @@ export class Session {
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly chatService: FileBackedChatService;
   private readonly chatSubscriptionManager: ChatSubscriptionManager;
+  private readonly identityService: IdentityService | undefined;
   private readonly scheduleService: ScheduleService;
   private readonly loopService: LoopService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
@@ -930,6 +940,7 @@ export class Session {
       workspaceRegistry,
       chatService,
       chatSubscriptionManager,
+      identityService,
       scheduleService,
       loopService,
       checkoutDiffManager,
@@ -978,6 +989,7 @@ export class Session {
     this.workspaceRegistry = workspaceRegistry;
     this.chatService = chatService;
     this.chatSubscriptionManager = chatSubscriptionManager;
+    this.identityService = identityService;
     this.scheduleService = scheduleService;
     this.loopService = loopService;
     this.checkoutDiffManager = checkoutDiffManager;
@@ -1819,6 +1831,7 @@ export class Session {
       this.dispatchTerminalMessage(msg) ??
       this.dispatchChatSyncMessage(msg) ??
       this.dispatchChatScheduleLoopMessage(msg) ??
+      this.dispatchIdentityMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
   }
@@ -2189,6 +2202,107 @@ export class Session {
       case "register_push_token":
         this.handleRegisterPushToken(msg.token);
         return;
+    }
+  }
+
+  // Phase 1.g — root identity RPCs. Kept in their own dispatcher (rather
+  // than folded into the chat/schedule one) so the cyclomatic complexity
+  // cap in dispatchChatScheduleLoopMessage isn't exceeded as we add more
+  // identity-shaped methods (devices, peers, …) in later phases.
+  private dispatchIdentityMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "identity/get":
+        return this.handleIdentityGetRequest(msg);
+      case "identity/initialize":
+        return this.handleIdentityInitializeRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private async handleIdentityGetRequest(
+    request: Extract<SessionInboundMessage, { type: "identity/get" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "identity/get/response",
+        payload: {
+          requestId: request.requestId,
+          state: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+
+    const state = this.identityService.getState();
+    if (state.kind === "loaded") {
+      this.emit({
+        type: "identity/get/response",
+        payload: {
+          requestId: request.requestId,
+          state: { kind: "loaded", identity: toPublicIdentity(state.bundle.stored) },
+          error: null,
+        },
+      });
+      return;
+    }
+    if (state.kind === "load-failed") {
+      this.emit({
+        type: "identity/get/response",
+        payload: {
+          requestId: request.requestId,
+          state: { kind: "load-failed", error: state.error.message },
+          error: null,
+        },
+      });
+      return;
+    }
+    this.emit({
+      type: "identity/get/response",
+      payload: {
+        requestId: request.requestId,
+        state: { kind: "uninitialized" },
+        error: null,
+      },
+    });
+  }
+
+  private async handleIdentityInitializeRequest(
+    request: Extract<SessionInboundMessage, { type: "identity/initialize" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "identity/initialize/response",
+        payload: {
+          requestId: request.requestId,
+          identity: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+
+    try {
+      const bundle = this.identityService.initialize(request.displayName);
+      this.emit({
+        type: "identity/initialize/response",
+        payload: {
+          requestId: request.requestId,
+          identity: toPublicIdentity(bundle.stored),
+          error: null,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit({
+        type: "identity/initialize/response",
+        payload: {
+          requestId: request.requestId,
+          identity: null,
+          error: message,
+        },
+      });
     }
   }
 

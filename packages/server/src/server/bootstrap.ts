@@ -245,11 +245,9 @@ export async function createOttieDaemon(
   const serverId = getOrCreateServerId(config.ottieHome, { logger });
   const daemonKeyPair = await loadOrCreateDaemonKeyPair(config.ottieHome, logger);
   // Root identity: load-or-detect-first-run. Construction logs the state.
-  // Consumers (WS RPC, CLI, app onboarding UI) are wired in subsequent
-  // Phase 1 commits; for now the service exists so bootstrap fails loudly
-  // on a corrupt identity file rather than silently regenerating.
+  // The service is consumed by the identity/* WS RPCs (Phase 1.g) and the
+  // CLI's identity show command (which reads the file directly).
   const identityService = new IdentityService({ ottieHome: config.ottieHome, logger });
-  void identityService;
   let relayTransport: RelayTransportController | null = null;
 
   const staticDir = config.staticDir;
@@ -919,6 +917,7 @@ export async function createOttieDaemon(
             chatSubscriptionManager,
             localTokenMode,
             pluginManager,
+            identityService,
           );
 
           if (typeof process.send === "function" && process.env.OTTIE_SUPERVISED === "1") {

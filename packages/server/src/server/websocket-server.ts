@@ -418,6 +418,7 @@ export class VoiceAssistantWebSocketServer {
   private unsubscribeSpeechReadiness: (() => void) | null = null;
   private unsubscribeDaemonConfigChange: (() => void) | null = null;
   private readonly pluginManager?: PluginManager;
+  private readonly identityService?: import("./identity/identity-service.js").IdentityService;
 
   constructor(
     server: HTTPServer,
@@ -461,6 +462,7 @@ export class VoiceAssistantWebSocketServer {
     chatSubscriptionManager?: ChatSubscriptionManager,
     localTokenMode: LocalTokenMode = { kind: "loopback-trust" },
     pluginManager?: PluginManager,
+    identityService?: import("./identity/identity-service.js").IdentityService,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.serverId = serverId;
@@ -492,6 +494,7 @@ export class VoiceAssistantWebSocketServer {
     this.mcpBaseUrl = mcpBaseUrl;
     this.localTokenMode = localTokenMode;
     this.pluginManager = pluginManager;
+    this.identityService = identityService;
     this.assignOptionalServices({
       speech,
       terminalManager,
@@ -915,6 +918,7 @@ export class VoiceAssistantWebSocketServer {
       workspaceRegistry: this.workspaceRegistry,
       chatService: this.chatService,
       chatSubscriptionManager: this.chatSubscriptionManager,
+      identityService: this.identityService,
       loopService: this.loopService,
       scheduleService: this.scheduleService,
       checkoutDiffManager: this.checkoutDiffManager,

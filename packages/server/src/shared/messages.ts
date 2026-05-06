@@ -28,6 +28,12 @@ import {
   ChatStatusEventSchema,
 } from "../server/chat/chat-rpc-schemas.js";
 import {
+  IdentityGetRequestSchema,
+  IdentityGetResponseSchema,
+  IdentityInitializeRequestSchema,
+  IdentityInitializeResponseSchema,
+} from "../server/identity/identity-rpc-schemas.js";
+import {
   ScheduleCreateRequestSchema,
   ScheduleListRequestSchema,
   ScheduleInspectRequestSchema,
@@ -2036,6 +2042,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ChatSubscribeRequestSchema,
   ChatUnsubscribeRequestSchema,
   ChatAckRequestSchema,
+  IdentityGetRequestSchema,
+  IdentityInitializeRequestSchema,
   ScheduleCreateRequestSchema,
   ScheduleListRequestSchema,
   ScheduleInspectRequestSchema,
@@ -3656,6 +3664,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ChatAckResponseSchema,
   ChatMessageEventSchema,
   ChatStatusEventSchema,
+  IdentityGetResponseSchema,
+  IdentityInitializeResponseSchema,
   ScheduleCreateResponseSchema,
   ScheduleListResponseSchema,
   ScheduleInspectResponseSchema,
