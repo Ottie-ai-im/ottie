@@ -280,3 +280,212 @@ describe("IdentityService.adoptIdentityFromLink — Phase 2.e/2", () => {
     expect(svc.requireBundle().stored.displayName).toBe("Existing");
   });
 });
+
+describe("IdentityService — Phase 2.f device-list event log", () => {
+  test("getDeviceListEvents starts empty on a fresh install", () => {
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_events_test", deviceLabel: "Events Test" },
+    });
+    expect(svc.getDeviceListEvents()).toHaveLength(0);
+  });
+
+  test("applyInboundDeviceListEvent rejects events from unknown sources", () => {
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_recv", deviceLabel: "Receiver" },
+    });
+    svc.initialize("Wendell");
+    const result = svc.applyInboundDeviceListEvent({
+      v: 1,
+      kind: "device-added",
+      seq: 1,
+      sourceDeviceId: "dev_unknown",
+      emittedAt: new Date(1_700_000_000_000).toISOString(),
+      device: {
+        v: 1,
+        deviceId: "dev_attacker",
+        deviceLabel: "Attacker",
+        role: "daemon",
+        signPublicKeyB64: "x".repeat(43),
+        authorizedAt: new Date(1_700_000_000_000).toISOString(),
+        authorizationSignatureB64: "y".repeat(43),
+      },
+      signatureB64: "z".repeat(43),
+    });
+    expect(result.status).toBe("rejected");
+    expect(result.reason).toMatch(/unknown source/i);
+    expect(svc.getDeviceListEvents()).toHaveLength(0);
+    expect(svc.getDeviceList()).toHaveLength(1); // still just self
+  });
+
+  test("event log persists across IdentityService restarts", async () => {
+    // Build a real event signed by an emitter the receiver has in its
+    // device list. Use adoptIdentityFromLink to install Bob with Alice
+    // as a peer, then simulate Alice emitting a device-removed for Bob.
+    const root = (() => {
+      const fs = require("node:fs") as typeof import("node:fs");
+      const tmp = mkdtempSync(path.join(os.tmpdir(), "ottie-event-restart-source-"));
+      const created = createRootIdentity(tmp, "Alice");
+      fs.rmSync(tmp, { recursive: true, force: true });
+      return created;
+    })();
+    const cryptoMod = require("node:crypto") as typeof import("node:crypto");
+    const aliceDeviceKeys = cryptoMod.generateKeyPairSync("ed25519");
+    const alicePub = (aliceDeviceKeys.publicKey.export({ format: "jwk" }) as { x: string }).x;
+    const aliceSigPayload = [
+      "ottie-device-auth-v1",
+      "dev_alice",
+      alicePub,
+      "daemon",
+      new Date(1_700_000_000_000).toISOString(),
+    ].join("\n");
+    const aliceAuthSig = cryptoMod
+      .sign(null, Buffer.from(aliceSigPayload, "utf8"), root.signPrivateKey)
+      .toString("base64")
+      .replace(/=+$/, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+    const aliceDeviceRecord = {
+      v: 1 as const,
+      deviceId: "dev_alice",
+      deviceLabel: "Alice's Mac",
+      role: "daemon" as const,
+      signPublicKeyB64: alicePub,
+      authorizedAt: new Date(1_700_000_000_000).toISOString(),
+      authorizationSignatureB64: aliceAuthSig,
+    };
+
+    // Bob's device record signed similarly.
+    const bobKeys = cryptoMod.generateKeyPairSync("ed25519");
+    const bobPub = (bobKeys.publicKey.export({ format: "jwk" }) as { x: string }).x;
+    const bobPriv = (bobKeys.privateKey.export({ format: "jwk" }) as { d: string }).d;
+    const bobSigPayload = [
+      "ottie-device-auth-v1",
+      "dev_bob",
+      bobPub,
+      "daemon",
+      new Date(1_700_000_000_000).toISOString(),
+    ].join("\n");
+    const bobAuthSig = cryptoMod
+      .sign(null, Buffer.from(bobSigPayload, "utf8"), root.signPrivateKey)
+      .toString("base64")
+      .replace(/=+$/, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+    const bobDeviceRecord = {
+      v: 1 as const,
+      deviceId: "dev_bob",
+      deviceLabel: "Bob's Laptop",
+      role: "daemon" as const,
+      signPublicKeyB64: bobPub,
+      authorizedAt: new Date(1_700_000_000_000).toISOString(),
+      authorizationSignatureB64: bobAuthSig,
+    };
+
+    // Charlie — a third peer that's neither emitter nor receiver, so
+    // removing Charlie won't trip the self-device safety re-add.
+    const charlieKeys = cryptoMod.generateKeyPairSync("ed25519");
+    const charliePub = (charlieKeys.publicKey.export({ format: "jwk" }) as { x: string }).x;
+    const charlieSigPayload = [
+      "ottie-device-auth-v1",
+      "dev_charlie",
+      charliePub,
+      "daemon",
+      new Date(1_700_000_000_000).toISOString(),
+    ].join("\n");
+    const charlieAuthSig = cryptoMod
+      .sign(null, Buffer.from(charlieSigPayload, "utf8"), root.signPrivateKey)
+      .toString("base64")
+      .replace(/=+$/, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+    const charlieDeviceRecord = {
+      v: 1 as const,
+      deviceId: "dev_charlie",
+      deviceLabel: "Charlie's iPad",
+      role: "daemon" as const,
+      signPublicKeyB64: charliePub,
+      authorizedAt: new Date(1_700_000_000_000).toISOString(),
+      authorizationSignatureB64: charlieAuthSig,
+    };
+
+    // Bootstrap Bob's daemon with Alice + Bob + Charlie all in the list.
+    const bobSvc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "dev_bob", deviceLabel: "Bob's Laptop" },
+    });
+    bobSvc.adoptIdentityFromLink({
+      rootIdentity: root.stored,
+      signedDevice: bobDeviceRecord,
+      peerDevices: [aliceDeviceRecord, bobDeviceRecord, charlieDeviceRecord],
+      signPrivateKeyB64: bobPriv,
+    });
+    expect(bobSvc.getDeviceList()).toHaveLength(3);
+
+    // Alice (a known peer) emits a device-removed event for Charlie.
+    const eventPayload = [
+      "ottie-device-list-event-v1",
+      "device-removed",
+      "1",
+      "dev_alice",
+      new Date(1_700_000_000_001).toISOString(),
+      "dev_charlie",
+    ].join("\n");
+    const eventSig = cryptoMod
+      .sign(null, Buffer.from(eventPayload, "utf8"), aliceDeviceKeys.privateKey)
+      .toString("base64")
+      .replace(/=+$/, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+
+    const result = bobSvc.applyInboundDeviceListEvent({
+      v: 1,
+      kind: "device-removed",
+      seq: 1,
+      sourceDeviceId: "dev_alice",
+      emittedAt: new Date(1_700_000_000_001).toISOString(),
+      removedDeviceId: "dev_charlie",
+      signatureB64: eventSig,
+    });
+    expect(result.status).toBe("applied");
+    expect(result.mutated).toBe(true);
+    expect(bobSvc.getDeviceList()).toHaveLength(2); // alice + bob remain
+    expect(
+      bobSvc
+        .getDeviceList()
+        .map((d) => d.deviceId)
+        .sort(),
+    ).toEqual(["dev_alice", "dev_bob"]);
+    expect(bobSvc.getDeviceListEvents()).toHaveLength(1);
+
+    // Restart: a fresh IdentityService on the same home reloads the log.
+    const reloaded = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "dev_bob", deviceLabel: "Bob's Laptop" },
+    });
+    expect(reloaded.getDeviceListEvents()).toHaveLength(1);
+    expect(reloaded.getDeviceList()).toHaveLength(2);
+
+    // Re-applying the same event must be a no-op (idempotent via the
+    // lastSeenSeqBySource map). The log will still grow because we
+    // append even on no-op (lets the high-water-mark advance), so we
+    // assert mutated=false rather than length.
+    const replayResult = reloaded.applyInboundDeviceListEvent({
+      v: 1,
+      kind: "device-removed",
+      seq: 1,
+      sourceDeviceId: "dev_alice",
+      emittedAt: new Date(1_700_000_000_001).toISOString(),
+      removedDeviceId: "dev_charlie",
+      signatureB64: eventSig,
+    });
+    expect(replayResult.status).toBe("applied");
+    expect(replayResult.mutated).toBe(false);
+    expect(reloaded.getDeviceList()).toHaveLength(2);
+  });
+});

@@ -148,6 +148,54 @@ async function attachReceiverHandler(
 }
 
 describe("Phase 2.d/2.e end-to-end — two IdentityService instances", () => {
+  test("approveDeviceLink emits a device-added event into Alice's local log (Phase 2.f/1)", async () => {
+    const alice = new IdentityService({
+      ottieHome: aliceHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_alice", deviceLabel: "Alice's Mac" },
+      relayEndpoint: "test.local:443",
+    });
+    alice.initialize("Alice");
+    expect(alice.getDeviceListEvents()).toHaveLength(0);
+
+    const offerResult = alice.generateDeviceLinkOffer();
+    if (!offerResult) throw new Error("offer expected");
+    const bob = new IdentityService({
+      ottieHome: bobHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_bob", deviceLabel: "Bob's Laptop" },
+      relayEndpoint: "test.local:443",
+    });
+
+    const wire = makeWire();
+    await attachReceiverHandler(
+      alice.createDeviceLinkConnectionHandler(),
+      wire.receiverSocket,
+      `device-link:${offerResult.pending.offer.nonceB64}`,
+    );
+    const promise = bob.redeemDeviceLinkOffer({
+      deepLinkOrOffer: offerResult.deepLink,
+      deviceLabel: "Bob's Laptop",
+      role: "daemon",
+      createSocket: () => wire.senderSocket,
+    });
+    wire.fireSenderOpen();
+    await Promise.resolve();
+    alice.approveDeviceLink(alice.listPendingDeviceLinkCandidates()[0]!.nonceB64);
+    await promise;
+
+    // Alice's events log should have exactly one device-added entry,
+    // signed by Alice (sourceDeviceId === srv_alice), seq=1.
+    const events = alice.getDeviceListEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.kind).toBe("device-added");
+    expect(events[0]?.seq).toBe(1);
+    expect(events[0]?.sourceDeviceId).toBe("srv_alice");
+    if (events[0]?.kind === "device-added") {
+      expect(events[0].device.deviceLabel).toBe("Bob's Laptop");
+    }
+  });
+
   test("happy path: two daemons fully linked, Bob persists identity to disk", async () => {
     // === Alice: existing user, has identity, generates an offer ===
     const alice = new IdentityService({

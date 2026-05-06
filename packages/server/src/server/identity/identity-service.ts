@@ -4,6 +4,9 @@ import type pino from "pino";
 import type { RelayConnectionHandler } from "../relay-transport.js";
 
 import { buildAuthorizedDevice, loadDeviceList, saveDeviceList } from "./device-list-store.js";
+import { applyDeviceListEvent, signDeviceAddedEvent } from "./device-list-event.js";
+import { DeviceListEventStore } from "./device-list-event-store.js";
+import type { DeviceListEvent } from "./device-list-event-types.js";
 import { DeviceLinkPendingCandidateStore } from "./device-link-pending-candidate-store.js";
 import {
   DeviceLinkPendingStore,
@@ -90,6 +93,7 @@ export class IdentityService {
   private readonly relayEndpoint: string | null;
   private readonly pendingDeviceLinks: DeviceLinkPendingStore;
   private readonly pendingCandidates: DeviceLinkPendingCandidateStore;
+  private readonly events: DeviceListEventStore;
   private state: IdentityState;
   private selfDevice: SelfDeviceBundle | null = null;
   private deviceList: StoredDeviceList | null = null;
@@ -101,6 +105,7 @@ export class IdentityService {
     this.relayEndpoint = options.relayEndpoint ?? null;
     this.pendingDeviceLinks = new DeviceLinkPendingStore(options.logger);
     this.pendingCandidates = new DeviceLinkPendingCandidateStore(options.logger);
+    this.events = DeviceListEventStore.loadOrCreate(options.ottieHome, options.logger);
     this.state = this.loadInitialState();
     if (this.state.kind === "loaded" && this.selfDeviceContext) {
       // Existing daemons that pre-date Phase 2.a have a root identity but no
@@ -462,6 +467,13 @@ export class IdentityService {
     }
     this.deviceList = updated;
 
+    // Phase 2.f/1: log a device-added event signed by this device.
+    // Phase 2.f/2 will broadcast un-broadcast events to peers; for now
+    // the event is only persisted locally. Failure to write the event
+    // log is non-fatal — the device is already in devices.json — but
+    // we surface a warning so an operator can investigate.
+    this.tryEmitDeviceAddedEvent(result.signedDevice);
+
     // Send the encrypted reply, then close the socket cleanly.
     const sent = this.sendThenClose(record.replySocket, JSON.stringify(result.envelope));
     if (!sent) {
@@ -521,6 +533,101 @@ export class IdentityService {
     );
     return { rejected: true, error: null };
   }
+
+  // ----- Phase 2.f: device-list event log --------------------------------
+
+  /**
+   * Snapshot of the local events log. Phase 2.f/2 will use this to
+   * replay un-broadcast events to peers on reconnect.
+   */
+  getDeviceListEvents(): readonly DeviceListEvent[] {
+    return this.events.list();
+  }
+
+  /**
+   * Apply an event that arrived from a peer daemon. Verifies the
+   * signature against the receiver's local device list, merges into
+   * devices.json + the in-memory list, and appends to the local event
+   * log so a future peer reconnect can replay it forward.
+   *
+   * Returns the apply outcome from `applyDeviceListEvent` plus a flag
+   * for whether persistence succeeded.
+   */
+  applyInboundDeviceListEvent(event: DeviceListEvent): {
+    status: "applied" | "rejected";
+    mutated: boolean;
+    reason?: string;
+    error?: string;
+  } {
+    if (!this.deviceList) {
+      return {
+        status: "rejected",
+        mutated: false,
+        reason: "Device list not initialized",
+      };
+    }
+    const outcome = applyDeviceListEvent({
+      event,
+      current: this.deviceList,
+      lastSeenSeqBySource: this.events.lastSeenSeqBySource(),
+    });
+    if (outcome.status === "rejected") {
+      this.logger.warn(
+        { kind: event.kind, sourceDeviceIdPrefix: event.sourceDeviceId.slice(0, 8) },
+        `Inbound device-list event rejected: ${outcome.reason}`,
+      );
+      return { status: "rejected", mutated: false, reason: outcome.reason };
+    }
+
+    if (outcome.mutated) {
+      try {
+        saveDeviceList(this.ottieHome, outcome.devices, this.logger);
+      } catch (err) {
+        return {
+          status: "rejected",
+          mutated: false,
+          error: `Failed to persist device list after applying event: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        };
+      }
+      this.deviceList = outcome.devices;
+    }
+    // Always append to the log even if mutated=false (replay-detected),
+    // so the per-source seq high-water mark advances. The store handles
+    // duplicates via lastSeenSeqBySource so re-broadcasting is safe.
+    this.events.append(event);
+    return { status: "applied", mutated: outcome.mutated };
+  }
+
+  private tryEmitDeviceAddedEvent(addedDevice: StoredDevice): void {
+    if (!this.selfDevice || !this.selfDeviceContext) {
+      this.logger.warn(
+        { addedDeviceId: addedDevice.deviceId },
+        "Cannot emit device-added event — self-device not loaded",
+      );
+      return;
+    }
+    try {
+      const event = signDeviceAddedEvent({
+        device: addedDevice,
+        sourceDeviceId: this.selfDeviceContext.serverId,
+        signPrivateKey: this.selfDevice.signPrivateKey,
+        seq: this.events.nextSelfSeq(this.selfDeviceContext.serverId),
+      });
+      this.events.append(event);
+    } catch (err) {
+      this.logger.warn(
+        { err, addedDeviceId: addedDevice.deviceId },
+        "Failed to emit device-added event (non-fatal — device-list write already succeeded)",
+      );
+    }
+  }
+
+  // tryEmitDeviceRemovedEvent (counterpart to tryEmitDeviceAddedEvent)
+  // lands in Phase 2.g when the "Remove device" UI/RPC arrives. Inbound
+  // device-removed events from peers already work via
+  // applyInboundDeviceListEvent.
 
   private sendThenClose(
     socket:
