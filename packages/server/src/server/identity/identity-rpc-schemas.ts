@@ -152,3 +152,72 @@ export const DeviceLinkCancelResponseSchema = z.object({
     error: z.string().nullable(),
   }),
 });
+
+// ----- device/link/redeem (Phase 2.d) ------------------------------------
+// New device's daemon redeems a deep-link / QR offer:
+//   - decodes the offer
+//   - generates a fresh device keypair + ephemeral X25519 keypair
+//   - encrypts a candidate-Device payload with NaCl box
+//   - opens a one-shot relay WebSocket to the OLD device
+//   - sends the envelope, awaits an ack-or-error reply
+// On accepted: caller gets the candidate echo (deviceLabel/role/etc.) and
+// continues to the Phase 2.e approval-wait flow on the new device.
+
+export const DeviceLinkRedeemRequestSchema = z.object({
+  type: z.literal("device/link/redeem"),
+  requestId: z.string(),
+  /** Either a full deep-link string or just the base64url payload portion. */
+  deepLink: z.string().min(1),
+  /** Human-readable label the new device wants to register itself under. */
+  deviceLabel: z.string().min(1).max(64),
+  /** Whether the new device runs a daemon or is client-only. */
+  role: z.enum(["daemon", "client"]),
+});
+
+/**
+ * Wire-friendly summary of the candidate that was sent. Mirrors the
+ * minimum the new device's UI needs to show "Sent → waiting for approval"
+ * — the long-lived signing private key is intentionally NOT included on
+ * the wire.
+ */
+export const DeviceLinkRedeemAcceptedSchema = z.object({
+  status: z.literal("accepted"),
+  /** UUID for the new device, the same one the candidate carried. */
+  deviceId: z.string().min(1),
+  /** Echo of the deviceLabel from the request, for confirmation UI. */
+  deviceLabel: z.string().min(1),
+  /** Echo of role. */
+  role: z.enum(["daemon", "client"]),
+  /** Display name of the OLD device's identity, for the "linking to <name>" UI. */
+  remoteDisplayName: z.string().min(1),
+  /** Old device's root signing public key — anchor of trust for Phase 2.e. */
+  remoteRootSignPublicKeyB64: z.string().min(1),
+});
+
+export const DeviceLinkRedeemRejectedSchema = z.object({
+  status: z.literal("rejected"),
+  /**
+   * Coded error: "no_offer" / "decrypt_failed" / "nonce_mismatch" /
+   * "bad_schema" / "bad_json" / "bad_frame" / "too_large" / "timeout" /
+   * "connection_closed" / "socket_error" / "offer_expired" /
+   * "build_failed" / "send_failed" / "unexpected_response".
+   */
+  errorCode: z.string().min(1),
+  errorMessage: z.string(),
+});
+
+export const DeviceLinkRedeemOutcomeSchema = z.discriminatedUnion("status", [
+  DeviceLinkRedeemAcceptedSchema,
+  DeviceLinkRedeemRejectedSchema,
+]);
+
+export const DeviceLinkRedeemResponseSchema = z.object({
+  type: z.literal("device/link/redeem/response"),
+  payload: z.object({
+    requestId: z.string(),
+    outcome: DeviceLinkRedeemOutcomeSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export type DeviceLinkRedeemOutcome = z.infer<typeof DeviceLinkRedeemOutcomeSchema>;

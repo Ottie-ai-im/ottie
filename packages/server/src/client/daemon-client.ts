@@ -1519,6 +1519,40 @@ export class DaemonClient {
     });
   }
 
+  async deviceLinkRedeem(args: {
+    deepLink: string;
+    deviceLabel: string;
+    role: "daemon" | "client";
+    requestId?: string;
+    /**
+     * Generous default — the redeem flow opens a relay WebSocket to the
+     * OLD device, sends a payload, and waits for an ack. 60s covers slow
+     * networks and the new-device-side WebSocket dial.
+     */
+    timeoutMs?: number;
+  }): Promise<{
+    outcome: import("../server/identity/identity-rpc-schemas.js").DeviceLinkRedeemOutcome | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "device/link/redeem",
+        requestId,
+        deepLink: args.deepLink,
+        deviceLabel: args.deviceLabel,
+        role: args.role,
+      },
+      timeout: args.timeoutMs ?? 60_000,
+      select: (msg) => {
+        if (msg.type !== "device/link/redeem/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { outcome: msg.payload.outcome, error: msg.payload.error };
+      },
+    });
+  }
+
   // ============================================================================
   // Agent RPCs (requestId-correlated)
   // ============================================================================

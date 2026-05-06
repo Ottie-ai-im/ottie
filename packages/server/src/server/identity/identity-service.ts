@@ -9,6 +9,11 @@ import {
   type CreatePendingOfferResult,
 } from "./device-link-pending-store.js";
 import { createDeviceLinkConnectionHandler } from "./device-link-receiver.js";
+import {
+  redeemDeviceLinkOffer,
+  type RedeemDeviceLinkOfferInput,
+  type RedeemDeviceLinkOfferOutcome,
+} from "./device-link-sender.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
 import {
   createRootIdentity,
@@ -243,6 +248,24 @@ export class IdentityService {
   /** Test/diagnostic helper for Phase 2.e wiring. */
   getPendingCandidateStore(): DeviceLinkPendingCandidateStore {
     return this.pendingCandidates;
+  }
+
+  /**
+   * Phase 2.d (sender side): the NEW device's daemon redeems a deep-link
+   * scanned/pasted by the user. Builds a candidate, opens a one-shot
+   * relay WebSocket to the OLD device, sends the redemption envelope,
+   * awaits an ack. The returned outcome is what the WS RPC layer turns
+   * into a `device/link/redeem/response`.
+   *
+   * Doesn't require the new device's identity to be initialized — the
+   * whole point is to bootstrap one. Phase 2.e will pick up the local
+   * secrets the sender produced and persist them once the OLD device
+   * approves.
+   */
+  redeemDeviceLinkOffer(
+    input: Omit<RedeemDeviceLinkOfferInput, "logger">,
+  ): Promise<RedeemDeviceLinkOfferOutcome> {
+    return redeemDeviceLinkOffer({ ...input, logger: this.logger });
   }
 
   // ----- private: self-device + device-list lifecycle ---------------------

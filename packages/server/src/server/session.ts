@@ -2221,6 +2221,8 @@ export class Session {
         return this.handleDeviceLinkGenerateRequest(msg);
       case "device/link/cancel":
         return this.handleDeviceLinkCancelRequest(msg);
+      case "device/link/redeem":
+        return this.handleDeviceLinkRedeemRequest(msg);
       default:
         return undefined;
     }
@@ -2300,6 +2302,71 @@ export class Session {
       type: "device/link/cancel/response",
       payload: { requestId: request.requestId, cancelled, error: null },
     });
+  }
+
+  private async handleDeviceLinkRedeemRequest(
+    request: Extract<SessionInboundMessage, { type: "device/link/redeem" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "device/link/redeem/response",
+        payload: {
+          requestId: request.requestId,
+          outcome: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+
+    try {
+      const outcome = await this.identityService.redeemDeviceLinkOffer({
+        deepLinkOrOffer: request.deepLink,
+        deviceLabel: request.deviceLabel,
+        role: request.role,
+      });
+
+      if (outcome.status === "accepted") {
+        this.emit({
+          type: "device/link/redeem/response",
+          payload: {
+            requestId: request.requestId,
+            outcome: {
+              status: "accepted",
+              deviceId: outcome.candidate.deviceId,
+              deviceLabel: outcome.candidate.deviceLabel,
+              role: outcome.candidate.role,
+              remoteDisplayName: outcome.offer.displayName,
+              remoteRootSignPublicKeyB64: outcome.offer.rootSignPublicKeyB64,
+            },
+            error: null,
+          },
+        });
+      } else {
+        this.emit({
+          type: "device/link/redeem/response",
+          payload: {
+            requestId: request.requestId,
+            outcome: {
+              status: "rejected",
+              errorCode: outcome.errorCode,
+              errorMessage: outcome.errorMessage,
+            },
+            error: null,
+          },
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit({
+        type: "device/link/redeem/response",
+        payload: {
+          requestId: request.requestId,
+          outcome: null,
+          error: message,
+        },
+      });
+    }
   }
 
   private async handleDeviceListRequest(
