@@ -98,3 +98,78 @@ describe("IdentityService — corrupt identity file", () => {
     expect(() => svc.initialize("Wendell")).toThrow(/load-failed/);
   });
 });
+
+describe("IdentityService — Phase 2.a self-device + device list", () => {
+  test("without selfDeviceContext, getSelfDevice() is null and getDeviceList() is empty", () => {
+    const svc = new IdentityService({ ottieHome: tmpHome, logger: SILENT_LOGGER });
+    svc.initialize("Wendell");
+    expect(svc.getSelfDevice()).toBeNull();
+    expect(svc.getDeviceList()).toEqual([]);
+  });
+
+  test("with selfDeviceContext, initialize() also creates self-device + device list", () => {
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_test_1", deviceLabel: "Test-MacBook" },
+    });
+    svc.initialize("Wendell");
+
+    const selfDevice = svc.getSelfDevice();
+    expect(selfDevice).not.toBeNull();
+    expect(selfDevice?.deviceId).toBe("srv_test_1");
+    expect(selfDevice?.deviceLabel).toBe("Test-MacBook");
+    expect(selfDevice?.role).toBe("daemon");
+    expect(selfDevice?.signPublicKeyB64).toHaveLength(43);
+    expect(selfDevice?.authorizationSignatureB64).toBeTruthy();
+
+    const list = svc.getDeviceList();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toEqual(selfDevice);
+  });
+
+  test("on existing identity without self-device, the constructor migrates in place", () => {
+    // Seed: create root identity but leave devices.json + self-device.json absent.
+    createRootIdentity(tmpHome, "Wendell");
+
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_migrate", deviceLabel: "Migrated-Mac" },
+    });
+
+    expect(svc.getState().kind).toBe("loaded");
+    expect(svc.getSelfDevice()?.deviceId).toBe("srv_migrate");
+    expect(svc.getDeviceList()).toHaveLength(1);
+  });
+
+  test("a fresh IdentityService on the same home reloads the persisted self-device", () => {
+    const first = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_persist", deviceLabel: "Persist-Mac" },
+    });
+    first.initialize("Wendell");
+    const originalKey = first.getSelfDevice()?.signPublicKeyB64;
+    expect(originalKey).toBeTruthy();
+
+    const reloaded = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_persist", deviceLabel: "Persist-Mac" },
+    });
+    expect(reloaded.getSelfDevice()?.signPublicKeyB64).toBe(originalKey);
+    expect(reloaded.getDeviceList()).toHaveLength(1);
+  });
+
+  test("constructor with selfDeviceContext but uninitialized identity does NOT create self-device", () => {
+    const svc = new IdentityService({
+      ottieHome: tmpHome,
+      logger: SILENT_LOGGER,
+      selfDeviceContext: { serverId: "srv_uninit", deviceLabel: "Uninit" },
+    });
+    expect(svc.getState().kind).toBe("uninitialized");
+    expect(svc.getSelfDevice()).toBeNull();
+    expect(svc.getDeviceList()).toEqual([]);
+  });
+});

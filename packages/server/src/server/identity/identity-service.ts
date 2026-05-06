@@ -1,10 +1,13 @@
 import type pino from "pino";
 
+import { buildAuthorizedDevice, loadDeviceList, saveDeviceList } from "./device-list-store.js";
+import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
 import {
   createRootIdentity,
   loadRootIdentity,
   type RootIdentityBundle,
 } from "./root-identity-store.js";
+import { createSelfDevice, loadSelfDevice, type SelfDeviceBundle } from "./self-device-store.js";
 
 /**
  * Lifecycle state of the root identity at daemon startup.
@@ -30,22 +33,46 @@ export type IdentityState =
 export interface IdentityServiceOptions {
   ottieHome: string;
   logger: pino.Logger;
+  /**
+   * Phase 2.a: required for self-device management. If omitted, the
+   * service still handles root identity, but `getSelfDevice()` returns
+   * `null` and `getDeviceList()` returns `[]`. Tests that only exercise
+   * root-identity behavior can leave it out.
+   */
+  selfDeviceContext?: SelfDeviceContext;
+}
+
+export interface SelfDeviceContext {
+  /** Stable daemon identifier; reused as the deviceId for role="daemon". */
+  serverId: string;
+  /** Human-readable label for this device. Default: hostname. */
+  deviceLabel: string;
 }
 
 /**
- * Daemon-side wrapper around the on-disk root identity. Constructed once
- * at bootstrap; consumed by WS RPC handlers (Phase 1.g), CLI (Phase 1.d),
- * and the device-list / signing flows in later phases.
+ * Daemon-side wrapper around the on-disk root identity and device list.
+ * Constructed once at bootstrap; consumed by WS RPC handlers (Phase 1.g),
+ * CLI (Phase 1.d), and the cross-device flows in later phases.
  */
 export class IdentityService {
   private readonly ottieHome: string;
   private readonly logger: pino.Logger;
+  private readonly selfDeviceContext: SelfDeviceContext | null;
   private state: IdentityState;
+  private selfDevice: SelfDeviceBundle | null = null;
+  private deviceList: StoredDeviceList | null = null;
 
   constructor(options: IdentityServiceOptions) {
     this.ottieHome = options.ottieHome;
     this.logger = options.logger;
+    this.selfDeviceContext = options.selfDeviceContext ?? null;
     this.state = this.loadInitialState();
+    if (this.state.kind === "loaded" && this.selfDeviceContext) {
+      // Existing daemons that pre-date Phase 2.a have a root identity but no
+      // self-device file. Migrate them in-place by generating + signing the
+      // self-device on first boot under the new build.
+      this.ensureSelfDevice(this.state.bundle);
+    }
   }
 
   private loadInitialState(): IdentityState {
@@ -95,6 +122,9 @@ export class IdentityService {
    * current state is "uninitialized" — callers should check `getState()`
    * before calling. We never overwrite a loaded identity, and we never
    * auto-recover from "load-failed" without explicit user direction.
+   *
+   * If `selfDeviceContext` was provided at construction time, this also
+   * creates the self-device record atomically (fresh-install path).
    */
   initialize(displayName: string): RootIdentityBundle {
     if (this.state.kind !== "uninitialized") {
@@ -102,6 +132,158 @@ export class IdentityService {
     }
     const bundle = createRootIdentity(this.ottieHome, displayName, this.logger);
     this.state = { kind: "loaded", bundle };
+    if (this.selfDeviceContext) {
+      this.ensureSelfDevice(bundle);
+    }
     return bundle;
+  }
+
+  /**
+   * Returns this device's record (role="daemon"), or null if either
+   * (a) no root identity, or (b) no `selfDeviceContext` was provided.
+   */
+  getSelfDevice(): StoredDevice | null {
+    if (!this.selfDevice || !this.deviceList) return null;
+    const found = this.deviceList.devices.find(
+      (d) => d.deviceId === this.selfDevice?.stored.deviceId,
+    );
+    return found ?? null;
+  }
+
+  /**
+   * Returns the full device list (this device plus any peer devices linked
+   * under the same root identity). Empty array when no identity is loaded
+   * or `selfDeviceContext` wasn't provided.
+   */
+  getDeviceList(): readonly StoredDevice[] {
+    return this.deviceList?.devices ?? [];
+  }
+
+  // ----- private: self-device + device-list lifecycle ---------------------
+
+  private ensureSelfDevice(rootIdentity: RootIdentityBundle): void {
+    if (!this.selfDeviceContext) return;
+
+    const existingSelf = this.tryLoad(
+      () => loadSelfDevice(this.ottieHome, this.logger),
+      "self-device",
+    );
+    const existingList = this.tryLoad(
+      () => loadDeviceList(this.ottieHome, this.logger),
+      "device-list",
+    );
+
+    if (existingSelf && existingList) {
+      // Both files present — happy path on every reboot after the first.
+      // Sanity-check that the list contains the self-device.
+      const inList = existingList.devices.some((d) => d.deviceId === existingSelf.stored.deviceId);
+      if (!inList) {
+        this.logger.warn(
+          { deviceId: existingSelf.stored.deviceId },
+          "Self-device file exists but is missing from device list — re-adding",
+        );
+        const refreshed = this.appendSelfToDeviceList(existingSelf, existingList, rootIdentity);
+        this.selfDevice = existingSelf;
+        this.deviceList = refreshed;
+        saveDeviceList(this.ottieHome, refreshed, this.logger);
+        return;
+      }
+      this.selfDevice = existingSelf;
+      this.deviceList = existingList;
+      return;
+    }
+
+    if (existingSelf && !existingList) {
+      // Self exists but list missing — corruption or partial write.
+      // Recreate the list from the self entry, signing freshly.
+      this.logger.warn(
+        { deviceId: existingSelf.stored.deviceId },
+        "Self-device exists but device list missing — rebuilding list",
+      );
+      const list = this.buildDeviceListFromSelf(existingSelf, rootIdentity);
+      saveDeviceList(this.ottieHome, list, this.logger);
+      this.selfDevice = existingSelf;
+      this.deviceList = list;
+      return;
+    }
+
+    if (!existingSelf && existingList) {
+      // List exists but no self — also corruption. We can't safely
+      // regenerate the self-device because doing so would reuse the existing
+      // deviceId (server-id) with a different signing key, invalidating any
+      // peer's cached copy of our public key. Surface this loudly.
+      throw new Error(
+        "Device list exists but self-device is missing. Refusing to regenerate the " +
+          "self-device key — peers would silently lose trust. Manually inspect " +
+          `${this.ottieHome}/identity/devices.json and self-device.json.`,
+      );
+    }
+
+    // Neither exists — fresh install path. Generate self-device + list.
+    const fresh = createSelfDevice(this.ottieHome, this.selfDeviceContext.serverId, this.logger);
+    const list = this.buildDeviceListFromSelf(fresh, rootIdentity);
+    saveDeviceList(this.ottieHome, list, this.logger);
+    this.selfDevice = fresh;
+    this.deviceList = list;
+    this.logger.info(
+      {
+        deviceId: fresh.stored.deviceId,
+        deviceLabel: this.selfDeviceContext.deviceLabel,
+      },
+      "Self-device record signed and persisted",
+    );
+  }
+
+  private buildDeviceListFromSelf(
+    self: SelfDeviceBundle,
+    rootIdentity: RootIdentityBundle,
+  ): StoredDeviceList {
+    const ctx = this.selfDeviceContext;
+    if (!ctx) {
+      // Defensive: ensureSelfDevice already checks this, but keep the type-narrow.
+      throw new Error("buildDeviceListFromSelf called without selfDeviceContext");
+    }
+    const device = buildAuthorizedDevice({
+      deviceId: self.stored.deviceId,
+      deviceLabel: ctx.deviceLabel,
+      role: "daemon",
+      signPublicKeyB64: self.stored.signPublicKeyB64,
+      rootIdentity,
+    });
+    return { v: 1, devices: [device] };
+  }
+
+  private appendSelfToDeviceList(
+    self: SelfDeviceBundle,
+    existing: StoredDeviceList,
+    rootIdentity: RootIdentityBundle,
+  ): StoredDeviceList {
+    const ctx = this.selfDeviceContext;
+    if (!ctx) {
+      throw new Error("appendSelfToDeviceList called without selfDeviceContext");
+    }
+    const selfDevice = buildAuthorizedDevice({
+      deviceId: self.stored.deviceId,
+      deviceLabel: ctx.deviceLabel,
+      role: "daemon",
+      signPublicKeyB64: self.stored.signPublicKeyB64,
+      rootIdentity,
+    });
+    return {
+      v: 1,
+      devices: [...existing.devices, selfDevice],
+    };
+  }
+
+  private tryLoad<T>(loader: () => T, label: string): T | null {
+    try {
+      return loader();
+    } catch (err) {
+      this.logger.error(
+        { err, label },
+        "Failed to load identity sub-resource — refusing to overwrite",
+      );
+      throw err;
+    }
   }
 }

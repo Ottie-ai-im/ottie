@@ -245,9 +245,17 @@ export async function createOttieDaemon(
   const serverId = getOrCreateServerId(config.ottieHome, { logger });
   const daemonKeyPair = await loadOrCreateDaemonKeyPair(config.ottieHome, logger);
   // Root identity: load-or-detect-first-run. Construction logs the state.
-  // The service is consumed by the identity/* WS RPCs (Phase 1.g) and the
-  // CLI's identity show command (which reads the file directly).
-  const identityService = new IdentityService({ ottieHome: config.ottieHome, logger });
+  // Phase 2.a: selfDeviceContext makes the service responsible for the
+  // daemon's own Device record (role="daemon", deviceId=serverId). On
+  // first boot the self-device keypair is generated and signed by root.
+  const identityService = new IdentityService({
+    ottieHome: config.ottieHome,
+    logger,
+    selfDeviceContext: {
+      serverId,
+      deviceLabel: getHostname() || serverId,
+    },
+  });
   let relayTransport: RelayTransportController | null = null;
 
   const staticDir = config.staticDir;
