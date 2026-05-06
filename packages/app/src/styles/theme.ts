@@ -71,8 +71,8 @@ const lightLegacyColors = {
   borderAccent: "#ececf1",
 
   // Brand — messenger green
-  accent: "#1FA855",
-  accentBright: "#22C55E",
+  accent: "#48b7f6",
+  accentBright: "#7dd3fc",
   accentForeground: "#ffffff",
 
   // Semantic
@@ -256,8 +256,8 @@ const ottieDarkConfig: DarkSemanticConfig = {
   scrollbarHandle: "#6E7270",
   border: "#252827",
   borderAccent: "#2E3231",
-  accent: "#1FA855",
-  accentBright: "#22C55E",
+  accent: "#48b7f6",
+  accentBright: "#7dd3fc",
 };
 
 const zincDarkConfig: DarkSemanticConfig = {
@@ -273,8 +273,8 @@ const zincDarkConfig: DarkSemanticConfig = {
   scrollbarHandle: "#71717a",
   border: "#27272a",
   borderAccent: "#303036",
-  accent: "#1FA855",
-  accentBright: "#22C55E",
+  accent: "#48b7f6",
+  accentBright: "#7dd3fc",
 };
 
 const midnightDarkConfig: DarkSemanticConfig = {
@@ -290,8 +290,8 @@ const midnightDarkConfig: DarkSemanticConfig = {
   scrollbarHandle: "#5F676D",
   border: "#242A2D",
   borderAccent: "#2D3439",
-  accent: "#1FA855",
-  accentBright: "#22C55E",
+  accent: "#48b7f6",
+  accentBright: "#7dd3fc",
   surfaceGlass: "rgba(210, 230, 255, 0.05)",
   surfaceGlassStrong: "rgba(210, 230, 255, 0.09)",
   surfaceGlassHover: "rgba(210, 230, 255, 0.13)",
@@ -311,8 +311,8 @@ const claudeDarkConfig: DarkSemanticConfig = {
   scrollbarHandle: "#6e6e73",
   border: "#2a2a2c",
   borderAccent: "#34343a",
-  accent: "#1FA855",
-  accentBright: "#22C55E",
+  accent: "#48b7f6",
+  accentBright: "#7dd3fc",
   surfaceGlass: "rgba(255, 240, 220, 0.05)",
   surfaceGlassStrong: "rgba(255, 240, 220, 0.09)",
   surfaceGlassHover: "rgba(255, 240, 220, 0.13)",
@@ -332,8 +332,8 @@ const ghosttyDarkConfig: DarkSemanticConfig = {
   scrollbarHandle: "#6F7775",
   border: "#272D2B",
   borderAccent: "#313835",
-  accent: "#1FA855",
-  accentBright: "#22C55E",
+  accent: "#48b7f6",
+  accentBright: "#7dd3fc",
   surfaceGlass: "rgba(220, 255, 235, 0.05)",
   surfaceGlassStrong: "rgba(220, 255, 235, 0.09)",
   surfaceGlassHover: "rgba(220, 255, 235, 0.13)",
