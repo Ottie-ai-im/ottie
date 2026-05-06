@@ -17,10 +17,64 @@ interface RelayTransportOptions {
   relayEndpoint: string; // "host:port"
   serverId: string;
   daemonKeyPair?: KeyPair;
+  /**
+   * Optional plug-in handlers checked in order *before* the default
+   * encrypted-attach flow. The first handler whose `matches(connectionId)`
+   * returns true takes ownership of the data socket — the default flow
+   * (createDaemonChannel + attachSocket) is skipped for that connection.
+   *
+   * This is the extension point for non-agent traffic that rides on the
+   * same relay session: Phase 2.d device-link redemption (one-shot,
+   * uses an offer's ephemeral keypair instead of the daemon's main key)
+   * and Phase 2.f peer-daemon sync (will use a different routing prefix).
+   *
+   * Handlers are responsible for:
+   *   - performing whatever handshake their protocol needs (E2EE or not),
+   *   - cleanly closing the socket on completion or error,
+   *   - never throwing past their own try/catch — relay-transport only
+   *     logs handler errors and moves on.
+   */
+  connectionHandlers?: ReadonlyArray<RelayConnectionHandler>;
 }
 
 export interface RelayTransportController {
   stop: () => Promise<void>;
+}
+
+/**
+ * A custom handler for a relay data socket whose connectionId matches the
+ * handler's own filter. See `RelayTransportOptions.connectionHandlers` for
+ * lifecycle expectations.
+ */
+export interface RelayConnectionHandler {
+  /** Stable name used in logs / observability — keep it grep-able. */
+  readonly name: string;
+  /** Returns true if this handler claims the given connectionId. */
+  matches(connectionId: string): boolean;
+  /**
+   * Take ownership of an open data socket. Handler must close the socket
+   * itself on completion (success or failure). The handler's own logger
+   * (already child-scoped to {handler, connectionId}) is provided.
+   */
+  handle(args: {
+    socket: RelayCustomHandlerSocket;
+    connectionId: string;
+    logger: pino.Logger;
+  }): Promise<void>;
+}
+
+/**
+ * The minimal `ws.WebSocket` surface a custom handler is allowed to touch.
+ * Re-exported so handlers don't have to depend on the `ws` package directly
+ * just for the type — keeps cross-package import noise down.
+ */
+export interface RelayCustomHandlerSocket {
+  readonly readyState: number;
+  send(data: string | ArrayBuffer | Buffer): void;
+  close(code?: number, reason?: string): void;
+  on(event: "message", listener: (data: unknown, isBinary: boolean) => void): void;
+  on(event: "close", listener: (code: number, reason: Buffer) => void): void;
+  on(event: "error", listener: (err: Error) => void): void;
 }
 
 interface RelaySocketLike {
@@ -100,6 +154,7 @@ export function startRelayTransport({
   relayEndpoint,
   serverId,
   daemonKeyPair,
+  connectionHandlers,
 }: RelayTransportOptions): RelayTransportController {
   const relayLogger = logger.child({ module: "relay-transport" });
 
@@ -352,6 +407,31 @@ export function startRelayTransport({
       relayLogger.info({ connectionId }, "relay_data_connected");
       if (attached) return;
       attached = true;
+
+      // Custom-handler dispatch: if any registered handler claims this
+      // connectionId, it owns the socket end-to-end. The default
+      // attach-to-WebSocket-server flow is skipped — that flow assumes
+      // agent-control traffic and would mis-handshake anything else.
+      const customHandler = connectionHandlers?.find((h) => h.matches(connectionId));
+      if (customHandler) {
+        const handlerLogger = relayLogger.child({
+          connectionId,
+          handler: customHandler.name,
+        });
+        handlerLogger.info("relay_custom_handler_dispatch");
+        Promise.resolve(
+          customHandler.handle({ socket, connectionId, logger: handlerLogger }),
+        ).catch((err) => {
+          handlerLogger.warn({ err }, "relay_custom_handler_error");
+          try {
+            socket.close(1011, "custom_handler_error");
+          } catch {
+            // ignore
+          }
+        });
+        return;
+      }
+
       const externalMetadata: ExternalSocketMetadata = {
         transport: "relay",
         externalSessionKey: `session:${connectionId}`,

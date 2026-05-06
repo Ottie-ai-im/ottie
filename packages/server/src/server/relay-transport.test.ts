@@ -221,3 +221,160 @@ describe("relay-transport control lifecycle", () => {
     });
   });
 });
+
+describe("relay-transport custom connectionHandlers", () => {
+  const controllers: Array<{ stop: () => Promise<void> }> = [];
+  const MockWebSocket = wsMock.MockWebSocket;
+
+  beforeEach(() => {
+    MockWebSocket.reset();
+  });
+
+  afterEach(async () => {
+    await Promise.all(controllers.map((controller) => controller.stop()));
+    controllers.length = 0;
+  });
+
+  test("matching handler takes ownership and the default attachSocket is skipped", async () => {
+    const logger = createMockLogger();
+    const attachSocket = vi.fn(async () => {});
+    const handle = vi.fn(async () => {});
+    const controller = startRelayTransport({
+      logger: logger as unknown as pino.Logger,
+      attachSocket,
+      relayEndpoint: "relay.ottie.app:443",
+      serverId: "srv_test",
+      connectionHandlers: [
+        {
+          name: "device-link",
+          matches: (id) => id.startsWith("device-link:"),
+          handle,
+        },
+      ],
+    });
+    controllers.push(controller);
+
+    const control = MockWebSocket.instances[0];
+    control.open();
+    control.message(JSON.stringify({ type: "pong", ts: Date.now() }));
+    control.message(JSON.stringify({ type: "connected", connectionId: "device-link:abc123" }));
+
+    const dataSocket = MockWebSocket.instances[1];
+    expect(dataSocket).toBeDefined();
+    dataSocket.open();
+
+    await Promise.resolve();
+
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(handle.mock.calls[0]?.[0]?.connectionId).toBe("device-link:abc123");
+    expect(handle.mock.calls[0]?.[0]?.socket).toBe(dataSocket);
+    // Default attach must NOT have run for a custom-handled connection.
+    expect(attachSocket).not.toHaveBeenCalled();
+    expect(hasLogMessage(logger.info, "relay_custom_handler_dispatch")).toBe(true);
+  });
+
+  test("non-matching handler falls through to the default attach flow", async () => {
+    const logger = createMockLogger();
+    const attachSocket = vi.fn(async () => {});
+    const handle = vi.fn(async () => {});
+    const controller = startRelayTransport({
+      logger: logger as unknown as pino.Logger,
+      attachSocket,
+      relayEndpoint: "relay.ottie.app:443",
+      serverId: "srv_test",
+      connectionHandlers: [
+        {
+          name: "device-link",
+          matches: (id) => id.startsWith("device-link:"),
+          handle,
+        },
+      ],
+    });
+    controllers.push(controller);
+
+    const control = MockWebSocket.instances[0];
+    control.open();
+    control.message(JSON.stringify({ type: "pong", ts: Date.now() }));
+    control.message(JSON.stringify({ type: "connected", connectionId: "clt_normal" }));
+
+    const dataSocket = MockWebSocket.instances[1];
+    dataSocket.open();
+    await Promise.resolve();
+
+    expect(handle).not.toHaveBeenCalled();
+    expect(attachSocket).toHaveBeenCalledWith(dataSocket, {
+      transport: "relay",
+      externalSessionKey: "session:clt_normal",
+    });
+  });
+
+  test("first handler whose matches() returns true wins", async () => {
+    const logger = createMockLogger();
+    const broadHandle = vi.fn(async () => {});
+    const narrowHandle = vi.fn(async () => {});
+    const controller = startRelayTransport({
+      logger: logger as unknown as pino.Logger,
+      attachSocket: async () => {},
+      relayEndpoint: "relay.ottie.app:443",
+      serverId: "srv_test",
+      connectionHandlers: [
+        { name: "broad", matches: (id) => id.startsWith("device-"), handle: broadHandle },
+        {
+          name: "narrow",
+          matches: (id) => id.startsWith("device-link:"),
+          handle: narrowHandle,
+        },
+      ],
+    });
+    controllers.push(controller);
+
+    const control = MockWebSocket.instances[0];
+    control.open();
+    control.message(JSON.stringify({ type: "pong", ts: Date.now() }));
+    control.message(JSON.stringify({ type: "connected", connectionId: "device-link:xyz" }));
+
+    const dataSocket = MockWebSocket.instances[1];
+    dataSocket.open();
+    await Promise.resolve();
+
+    expect(broadHandle).toHaveBeenCalledTimes(1);
+    expect(narrowHandle).not.toHaveBeenCalled();
+  });
+
+  test("handler that throws closes the socket with custom_handler_error", async () => {
+    const logger = createMockLogger();
+    const attachSocket = vi.fn(async () => {});
+    const controller = startRelayTransport({
+      logger: logger as unknown as pino.Logger,
+      attachSocket,
+      relayEndpoint: "relay.ottie.app:443",
+      serverId: "srv_test",
+      connectionHandlers: [
+        {
+          name: "boom",
+          matches: () => true,
+          handle: async () => {
+            throw new Error("intentional failure");
+          },
+        },
+      ],
+    });
+    controllers.push(controller);
+
+    const control = MockWebSocket.instances[0];
+    control.open();
+    control.message(JSON.stringify({ type: "pong", ts: Date.now() }));
+    control.message(JSON.stringify({ type: "connected", connectionId: "device-link:xyz" }));
+
+    const dataSocket = MockWebSocket.instances[1];
+    dataSocket.open();
+
+    // Promise.resolve(handler.handle(...)).catch — let the rejection settle.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(dataSocket.readyState).toBe(MockWebSocket.CLOSED);
+    expect(hasLogMessage(logger.warn, "relay_custom_handler_error")).toBe(true);
+    expect(attachSocket).not.toHaveBeenCalled();
+  });
+});
