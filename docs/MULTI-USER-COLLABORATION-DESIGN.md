@@ -1056,7 +1056,18 @@ Two laptops + a phone (one daemon each) under one identity now:
     `chat.add.addFriend` + `chat.add.redeemFriendLink`, surfaced
     in the top-right `+` menu (now 8 items). Bilingual i18n
     strings landed in en.json and zh.json.
-  - ⏳ 3.b/0 — chat-room kind=p2p schema, Peer entity in store
+  - ✅ 3.b/0 — chat-room kind=p2p schema. `ChatRoomSchema` gains
+    optional `kind` (`"agent-only" | "p2p" | "group"`),
+    `ownerRootPubKey`, and `members` (array of `{rootPubKey, role,
+    addedAt}`). `ChatMessageSchema` gains optional
+    `authorRootPubKey`, `authorDeviceId`, `kind` (incl. all
+    `ai-share/*` variants for Phase 4 forward-compat), `payload`.
+    All new fields are `.optional()` so the back-compat matrix
+    stays satisfied (old daemon strips → new client ignores → old
+    client receiving new payload still parses + renders the
+    `body` fallback). New helpers: `p2pRoomId({a, b})` derives
+    a deterministic order-insensitive `p2p:<a>|<b>` id;
+    `isP2pRoom(room)` type-guard.
   - ⏳ 3.b/1 — message send/receive over relay (live)
   - ⏳ 3.b/2 — Cloudflare KV inbox for offline delivery; recipient
     pulls on connect with cursor
