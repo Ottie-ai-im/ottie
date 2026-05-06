@@ -401,6 +401,58 @@ The relay's zero-knowledge property is preserved. The "sharing breaks code priva
 
 > **Open question Q2 (§13):** Should the _first_ AI share with each new friend require a more elaborate confirmation (e.g., type the friend's name)? Errs on side of friction. **Provisional: yes for Phase 1.**
 
+### 7.5 Multi-daemon share routing (decided: explicit two-step)
+
+When the owner has multiple daemons online (e.g. laptop + home server),
+each potentially configured with one or more AI providers, every share
+request from a friend triggers a **two-step modal** on the owner's UI
+(any of the owner's devices that's online — they're synced via §5.5).
+There is no auto-route, no per-friend default, no "main daemon" rule —
+every share is an explicit, present-tense decision.
+
+**Step 1 — pick the daemon:**
+```
+Bob wants to use one of your AIs.
+Where do you want to share from?
+  ○ Laptop A     (online, has: Claude, Codex)
+  ○ Home Server  (online, has: Codex)
+  ○ iPad daemon  (offline)
+```
+
+**Step 2 — pick (and confirm) the AI:**
+```
+[picked Home Server, which only has Codex]
+Will share Codex from Home Server. Confirm?
+  [Cancel] [Confirm]
+
+[picked Laptop A, which has both Claude and Codex]
+Which AI on Laptop A?
+  ○ Claude
+  ○ Codex
+  [Cancel] [Confirm]
+```
+
+**Always two modals**, even when step 2 has a single option — the
+second modal is a deliberate confirmation gate so the owner never
+shares by accident. Mirrors the friction of "Q2: first-share extra
+confirmation" but applied to every share, not just the first.
+
+Why no shortcuts:
+- Sharing an AI agent is high-stakes (the friend can issue tool calls
+  the owner pays for). The few seconds of friction is the right
+  trade-off vs the risk of misroute.
+- Per-friend / per-AI defaults would create a settings surface to
+  audit + a persistence concern across multi-device sync. Easier to
+  re-decide each time than to trust stale config.
+- If usage feedback proves friction is too high, Phase 5+ can add an
+  opt-in "remember last route for this friend (24h)" toggle.
+
+Phase 4 implements this UI; Phase 4's daemon-side routing only needs
+to: (a) deliver the share request to ALL of the owner's daemons that
+have any AI configured (so any of them can render the modal) and (b)
+once the owner picks, lock the session to that specific daemon for
+its whole lifetime.
+
 ---
 
 ## 8. Relay Changes
