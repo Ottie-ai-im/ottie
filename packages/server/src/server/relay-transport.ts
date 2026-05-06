@@ -558,6 +558,19 @@ function createEncryptedSocket(channel: EncryptedChannel, emitter: EventEmitter)
   };
 }
 
+/**
+ * Decide whether a `ws.WebSocket` message frame is text or binary based on
+ * the `isBinary` flag the library passes. Must NOT be skipped — Node's
+ * `ws` library always delivers `data` as a Buffer regardless of the wire
+ * frame's text/binary distinction; only `isBinary` carries that signal.
+ *
+ * If you write any new ws→ws bridge in this codebase, propagate
+ * `isBinary` end-to-end (e.g. `target.send(data, { binary: isBinary })`)
+ * or use this helper. Cloudflare's `webSocketMessage(ws, message: string
+ * | ArrayBuffer)` is bug-resistant by type, but the Node side isn't —
+ * the test-utils MockRelay shipped with this exact bug for one commit
+ * before it got fixed.
+ */
 function normalizeMessageData(data: unknown, isBinary: boolean): string | ArrayBuffer {
   if (!isBinary) {
     if (typeof data === "string") return data;
