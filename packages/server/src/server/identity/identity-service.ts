@@ -8,8 +8,9 @@ import { applyDeviceListEvent, signDeviceAddedEvent } from "./device-list-event.
 import { DeviceListEventStore } from "./device-list-event-store.js";
 import type { DeviceListEvent } from "./device-list-event-types.js";
 import { DeviceLinkPendingCandidateStore } from "./device-link-pending-candidate-store.js";
-import { PeerSessionRegistry } from "./peer-session-registry.js";
+import { PeerSessionRegistry, type PeerSession } from "./peer-session-registry.js";
 import { PeerSyncDialer } from "./peer-sync-dialer.js";
+import { encryptPeerSyncFrame } from "./peer-sync-handshake.js";
 import { createPeerSyncConnectionHandler } from "./peer-sync-receiver.js";
 import {
   DeviceLinkPendingStore,
@@ -278,6 +279,9 @@ export class IdentityService {
         // that everything else funnels through.
         this.applyInboundDeviceListEvent(event);
       },
+      onSessionEstablished: (peerDeviceId) => {
+        this.replayEventsToPeer(peerDeviceId);
+      },
     });
   }
 
@@ -307,6 +311,9 @@ export class IdentityService {
       getLocalDeviceList: () => this.deviceList?.devices ?? [],
       sessions: this.peerSessions,
       applyInboundEvent: (event) => this.applyInboundDeviceListEvent(event),
+      onSessionEstablished: (peerDeviceId) => {
+        this.replayEventsToPeer(peerDeviceId);
+      },
       logger: this.logger,
     });
     this.peerDialer.start();
@@ -695,6 +702,85 @@ export class IdentityService {
     return { status: "applied", mutated: outcome.mutated };
   }
 
+  /**
+   * Phase 2.f/3: encrypt + send a single event to all currently-
+   * active peer sessions. Used both for live broadcasts (right after
+   * tryEmitDeviceAddedEvent) and reconnect catch-up (replayEventsToPeer).
+   *
+   * Failures on individual sessions log and skip — applyDeviceList
+   * Event on the peer side is idempotent + replay-safe via lastSeen
+   * SeqBySource, so a partial-fanout is recoverable on the next
+   * reconnect.
+   */
+  private broadcastEvent(event: DeviceListEvent): void {
+    const sessions = this.peerSessions.list();
+    if (sessions.length === 0) return;
+    const payload = JSON.stringify(event);
+    for (const session of sessions) {
+      this.sendEventToSession(session, event, payload);
+    }
+  }
+
+  /**
+   * Phase 2.f/3 catch-up: when a fresh peer session is established,
+   * replay every event in the local log to that peer. Their replay-
+   * protection map (lastSeenSeqBySource) drops events they've already
+   * applied, so the cost is just bytes-on-the-wire (small for now,
+   * Phase 2.f+ may switch to delta-resync if it grows).
+   */
+  private replayEventsToPeer(peerDeviceId: string): void {
+    const session = this.peerSessions.get(peerDeviceId);
+    if (!session) return;
+    const events = this.events.list();
+    if (events.length === 0) return;
+    let sent = 0;
+    for (const event of events) {
+      const payload = JSON.stringify(event);
+      if (this.sendEventToSession(session, event, payload)) sent += 1;
+    }
+    this.logger.info(
+      {
+        peerDeviceIdPrefix: peerDeviceId.slice(0, 12),
+        replayedCount: sent,
+        totalLog: events.length,
+      },
+      "peer_sync_catchup_replay",
+    );
+  }
+
+  private sendEventToSession(
+    session: PeerSession,
+    event: DeviceListEvent,
+    payloadJson: string,
+  ): boolean {
+    try {
+      const frame = encryptPeerSyncFrame({
+        sharedKey: session.sharedKey,
+        plaintext: payloadJson,
+      });
+      session.socket.send(JSON.stringify(frame));
+      return true;
+    } catch (err) {
+      this.logger.warn(
+        {
+          err,
+          peerDeviceIdPrefix: session.peerDeviceId.slice(0, 12),
+          eventKind: event.kind,
+          eventSeq: event.seq,
+        },
+        "peer_sync_broadcast_send_failed",
+      );
+      // Surface socket failure by closing — dialer will reconnect.
+      try {
+        session.socket.close(1011, "broadcast_send_failed");
+      } catch {
+        // ignore
+      }
+      this.peerSessions.remove(session.peerDeviceId);
+      return false;
+    }
+  }
+
   private tryEmitDeviceAddedEvent(addedDevice: StoredDevice): void {
     if (!this.selfDevice || !this.selfDeviceContext) {
       this.logger.warn(
@@ -711,6 +797,10 @@ export class IdentityService {
         seq: this.events.nextSelfSeq(this.selfDeviceContext.serverId),
       });
       this.events.append(event);
+      // Phase 2.f/3: fan out to every active peer session right after
+      // appending. Newly-connected peers also pick this up via the
+      // catch-up replay in replayEventsToPeer.
+      this.broadcastEvent(event);
     } catch (err) {
       this.logger.warn(
         { err, addedDeviceId: addedDevice.deviceId },

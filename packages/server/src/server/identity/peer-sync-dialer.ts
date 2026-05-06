@@ -61,6 +61,14 @@ export interface PeerSyncDialerOptions {
   sessions: PeerSessionRegistry;
   /** Bridges decrypted inbound events into IdentityService.applyInboundDeviceListEvent. */
   applyInboundEvent: (event: DeviceListEvent) => void;
+  /**
+   * Phase 2.f/3 hook: called once per session right after the SIGMA-I
+   * handshake completes and the session is registered. Used by
+   * IdentityService to replay the local events log to the peer for
+   * catch-up. Failures here must NOT close the session — replay is
+   * best-effort.
+   */
+  onSessionEstablished?: (peerDeviceId: string) => void;
   logger: pino.Logger;
   /** Override `ws.WebSocket` factory (for tests with mock-relay). */
   createSocket?: (url: string) => DialerSocket;
@@ -410,6 +418,16 @@ export class PeerSyncDialer {
       "peer_sync_dialer_session_established",
     );
     args.onEstablished(sharedKey);
+    // Phase 2.f/3 catch-up: now that we have a session, IdentityService
+    // can replay any events the peer might not have seen yet.
+    try {
+      this.options.onSessionEstablished?.(args.peerDeviceId);
+    } catch (err) {
+      this.log.warn(
+        { err, peerDeviceIdPrefix: args.peerDeviceId.slice(0, 12) },
+        "peer_sync_dialer_on_established_threw",
+      );
+    }
   }
 
   private handlePostHandshakeFrame(args: {

@@ -66,6 +66,14 @@ export interface PeerSyncReceiverDeps {
    * Phase 2.f/3+ may add an ack/nack channel).
    */
   applyInboundEvent: (event: DeviceListEvent) => void;
+  /**
+   * Phase 2.f/3 hook: called once per session right after the SIGMA-I
+   * handshake completes and the session is registered. Used by
+   * IdentityService to replay the local events log to the peer for
+   * catch-up. Failures here must NOT close the session — replay is
+   * best-effort.
+   */
+  onSessionEstablished?: (peerDeviceId: string) => void;
   /** Override clock for tests. */
   now?: () => number;
 }
@@ -195,6 +203,13 @@ export function createPeerSyncConnectionHandler(
           { peerDeviceIdPrefix: peerDeviceId.slice(0, 12), connectionId },
           "peer_sync_session_established",
         );
+        // Phase 2.f/3 catch-up: notify IdentityService to replay the
+        // local events log so the freshly-connected peer catches up.
+        try {
+          deps.onSessionEstablished?.(peerDeviceId);
+        } catch (err) {
+          logger.warn({ err }, "peer_sync_handler_on_established_threw");
+        }
       };
 
       const handleIncomingFrame = (parsed: unknown): void => {
