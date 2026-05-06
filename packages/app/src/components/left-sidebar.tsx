@@ -335,16 +335,18 @@ export const LeftSidebar = memo(function LeftSidebar({
 
   if (isCompactLayout) {
     return (
-      <MobileSidebar
-        {...sharedProps}
-        insetsTop={insets.top}
-        insetsBottom={insets.bottom}
-        isOpen={isOpen}
-        closeToAgent={showMobileAgent}
-        handleOpenProject={handleOpenProjectMobile}
-        handleSettings={handleSettingsMobile}
-        handleViewMoreNavigate={handleViewMoreNavigate}
-      />
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <MobileSidebar
+          {...sharedProps}
+          insetsTop={insets.top}
+          insetsBottom={insets.bottom}
+          isOpen={isOpen}
+          closeToAgent={showMobileAgent}
+          handleOpenProject={handleOpenProjectMobile}
+          handleSettings={handleSettingsMobile}
+          handleViewMoreNavigate={handleViewMoreNavigate}
+        />
+      </DndContext>
     );
   }
 
