@@ -70,6 +70,19 @@ export const FriendCandidateSchema = z.object({
    * expired — defense in depth on top of the offer's own `exp`.
    */
   generatedAt: z.string(),
+  /**
+   * Phase 3.b/1a: Bob's stable daemon serverId. Lets Alice's daemon route
+   * back to Bob's daemon when opening a long-lived friend-sync chat
+   * session in Phase 3.b/1c. Optional so old responder daemons that pre-
+   * date 3.b/1a still pair successfully (they just won't be reachable
+   * for chat until they re-pair under the new build).
+   */
+  serverId: z.string().optional(),
+  /**
+   * Phase 3.b/1a: relay host:port Bob's daemon was reachable at. Mirrors
+   * the offer's `relayEndpoint`; same back-compat reason as `serverId`.
+   */
+  relayEndpoint: z.string().optional(),
 });
 
 export type FriendCandidate = z.infer<typeof FriendCandidateSchema>;

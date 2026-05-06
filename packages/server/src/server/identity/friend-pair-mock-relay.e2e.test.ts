@@ -142,8 +142,14 @@ describe("Phase 3.a/3 mock-relay e2e (real WebSockets, two separate identities)"
       expect(existsSync(peerListFilePath(bobHome))).toBe(true);
       const aliceFile = JSON.parse(readFileSync(peerListFilePath(aliceHome), "utf8"));
       expect(aliceFile.peers[0].peerDisplayName).toBe("Bob");
+      // Phase 3.b/1a: routing info round-tripped through the candidate.
+      expect(aliceFile.peers[0].peerServerId).toBe("srv_bob_fp_e2e");
+      expect(aliceFile.peers[0].peerRelayEndpoint).toBe(relayEndpoint);
       const bobFile = JSON.parse(readFileSync(peerListFilePath(bobHome), "utf8"));
       expect(bobFile.peers[0].peerDisplayName).toBe("Alice");
+      // Phase 3.b/1a: Alice's serverId came from the offer Bob scanned.
+      expect(bobFile.peers[0].peerServerId).toBe("srv_alice_fp_e2e");
+      expect(bobFile.peers[0].peerRelayEndpoint).toBe(relayEndpoint);
 
       // === Fresh IdentityService instances reload the friend list ===
       const aliceAfterReboot = new IdentityService({

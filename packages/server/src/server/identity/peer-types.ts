@@ -56,6 +56,20 @@ export const PeerSchema = z.object({
    */
   authorizationSignatureB64: z.string().min(1),
   /**
+   * Phase 3.b/1a: the peer's stable daemon serverId at pairing time. Used
+   * by the friend-sync dialer (Phase 3.b/1c) to know which `serverId` to
+   * route to when opening a long-lived chat session. Optional because old
+   * peers.json entries from pre-3.b/1a pairings don't have it — those
+   * peers will be skipped by the dialer until they re-pair.
+   */
+  peerServerId: z.string().optional(),
+  /**
+   * Phase 3.b/1a: the relay host:port the peer was reachable at during
+   * pairing. Same routing target the friend-pair offer carried. Optional
+   * for the same back-compat reason as `peerServerId`.
+   */
+  peerRelayEndpoint: z.string().optional(),
+  /**
    * Phase 3.b+ will populate this with the peer's published device list
    * (so we know which of their daemons to route messages to). Empty
    * here in Phase 3.a — the friend list is identity-only at first.

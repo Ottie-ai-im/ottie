@@ -123,6 +123,39 @@ describe("approveFriendPairCandidate + decryptFriendPairApprovalEnvelope + verif
     expect(result.selfPeer.authorizationSignatureB64).toBe(ctx.candidate.signatureB64);
   });
 
+  test("3.b/1a: Alice's Peer captures Bob's serverId + relayEndpoint from the candidate", () => {
+    const ctx = setupApprovalContext();
+    // Inject routing fields into the candidate (same shape buildFriend
+    // PairRedemption produces when called with selfServerId).
+    const candidateWithRouting = {
+      ...ctx.candidate,
+      serverId: "srv_bob_routing",
+      relayEndpoint: "relay.claws.company:443",
+    };
+    const result = approveFriendPairCandidate({
+      candidate: candidateWithRouting,
+      offer: ctx.offer,
+      ephPrivateKeyB64: ctx.aliceEphPrivateKeyB64,
+      candidateEphPublicKeyB64: ctx.candidateEphPublicKeyB64,
+      rootIdentity: ctx.alice,
+    });
+    expect(result.selfPeer.peerServerId).toBe("srv_bob_routing");
+    expect(result.selfPeer.peerRelayEndpoint).toBe("relay.claws.company:443");
+  });
+
+  test("3.b/1a: Peer record omits routing fields when candidate doesn't supply them", () => {
+    const ctx = setupApprovalContext();
+    const result = approveFriendPairCandidate({
+      candidate: ctx.candidate,
+      offer: ctx.offer,
+      ephPrivateKeyB64: ctx.aliceEphPrivateKeyB64,
+      candidateEphPublicKeyB64: ctx.candidateEphPublicKeyB64,
+      rootIdentity: ctx.alice,
+    });
+    expect(result.selfPeer.peerServerId).toBeUndefined();
+    expect(result.selfPeer.peerRelayEndpoint).toBeUndefined();
+  });
+
   test("reject roundtrips with an optional reason", () => {
     const ctx = setupApprovalContext();
     const { envelope, reply } = rejectFriendPairCandidate({

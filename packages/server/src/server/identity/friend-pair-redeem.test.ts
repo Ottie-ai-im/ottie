@@ -105,6 +105,45 @@ describe("buildFriendPairRedemption + decryptFriendPairRedemption + verifyFriend
     expect(recovered.displayName).toBe("Bob");
   });
 
+  test("3.b/1a: includes selfServerId + selfRelayEndpoint when caller passes them", () => {
+    const alice = mintRootKeys();
+    const bob = mintRootKeys();
+    const pending = mintPendingOffer({ alice });
+
+    const built = buildFriendPairRedemption({
+      offer: pending.offer,
+      selfRootSignPublicKeyB64: bob.signPublicKeyB64,
+      selfRootSignPrivateKey: bob.signPrivateKey,
+      selfDisplayName: "Bob",
+      selfServerId: "srv_bob_e2e",
+      selfRelayEndpoint: "relay.claws.company:443",
+    });
+    expect(built.candidate.serverId).toBe("srv_bob_e2e");
+    expect(built.candidate.relayEndpoint).toBe("relay.claws.company:443");
+
+    const recovered = decryptFriendPairRedemption({
+      redemption: built.redemption,
+      ephPrivateKeyB64: pending.ephPrivateKeyB64,
+    });
+    expect(recovered.serverId).toBe("srv_bob_e2e");
+    expect(recovered.relayEndpoint).toBe("relay.claws.company:443");
+  });
+
+  test("3.b/1a: omits routing fields when caller doesn't pass them (back-compat)", () => {
+    const alice = mintRootKeys();
+    const bob = mintRootKeys();
+    const pending = mintPendingOffer({ alice });
+
+    const built = buildFriendPairRedemption({
+      offer: pending.offer,
+      selfRootSignPublicKeyB64: bob.signPublicKeyB64,
+      selfRootSignPrivateKey: bob.signPrivateKey,
+      selfDisplayName: "Bob",
+    });
+    expect(built.candidate.serverId).toBeUndefined();
+    expect(built.candidate.relayEndpoint).toBeUndefined();
+  });
+
   test("two redemptions for the same offer use distinct ephemeral keys + signatures", () => {
     const alice = mintRootKeys();
     const bob = mintRootKeys();

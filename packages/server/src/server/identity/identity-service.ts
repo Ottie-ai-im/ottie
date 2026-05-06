@@ -384,6 +384,11 @@ export class IdentityService {
       selfRootSignPublicKeyB64: this.state.bundle.stored.signPublicKeyB64,
       selfRootSignPrivateKey: this.state.bundle.signPrivateKey,
       selfDisplayName: this.state.bundle.stored.displayName,
+      // Phase 3.b/1a: route Bob's serverId + relayEndpoint into the
+      // candidate so Alice's peers.json captures them. Skipped on tests
+      // / CLI paths that don't construct with a self-device context.
+      ...(this.selfDeviceContext ? { selfServerId: this.selfDeviceContext.serverId } : {}),
+      ...(this.relayEndpoint ? { selfRelayEndpoint: this.relayEndpoint } : {}),
       logger: this.logger,
     });
     if (outcome.status !== "paired") return outcome;

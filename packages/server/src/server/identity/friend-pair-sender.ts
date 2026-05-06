@@ -110,6 +110,17 @@ export interface RedeemFriendPairOfferInput {
   selfRootSignPrivateKey: KeyObject;
   /** Bob's display name, shown to Alice in her approve dialog. */
   selfDisplayName: string;
+  /**
+   * Phase 3.b/1a: Bob's stable daemon serverId. Optional in tests but
+   * IdentityService passes it in production so Alice's peers.json
+   * captures Bob's chat-routing target.
+   */
+  selfServerId?: string;
+  /**
+   * Phase 3.b/1a: relay host:port Bob's daemon is reachable at. Same
+   * back-compat reason as `selfServerId`.
+   */
+  selfRelayEndpoint?: string;
   /** Override clock (tests). */
   nowMs?: number;
   /** Override timeout in ms. Defaults to 5 minutes. */
@@ -140,6 +151,8 @@ export async function redeemFriendPairOffer(
       selfRootSignPublicKeyB64: input.selfRootSignPublicKeyB64,
       selfRootSignPrivateKey: input.selfRootSignPrivateKey,
       selfDisplayName: input.selfDisplayName,
+      ...(input.selfServerId ? { selfServerId: input.selfServerId } : {}),
+      ...(input.selfRelayEndpoint ? { selfRelayEndpoint: input.selfRelayEndpoint } : {}),
       ...(input.nowMs !== undefined ? { nowMs: input.nowMs } : {}),
     });
   } catch (err) {
@@ -413,6 +426,11 @@ function handleApprovalEnvelope(args: {
     status: "active",
     pairingNonceB64: built.offer.nonceB64,
     authorizationSignatureB64: approvalReply.authorizationSignatureB64,
+    // Phase 3.b/1a: Alice's serverId came in the offer Bob scanned. The
+    // relayEndpoint is also right there. Capturing both lets Bob's
+    // friend-sync dialer route to Alice's daemon for chat in 3.b/1c.
+    peerServerId: built.offer.serverId,
+    peerRelayEndpoint: built.offer.relayEndpoint,
   };
   log?.info(
     {

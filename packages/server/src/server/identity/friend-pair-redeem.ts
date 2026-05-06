@@ -56,6 +56,18 @@ export interface BuildFriendPairRedemptionInput {
   selfRootSignPrivateKey: KeyObject;
   /** Bob's display name, shown to Alice in her approve dialog. */
   selfDisplayName: string;
+  /**
+   * Phase 3.b/1a: Bob's stable daemon serverId. Optional so callers
+   * without a self-device context can still build a candidate (used in
+   * tests) — but in production IdentityService always passes this so
+   * Alice's peers.json captures Bob's chat-routing target.
+   */
+  selfServerId?: string;
+  /**
+   * Phase 3.b/1a: relay host:port Bob's daemon is reachable at. Same
+   * back-compat reason as `selfServerId`.
+   */
+  selfRelayEndpoint?: string;
   /** Override clock for tests. Defaults to Date.now(). */
   nowMs?: number;
 }
@@ -118,6 +130,8 @@ export function buildFriendPairRedemption(
     displayName: trimmedName,
     signatureB64,
     generatedAt: new Date(nowMs).toISOString(),
+    ...(input.selfServerId ? { serverId: input.selfServerId } : {}),
+    ...(input.selfRelayEndpoint ? { relayEndpoint: input.selfRelayEndpoint } : {}),
   };
 
   // Derive shared key from our ephemeral X25519 secret + offer's ephemeral

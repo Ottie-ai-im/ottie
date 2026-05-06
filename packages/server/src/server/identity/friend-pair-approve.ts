@@ -108,7 +108,9 @@ export function approveFriendPairCandidate(
   // SIGMA-I signature Bob sent during 3.a/2 — that's a proof made by
   // Bob's root key that Bob owned the ECDH session that landed under
   // Alice's pending offer, which is exactly what we want to record as
-  // "Bob accepted Alice's pair offer".
+  // "Bob accepted Alice's pair offer". The serverId + relayEndpoint
+  // captured in 3.b/1a let Alice's friend-sync dialer route to Bob's
+  // daemon for chat in 3.b/1c.
   const selfPeer: StoredPeer = {
     v: 1,
     peerRootSignPublicKeyB64: input.candidate.rootSignPublicKeyB64,
@@ -117,6 +119,8 @@ export function approveFriendPairCandidate(
     status: "active",
     pairingNonceB64: input.offer.nonceB64,
     authorizationSignatureB64: input.candidate.signatureB64,
+    ...(input.candidate.serverId ? { peerServerId: input.candidate.serverId } : {}),
+    ...(input.candidate.relayEndpoint ? { peerRelayEndpoint: input.candidate.relayEndpoint } : {}),
   };
 
   return { envelope, reply, selfPeer };
