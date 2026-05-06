@@ -259,12 +259,15 @@ function ProfileButton() {
     ],
     [],
   );
+  // Phase 1.f wires this to the identity & devices page. A richer account
+  // sheet (avatar upload, sign-out, multi-identity) can replace this once
+  // those surfaces ship.
+  const handlePress = useCallback(() => {
+    router.push("/settings/identity");
+  }, []);
   return (
     <Pressable
-      // Profile/account panel isn't wired yet — placeholder per spec. Will
-      // open an account sheet (avatar, sign-in, profile shortcuts) once that
-      // surface ships.
-      onPress={NOOP}
+      onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={t("nav.profile", { defaultValue: "Profile" })}
       testID="desktop-nav-profile"
