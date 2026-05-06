@@ -9,6 +9,7 @@ import { DeviceListEventStore } from "./device-list-event-store.js";
 import type { DeviceListEvent } from "./device-list-event-types.js";
 import { DeviceLinkPendingCandidateStore } from "./device-link-pending-candidate-store.js";
 import { PeerSessionRegistry } from "./peer-session-registry.js";
+import { PeerSyncDialer } from "./peer-sync-dialer.js";
 import { createPeerSyncConnectionHandler } from "./peer-sync-receiver.js";
 import {
   DeviceLinkPendingStore,
@@ -97,6 +98,7 @@ export class IdentityService {
   private readonly pendingCandidates: DeviceLinkPendingCandidateStore;
   private readonly events: DeviceListEventStore;
   private readonly peerSessions: PeerSessionRegistry;
+  private peerDialer: PeerSyncDialer | null = null;
   private state: IdentityState;
   private selfDevice: SelfDeviceBundle | null = null;
   private deviceList: StoredDeviceList | null = null;
@@ -282,6 +284,55 @@ export class IdentityService {
   /** Phase 2.f/2b+: snapshot of active peer sessions for diagnostics + Phase 2.f/3 broadcast. */
   getPeerSessions(): readonly import("./peer-session-registry.js").PeerSession[] {
     return this.peerSessions.list();
+  }
+
+  /**
+   * Phase 2.f/2c: kick off the outbound peer-sync dialer. Bootstrap
+   * calls this once after relay-transport is up. Idempotent —
+   * subsequent calls reuse the existing dialer.
+   *
+   * Requires identity loaded + self-device + a relay endpoint. No-op
+   * silently when prerequisites aren't met (e.g. uninitialized
+   * daemon — there's no peer to dial yet).
+   */
+  startPeerSync(): void {
+    if (this.peerDialer) return;
+    if (!this.selfDevice || !this.selfDeviceContext || !this.relayEndpoint) return;
+    if (this.state.kind !== "loaded") return;
+
+    this.peerDialer = new PeerSyncDialer({
+      selfDeviceId: this.selfDeviceContext.serverId,
+      selfSignPrivateKey: this.selfDevice.signPrivateKey,
+      relayEndpoint: this.relayEndpoint,
+      getLocalDeviceList: () => this.deviceList?.devices ?? [],
+      sessions: this.peerSessions,
+      applyInboundEvent: (event) => this.applyInboundDeviceListEvent(event),
+      logger: this.logger,
+    });
+    this.peerDialer.start();
+    this.logger.info(
+      { peerCount: this.deviceList?.devices.length ?? 0 },
+      "Peer-sync dialer started",
+    );
+  }
+
+  /** Daemon shutdown / test cleanup. Closes all dialer sockets + sessions. */
+  async stopPeerSync(): Promise<void> {
+    if (this.peerDialer) {
+      await this.peerDialer.stop();
+      this.peerDialer = null;
+    }
+    this.peerSessions.closeAll("daemon_shutdown");
+  }
+
+  /**
+   * Refresh the dialer's view of the device list — call after a device
+   * is added (locally or via inbound event) so the dialer immediately
+   * tries to connect to the new peer.
+   */
+  refreshPeerDialerTargets(): void {
+    if (!this.peerDialer) return;
+    this.peerDialer.refreshTargets();
   }
 
   /**
@@ -507,6 +558,12 @@ export class IdentityService {
     // we surface a warning so an operator can investigate.
     this.tryEmitDeviceAddedEvent(result.signedDevice);
 
+    // Phase 2.f/2c: nudge the dialer so it immediately tries to
+    // connect to the freshly-added daemon peer (if it's a daemon).
+    if (result.signedDevice.role === "daemon") {
+      this.refreshPeerDialerTargets();
+    }
+
     // Send the encrypted reply, then close the socket cleanly.
     const sent = this.sendThenClose(record.replySocket, JSON.stringify(result.envelope));
     if (!sent) {
@@ -625,6 +682,11 @@ export class IdentityService {
         };
       }
       this.deviceList = outcome.devices;
+      // Phase 2.f/2c: a peer-emitted add lands here — nudge the dialer
+      // so we immediately try to connect to any new daemon peer.
+      if (event.kind === "device-added" && event.device.role === "daemon") {
+        this.refreshPeerDialerTargets();
+      }
     }
     // Always append to the log even if mutated=false (replay-detected),
     // so the per-source seq high-water mark advances. The store handles

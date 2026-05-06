@@ -196,10 +196,19 @@ describe("signDeviceAddedEvent + applyDeviceListEvent", () => {
       seq: 1,
     });
 
-    // Flip a character in the signature.
+    // Flip a character in the MIDDLE of the signature. The last char
+    // of an unpadded base64 encoding of 64-byte data only carries
+    // 2 useful bits (the other 4 are unused padding) — flipping it
+    // can produce the same decoded bytes, which would flake the test.
+    // The middle is always data-carrying.
+    const mid = Math.floor(event.signatureB64.length / 2);
+    const midChar = event.signatureB64[mid] ?? "A";
+    const replacement = midChar === "A" ? "B" : "A";
     const bad = {
       ...event,
-      signatureB64: `${event.signatureB64.slice(0, -2)}AA`,
+      signatureB64: `${event.signatureB64.slice(0, mid)}${replacement}${event.signatureB64.slice(
+        mid + 1,
+      )}`,
     };
     const outcome = applyDeviceListEvent({ event: bad, current: list });
     expect(outcome.status).toBe("rejected");

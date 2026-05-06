@@ -985,6 +985,11 @@ export async function createOttieDaemon(
                 return handlers;
               })(),
             });
+
+            // Phase 2.f/2c: with relay-transport up, kick off the
+            // outbound dialer so this daemon proactively connects to
+            // every other daemon under the same identity.
+            identityService.startPeerSync();
           }
         };
 
