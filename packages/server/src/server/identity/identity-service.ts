@@ -1,10 +1,14 @@
 import type pino from "pino";
 
+import type { RelayConnectionHandler } from "../relay-transport.js";
+
 import { buildAuthorizedDevice, loadDeviceList, saveDeviceList } from "./device-list-store.js";
+import { DeviceLinkPendingCandidateStore } from "./device-link-pending-candidate-store.js";
 import {
   DeviceLinkPendingStore,
   type CreatePendingOfferResult,
 } from "./device-link-pending-store.js";
+import { createDeviceLinkConnectionHandler } from "./device-link-receiver.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
 import {
   createRootIdentity,
@@ -71,6 +75,7 @@ export class IdentityService {
   private readonly selfDeviceContext: SelfDeviceContext | null;
   private readonly relayEndpoint: string | null;
   private readonly pendingDeviceLinks: DeviceLinkPendingStore;
+  private readonly pendingCandidates: DeviceLinkPendingCandidateStore;
   private state: IdentityState;
   private selfDevice: SelfDeviceBundle | null = null;
   private deviceList: StoredDeviceList | null = null;
@@ -81,6 +86,7 @@ export class IdentityService {
     this.selfDeviceContext = options.selfDeviceContext ?? null;
     this.relayEndpoint = options.relayEndpoint ?? null;
     this.pendingDeviceLinks = new DeviceLinkPendingStore(options.logger);
+    this.pendingCandidates = new DeviceLinkPendingCandidateStore(options.logger);
     this.state = this.loadInitialState();
     if (this.state.kind === "loaded" && this.selfDeviceContext) {
       // Existing daemons that pre-date Phase 2.a have a root identity but no
@@ -211,6 +217,32 @@ export class IdentityService {
    */
   getPendingDeviceLinkStore(): DeviceLinkPendingStore {
     return this.pendingDeviceLinks;
+  }
+
+  /**
+   * Phase 2.d: relay-side handler that decrypts incoming candidate Device
+   * records and parks them in the pending-candidate store for Phase 2.e
+   * to surface as an "approve this device?" prompt. Bootstrap registers
+   * this handler with the relay transport's `connectionHandlers` array.
+   */
+  createDeviceLinkConnectionHandler(): RelayConnectionHandler {
+    return createDeviceLinkConnectionHandler({
+      pendingOffers: this.pendingDeviceLinks,
+      pendingCandidates: this.pendingCandidates,
+    });
+  }
+
+  /**
+   * Snapshot of currently-pending candidates awaiting user approval.
+   * Phase 2.e renders these in the "Approve new device?" dialog.
+   */
+  getPendingDeviceLinkCandidates() {
+    return this.pendingCandidates.list();
+  }
+
+  /** Test/diagnostic helper for Phase 2.e wiring. */
+  getPendingCandidateStore(): DeviceLinkPendingCandidateStore {
+    return this.pendingCandidates;
   }
 
   // ----- private: self-device + device-list lifecycle ---------------------

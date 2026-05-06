@@ -965,6 +965,10 @@ export async function createOttieDaemon(
               relayEndpoint,
               serverId,
               daemonKeyPair: daemonKeyPair.keyPair,
+              // Phase 2.d: route "device-link:<nonce>" connections to the
+              // identity-service's redemption handler instead of the
+              // default agent-control attach flow.
+              connectionHandlers: [identityService.createDeviceLinkConnectionHandler()],
             });
           }
         };
