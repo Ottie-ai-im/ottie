@@ -63,7 +63,17 @@
     "removeFailed": "无法移除设备",
     "removeConfirmTitle": "确定移除「{{label}}」?",
     "removeConfirmBody": "这台设备将失去对你账号的访问权限。你账号下其他设备会在几秒内同步看到此变更。如需重新加入,在另一台设备生成新的配对二维码即可。",
-    "removeConfirmAction": "移除"
+    "removeConfirmAction": "移除",
+    "friendsSection": "好友",
+    "friendsEmpty": "还没有好友。点「添加好友」生成一次性配对链接发给对方。",
+    "friendsRefreshFailed": "无法加载好友列表。",
+    "addFriend": "添加好友",
+    "friendName": "名称",
+    "friendStatus": "状态",
+    "friendPairedAt": "配对时间",
+    "pendingFriendsSection": "待处理好友请求",
+    "pendingFriendsHelper": "有人想加你为好友。批准后建立好友关系,拒绝则取消。",
+    "pendingFriendsRefreshFailed": "无法加载待处理好友请求。"
   },
   "addDevice": {
     "title": "添加设备",
@@ -92,6 +102,35 @@
     "rejectedByUser": "对方拒绝了这次配对。",
     "rejectedNoOffer": "链接已过期或已被使用,请在另一台设备重新生成。",
     "rejectedTimeout": "等待对方批准超时。",
+    "rejectedConnectionClosed": "连接中断,请重试。"
+  },
+  "addFriend": {
+    "title": "添加好友",
+    "subtitle": "把这个二维码给身边的朋友扫描(或复制链接通过其他方式发给他们)。链接 10 分钟内有效。",
+    "qrAccessibility": "包含一次性好友配对凭据的二维码",
+    "expiresAt": "{{exp}} 失效",
+    "linkLabel": "或复制此链接",
+    "copyLink": "复制链接",
+    "copied": "已复制",
+    "regenerate": "重新生成",
+    "genericError": "无法生成好友配对凭据,请重试。"
+  },
+  "redeemFriend": {
+    "title": "添加朋友为好友",
+    "subtitle": "粘贴朋友给你的链接。提交后,朋友在自己设备上点「批准」完成配对 — 双方都需要同意。",
+    "linkLabel": "好友配对链接",
+    "linkPlaceholder": "ottie://friend-pair#payload=…",
+    "pasteFromClipboard": "从剪贴板粘贴",
+    "submit": "配对好友",
+    "submitting": "已发送 — 等待朋友批准…",
+    "paired": "已配对。朋友已出现在你的好友列表里。",
+    "errorMissingLink": "请先粘贴好友配对链接。",
+    "errorPrefix": "无法配对",
+    "rejectedByUser": "朋友拒绝了这次配对。",
+    "rejectedNoOffer": "链接已过期或已被使用,请让朋友重新生成。",
+    "rejectedSelfPairing": "不能跟自己配对 — 添加自己的设备请用「添加设备」。",
+    "rejectedBadSignature": "配对凭据签名验证失败,请让朋友重新生成链接。",
+    "rejectedTimeout": "等待朋友批准超时。",
     "rejectedConnectionClosed": "连接中断,请重试。"
   },
   "welcome": {
@@ -566,7 +605,9 @@
       "joinHost": "加入 host",
       "createWorkspace": "创建 workspace",
       "addDevice": "添加设备",
-      "linkToExisting": "把这台设备加入已有账号"
+      "linkToExisting": "把这台设备加入已有账号",
+      "addFriend": "添加好友",
+      "redeemFriendLink": "配对好友"
     },
     "swipe": {
       "markRead": "已读",

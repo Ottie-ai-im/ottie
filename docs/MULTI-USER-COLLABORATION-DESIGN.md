@@ -1045,6 +1045,17 @@ Two laptops + a phone (one daemon each) under one identity now:
     or `{status: "rejected", errorCode, errorMessage}`. Mock-relay
     e2e (`friend-pair-mock-relay.e2e.test.ts`) verifies the full
     two-daemon happy path + rejection through real WebSockets.
+  - ✅ 3.a UI — full app surface for friend pairing. New screens
+    `/onboarding/add-friend` (QR + copy-link, mirrors add-device)
+    and `/onboarding/redeem-friend-link` (paste-link + submit,
+    mirrors link-existing-device). `/settings/identity` gains
+    a "Friends" section (list of paired peers with displayName +
+    pubkey-prefix + status), an "Add friend" button, and a
+    "Pending friend requests" section that polls every 3s with
+    Approve / Reject. Two new actions registered:
+    `chat.add.addFriend` + `chat.add.redeemFriendLink`, surfaced
+    in the top-right `+` menu (now 8 items). Bilingual i18n
+    strings landed in en.json and zh.json.
   - ⏳ 3.b/0 — chat-room kind=p2p schema, Peer entity in store
   - ⏳ 3.b/1 — message send/receive over relay (live)
   - ⏳ 3.b/2 — Cloudflare KV inbox for offline delivery; recipient

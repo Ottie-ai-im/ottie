@@ -33,7 +33,9 @@ export type ActionId =
   | "chat.add.joinHost"
   | "chat.add.createWorkspace"
   | "chat.add.addDevice"
+  | "chat.add.addFriend"
   | "chat.add.linkToExisting"
+  | "chat.add.redeemFriendLink"
   // Settings deep-link buckets (D-09 / SET-03 — registered by Plan 02d)
   | "settings.open.account"
   | "settings.open.agents"

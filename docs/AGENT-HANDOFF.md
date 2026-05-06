@@ -12,30 +12,25 @@ from here.
   `packages/app`, `packages/relay`, etc. GitHub: `Ottie-ai-im/ottie`.
 - **Side-quest in flight**: extend ottie into multi-user collab.
   Design doc: [`docs/MULTI-USER-COLLABORATION-DESIGN.md`](./MULTI-USER-COLLABORATION-DESIGN.md).
-- **Current state**: **Phases 1 + 2 fully complete** + **Phase 3.a
-  server-side fully complete** (3.a/0 crypto + 3.a/1 offer gen +
-  3.a/2 receiver/sender + 3.a/3a Peer store + approve crypto +
-  3.a/3b bilateral confirm wired). 300 tests green across 29 files
-  in identity + relay-transport (5 consecutive stability runs).
-  Real-WebSocket two-daemon e2e
-  (`friend-pair-mock-relay.e2e.test.ts`) shows the full pair flow
-  (Alice generates → Bob redeems → Alice approves → both store
-  Peer entries → both reload from disk).
-- **Next phase**: **Phase 3.a UI bundle** (mirrors 42c2d5e4
-  device-link 2.d/e UI commit pattern). Need:
-  - `/onboarding/add-friend` QR + copy-link screen (analog of
-    `add-device.tsx`).
-  - `/onboarding/redeem-friend-link` paste-link screen (analog of
-    `link-existing-device.tsx`).
-  - "Pending friend requests" section on `/settings/identity` (or
-    a new `/settings/friends` page) with Approve/Reject buttons,
-    poll every 3s — analog of the existing
-    `PendingCandidatesSection`.
-  - Friend list display once paired (peers.json content, status
-    badge active/blocked/removed).
-  - Bilingual i18n strings in
-    `packages/app/src/i18n/locales/{en,zh}.json`.
-  - Optional: end-to-end click-through flow once UI lands.
+- **Current state**: **Phases 1 + 2 + 3.a fully complete**
+  (identity + device-linking + multi-daemon sync + remove device +
+  friend pairing handshake). 300 tests green across 29 files in
+  identity + relay-transport (5 consecutive stability runs);
+  whole-workspace typecheck clean; UI lint clean. Two-daemon
+  real-WebSocket e2e covers the full friend-pair flow.
+  Friend-pair UI bundle landed: `/onboarding/add-friend`,
+  `/onboarding/redeem-friend-link`, "Friends" + "Pending friend
+  requests" sections on `/settings/identity`, top-right `+`
+  menu wired to both flows, bilingual i18n.
+- **Next phase**: **Phase 3.b — 1-to-1 chat over the relay**.
+  Sub-task breakdown in design doc §17 (Phase 3.b section):
+  - 3.b/0 — chat-room kind=p2p schema, peer-keyed routing.
+  - 3.b/1 — message send/receive over the same NaCl-box pipeline,
+    using each Peer's pubkey for the per-message ECDH.
+  - 3.b/2 — Cloudflare KV inbox for offline delivery (recipient
+    pulls on connect with cursor).
+  - 3.b/3 — read receipts + UI integration so chats list shows
+    friends + agents side-by-side.
 - **User**: Wendell. Native Mandarin speaker, talks to you in 中文.
   Wants direct answers + small commits + tests for everything. He
   pushed back hard once when I designed without reading existing

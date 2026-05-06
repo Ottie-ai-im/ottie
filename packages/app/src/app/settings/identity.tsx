@@ -11,8 +11,10 @@ import type { DaemonClient } from "@server/client/daemon-client";
 import type {
   IdentityStateOnWire,
   PendingDeviceLinkCandidateOnWire,
+  PendingFriendPairCandidateOnWire,
   PublicDevice,
 } from "@server/server/identity/identity-rpc-schemas";
+import type { StoredPeer } from "@server/server/identity/peer-types";
 import type { HostProfile } from "@/types/host-connection";
 
 const PENDING_POLL_MS = 3_000;
@@ -293,6 +295,12 @@ function LoadedBody({
       params: { serverId: fetchState.serverId },
     });
   }, [router, fetchState.serverId]);
+  const handleAddFriend = useCallback(() => {
+    router.push({
+      pathname: "/onboarding/add-friend",
+      params: { serverId: fetchState.serverId },
+    });
+  }, [router, fetchState.serverId]);
   const addDeviceIcon = useMemo(
     () => <Plus size={16} color={theme.colors.palette.white} />,
     [theme.colors.palette.white],
@@ -377,6 +385,15 @@ function LoadedBody({
       )}
 
       <PendingCandidatesSection serverId={fetchState.serverId} t={t} />
+
+      <Text style={styles.sectionTitleSpaced}>{t("identitySettings.friendsSection")}</Text>
+      <FriendListSection serverId={fetchState.serverId} t={t} />
+      <View style={styles.addDeviceButtonRow}>
+        <Button variant="default" onPress={handleAddFriend} leftIcon={addDeviceIcon}>
+          {t("identitySettings.addFriend")}
+        </Button>
+      </View>
+      <PendingFriendRequestsSection serverId={fetchState.serverId} t={t} />
     </View>
   );
 }
@@ -613,6 +630,231 @@ function PendingCandidateCard({
       <View style={styles.row}>
         <Text style={styles.rowLabel}>{t("identitySettings.role")}</Text>
         <Text style={styles.rowValue}>{candidate.role}</Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.pendingRequestedAt")}</Text>
+        <Text style={styles.rowValue}>{candidate.receivedAt}</Text>
+      </View>
+      <View style={styles.pendingButtonRow}>
+        <Button variant="default" onPress={handleApprovePress} disabled={busy}>
+          {t("identitySettings.pendingApprove")}
+        </Button>
+        <Button variant="secondary" onPress={handleRejectPress} disabled={busy}>
+          {t("identitySettings.pendingReject")}
+        </Button>
+      </View>
+    </View>
+  );
+}
+
+function FriendListSection({
+  serverId,
+  t,
+}: {
+  serverId: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const client = useHostRuntimeClient(serverId);
+  const [peers, setPeers] = useState<readonly StoredPeer[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const refresh = useCallback(async (clientRef: DaemonClient | null) => {
+    if (!clientRef) return;
+    try {
+      const response = await clientRef.friendList();
+      if (response.error) {
+        setLoadError(response.error);
+      } else {
+        setLoadError(null);
+        setPeers(response.peers ?? []);
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      void refresh(client);
+    };
+    tick();
+    const id = setInterval(tick, PENDING_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [client, refresh]);
+
+  if (loadError) {
+    return (
+      <View style={styles.cardSpaced}>
+        <Text style={styles.helper}>{t("identitySettings.friendsRefreshFailed")}</Text>
+      </View>
+    );
+  }
+  if (peers.length === 0) {
+    return (
+      <View style={styles.cardSpaced}>
+        <Text style={styles.helper}>{t("identitySettings.friendsEmpty")}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      {peers.map((peer, idx) => (
+        <View
+          key={peer.peerRootSignPublicKeyB64}
+          style={idx === 0 ? styles.cardSpaced : styles.cardCompactSpaced}
+        >
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>{t("identitySettings.friendName")}</Text>
+            <Text style={styles.rowValue}>
+              {peer.peerDisplayName} ({peer.peerRootSignPublicKeyB64.slice(0, 8)})
+            </Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>{t("identitySettings.friendStatus")}</Text>
+            <Text style={styles.rowValue}>{peer.status}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>{t("identitySettings.friendPairedAt")}</Text>
+            <Text style={styles.rowValue}>{peer.pairedAt}</Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function PendingFriendRequestsSection({
+  serverId,
+  t,
+}: {
+  serverId: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const client = useHostRuntimeClient(serverId);
+  const [candidates, setCandidates] = useState<readonly PendingFriendPairCandidateOnWire[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busyNonce, setBusyNonce] = useState<string | null>(null);
+
+  const refresh = useCallback(async (clientRef: DaemonClient | null) => {
+    if (!clientRef) return;
+    try {
+      const response = await clientRef.friendPairCandidates();
+      if (response.error) {
+        setLoadError(response.error);
+      } else {
+        setLoadError(null);
+        setCandidates(response.candidates ?? []);
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      void refresh(client);
+    };
+    tick();
+    const id = setInterval(tick, PENDING_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [client, refresh]);
+
+  const handleApprove = useCallback(
+    async (nonceB64: string) => {
+      if (!client) return;
+      setBusyNonce(nonceB64);
+      try {
+        await client.friendPairApprove(nonceB64);
+      } finally {
+        setBusyNonce(null);
+        void refresh(client);
+      }
+    },
+    [client, refresh],
+  );
+  const handleReject = useCallback(
+    async (nonceB64: string) => {
+      if (!client) return;
+      setBusyNonce(nonceB64);
+      try {
+        await client.friendPairReject(nonceB64);
+      } finally {
+        setBusyNonce(null);
+        void refresh(client);
+      }
+    },
+    [client, refresh],
+  );
+
+  if (candidates.length === 0 && !loadError) {
+    return null;
+  }
+
+  return (
+    <View>
+      <Text style={styles.sectionTitleSpaced}>{t("identitySettings.pendingFriendsSection")}</Text>
+      {loadError ? (
+        <View style={styles.cardSpaced}>
+          <Text style={styles.helper}>{t("identitySettings.pendingFriendsRefreshFailed")}</Text>
+        </View>
+      ) : null}
+      {candidates.map((c, idx) => (
+        <PendingFriendCandidateCard
+          key={c.nonceB64}
+          candidate={c}
+          index={idx}
+          busy={busyNonce === c.nonceB64}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          t={t}
+        />
+      ))}
+      <Text style={styles.helperSpaced}>{t("identitySettings.pendingFriendsHelper")}</Text>
+    </View>
+  );
+}
+
+function PendingFriendCandidateCard({
+  candidate,
+  index,
+  busy,
+  onApprove,
+  onReject,
+  t,
+}: {
+  candidate: PendingFriendPairCandidateOnWire;
+  index: number;
+  busy: boolean;
+  onApprove: (nonceB64: string) => Promise<void>;
+  onReject: (nonceB64: string) => Promise<void>;
+  t: (key: string) => string;
+}) {
+  const handleApprovePress = useCallback(() => {
+    void onApprove(candidate.nonceB64);
+  }, [candidate.nonceB64, onApprove]);
+  const handleRejectPress = useCallback(() => {
+    void onReject(candidate.nonceB64);
+  }, [candidate.nonceB64, onReject]);
+  return (
+    <View style={index === 0 ? styles.cardSpaced : styles.cardCompactSpaced}>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.friendName")}</Text>
+        <Text style={styles.rowValue}>
+          {candidate.peerDisplayName} ({candidate.peerRootSignPublicKeyB64.slice(0, 8)})
+        </Text>
       </View>
       <View style={styles.row}>
         <Text style={styles.rowLabel}>{t("identitySettings.pendingRequestedAt")}</Text>

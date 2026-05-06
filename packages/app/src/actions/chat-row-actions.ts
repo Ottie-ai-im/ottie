@@ -299,6 +299,48 @@ export function registerChatRowActions(): void {
       },
     }),
   );
+
+  // Phase 3.a-ui — open the "Add friend" QR screen for the current host.
+  actionRegistry.register(
+    defineAction("chat.add.addFriend", {
+      description: "Add a friend (opens friend-pair QR screen)",
+      modalities: ["menu", "cmdk"],
+      schema: OptionalServerPayload,
+      handler: async (payload) => {
+        const { router } = await import("expo-router");
+        const serverId = payload?.serverId;
+        if (typeof serverId === "string" && serverId.length > 0) {
+          router.push({
+            pathname: "/onboarding/add-friend",
+            params: { serverId },
+          });
+        } else {
+          router.push("/settings/identity");
+        }
+      },
+    }),
+  );
+
+  // Phase 3.a-ui — paste a friend's QR/link to redeem it from their side.
+  actionRegistry.register(
+    defineAction("chat.add.redeemFriendLink", {
+      description: "Pair with a friend by pasting their friend-pair link",
+      modalities: ["menu", "cmdk"],
+      schema: OptionalServerPayload,
+      handler: async (payload) => {
+        const { router } = await import("expo-router");
+        const serverId = payload?.serverId;
+        if (typeof serverId === "string" && serverId.length > 0) {
+          router.push({
+            pathname: "/onboarding/redeem-friend-link",
+            params: { serverId },
+          });
+        } else {
+          router.push("/onboarding/redeem-friend-link");
+        }
+      },
+    }),
+  );
 }
 
 // Side-effect: register on first import.

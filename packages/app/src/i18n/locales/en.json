@@ -63,7 +63,17 @@
     "removeFailed": "Couldn't remove device",
     "removeConfirmTitle": "Remove {{label}}?",
     "removeConfirmBody": "This device will lose access to your account. Other devices under your identity will see the change within a few seconds. You can re-add it later by scanning a new device-link QR.",
-    "removeConfirmAction": "Remove"
+    "removeConfirmAction": "Remove",
+    "friendsSection": "Friends",
+    "friendsEmpty": "No friends yet. Tap Add friend to send someone a one-time pair link.",
+    "friendsRefreshFailed": "Couldn't load friend list.",
+    "addFriend": "Add friend",
+    "friendName": "Name",
+    "friendStatus": "Status",
+    "friendPairedAt": "Paired",
+    "pendingFriendsSection": "Pending friend requests",
+    "pendingFriendsHelper": "Someone is asking to add you as a friend. Approve to add them, or reject to refuse.",
+    "pendingFriendsRefreshFailed": "Couldn't load pending friend requests."
   },
   "addDevice": {
     "title": "Add device",
@@ -92,6 +102,35 @@
     "rejectedByUser": "The other device declined the link.",
     "rejectedNoOffer": "The link has expired or already been used. Generate a new one.",
     "rejectedTimeout": "Timed out waiting for the other device to approve.",
+    "rejectedConnectionClosed": "Lost the connection while waiting. Try again."
+  },
+  "addFriend": {
+    "title": "Add friend",
+    "subtitle": "Show this QR to a friend nearby (or copy the link to send it some other way). The link expires in 10 minutes.",
+    "qrAccessibility": "QR code containing a one-time friend-pair payload",
+    "expiresAt": "Expires at {{exp}}",
+    "linkLabel": "Or copy this link",
+    "copyLink": "Copy link",
+    "copied": "Copied",
+    "regenerate": "Generate new",
+    "genericError": "Could not generate a friend-pair offer. Please try again."
+  },
+  "redeemFriend": {
+    "title": "Pair with a friend",
+    "subtitle": "Paste the link your friend gave you. After you submit, your friend taps Approve on their device to confirm — both sides need to accept.",
+    "linkLabel": "Friend-pair link",
+    "linkPlaceholder": "ottie://friend-pair#payload=…",
+    "pasteFromClipboard": "Paste from clipboard",
+    "submit": "Pair with friend",
+    "submitting": "Pairing — waiting for your friend to approve…",
+    "paired": "Paired. Your friend now appears in your friends list.",
+    "errorMissingLink": "Paste the friend-pair link first.",
+    "errorPrefix": "Couldn't pair",
+    "rejectedByUser": "Your friend declined the pair.",
+    "rejectedNoOffer": "The link has expired or already been used. Ask your friend to generate a new one.",
+    "rejectedSelfPairing": "You can't pair with yourself — use Add device instead.",
+    "rejectedBadSignature": "The pairing payload's signature didn't verify. Ask your friend to regenerate the link.",
+    "rejectedTimeout": "Timed out waiting for your friend to approve.",
     "rejectedConnectionClosed": "Lost the connection while waiting. Try again."
   },
   "welcome": {
@@ -566,7 +605,9 @@
       "joinHost": "Join host",
       "createWorkspace": "Create workspace",
       "addDevice": "Add device",
-      "linkToExisting": "Link this device to an account"
+      "linkToExisting": "Link this device to an account",
+      "addFriend": "Add friend",
+      "redeemFriendLink": "Pair with a friend"
     },
     "swipe": {
       "markRead": "Read",
