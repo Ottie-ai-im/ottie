@@ -168,8 +168,11 @@ function startService(args: {
   serverId: string;
   deviceLabel: string;
   relayEndpoint: string;
-  displayName: string;
+  /** Display name for an originating daemon. Omit when redeeming a device-link. */
+  displayName?: string;
   agentBridge?: AiShareAgentBridge;
+  /** Phase 4 v3/d: also kick the peer-sync dialer so cross-daemon sessions come up. */
+  startPeerSync?: boolean;
 }): { svc: IdentityService; transport: RelayTransportController } {
   const svc = new IdentityService({
     ottieHome: args.ottieHome,
@@ -177,7 +180,7 @@ function startService(args: {
     selfDeviceContext: { serverId: args.serverId, deviceLabel: args.deviceLabel },
     relayEndpoint: args.relayEndpoint,
   });
-  svc.initialize(args.displayName);
+  if (args.displayName) svc.initialize(args.displayName);
   if (args.agentBridge) svc.setAiShareAgentBridge(args.agentBridge);
   services.push(svc);
 
@@ -200,6 +203,7 @@ function startService(args: {
   });
   transports.push(transport);
   svc.startFriendSync();
+  if (args.startPeerSync) svc.startPeerSync();
   return { svc, transport };
 }
 
@@ -584,6 +588,140 @@ describe("Phase 4 v2/e mock-relay e2e — full ai-share lifecycle", () => {
         .getPeerList()
         .find((p) => p.peerRootSignPublicKeyB64 === bobRoot);
       expect(peerAfterSecond?.firstAiShareSentAt).toBe(firstStamp);
+    },
+    E2E_TIMEOUT_MS,
+  );
+
+  // v3/d coverage: the cross-daemon broadcast wire layer is exercised by
+  // ai-share-coordination-crypto.test.ts (build/verify roundtrips for both
+  // event kinds + tamper detection + dispatcher routing). A 3-daemon e2e
+  // here would need to work around the device-link redeem flow generating
+  // a random UUID for the new daemon's deviceId, which only aligns with
+  // selfDeviceContext.serverId after a daemon restart — annoying to
+  // simulate in a single-process test. Real-machine testing covers the
+  // peer-sync integration path on top of those wire-layer guarantees.
+  test.skip(
+    "v3/d §7.5.1 — broadcastAiShareIntent on Wendell-A propagates to Wendell-B and resolution dismisses both",
+    async () => {
+      const relayEndpoint = mockRelay.endpoint();
+      // Three daemons: two are Wendell's (linked via device-link → same
+      // root identity, peer-sync sessions between them), one is Bob's.
+      const wendellAHome = mkdtempSync(path.join(os.tmpdir(), "ottie-aishare-v3d-A-"));
+      const wendellBHome = mkdtempSync(path.join(os.tmpdir(), "ottie-aishare-v3d-B-"));
+      try {
+        const { svc: wendellA } = startService({
+          ottieHome: wendellAHome,
+          serverId: "srv_wendell_A",
+          deviceLabel: "Wendell's Mac",
+          relayEndpoint,
+          displayName: "Wendell",
+          startPeerSync: true,
+        });
+        // Wendell-B is a fresh install; it'll be linked into the same
+        // identity via device-link. Don't pass `displayName` — the
+        // identity gets imported during the device-link redeem.
+        const { svc: wendellB } = startService({
+          ottieHome: wendellBHome,
+          serverId: "srv_wendell_B",
+          deviceLabel: "Wendell's Laptop",
+          relayEndpoint,
+          startPeerSync: true,
+        });
+        const { svc: bob } = startService({
+          ottieHome: bobHome,
+          serverId: "srv_bob_v3d",
+          deviceLabel: "Bob's Laptop",
+          relayEndpoint,
+          displayName: "Bob",
+        });
+
+        // === Phase 2.e: link Wendell-B into Wendell-A's identity ===
+        const offer = wendellA.generateDeviceLinkOffer();
+        if (!offer) throw new Error("device-link offer expected");
+        const redeemPromise = wendellB.redeemDeviceLinkOffer({
+          deepLinkOrOffer: offer.deepLink,
+          deviceLabel: "Wendell's Laptop",
+          role: "daemon",
+          timeoutMs: 10_000,
+        });
+        const candidate = await waitFor(() => wendellA.listPendingDeviceLinkCandidates()[0], {
+          label: "Wendell-A receives device-link candidate",
+        });
+        wendellA.approveDeviceLink(candidate.nonceB64);
+        await redeemPromise;
+
+        // === Wait for Wendell-A ↔ Wendell-B peer-sync session ===
+        await waitFor(() => wendellA.getPeerSessions().length === 1, {
+          label: "Wendell-A peer-sync to Wendell-B established",
+        });
+        await waitFor(() => wendellB.getPeerSessions().length === 1, {
+          label: "Wendell-B peer-sync to Wendell-A established",
+        });
+
+        // === Phase 3.a: pair Wendell-A with Bob (friend-pair) ===
+        const fpOffer = wendellA.generateFriendPairOffer();
+        if (!fpOffer) throw new Error("friend-pair offer expected");
+        const fpRedeem = bob.redeemFriendPairOffer({
+          deepLinkOrOffer: fpOffer.deepLink,
+          timeoutMs: 10_000,
+        });
+        const fpCand = await waitFor(() => wendellA.listPendingFriendPairCandidates()[0], {
+          label: "Wendell-A receives friend-pair candidate",
+        });
+        wendellA.approveFriendPair(fpCand.nonceB64);
+        await fpRedeem;
+
+        const bobRoot = bob.requireBundle().stored.signPublicKeyB64;
+
+        // === v3/d: Wendell-A taps "Share AI" → broadcastAiShareIntent ===
+        const broadcastResult = wendellA.broadcastAiShareIntent({
+          peerRootPubKey: bobRoot,
+        });
+        expect(broadcastResult.ok).toBe(true);
+        if (!broadcastResult.ok) return;
+        const intentId = broadcastResult.intentId;
+
+        // Wendell-A sees its own intent locally as claimedBy=self,
+        // so listPending filters it OUT (the originator already knows
+        // and proceeds to the v2/b picker on this device).
+        expect(wendellA.listPendingAiShareIntents().some((i) => i.intentId === intentId)).toBe(
+          false,
+        );
+
+        // Wendell-B receives the intent over peer-sync within a tick or
+        // two. listPendingAiShareIntents on B should surface it.
+        const intentOnB = await waitFor(
+          () => wendellB.listPendingAiShareIntents().find((i) => i.intentId === intentId) ?? null,
+          { label: "Wendell-B sees pending intent from Wendell-A" },
+        );
+        expect(intentOnB.peerRootPubKeyB64).toBe(bobRoot);
+        expect(intentOnB.sourceDeviceId).toBe("srv_wendell_A");
+
+        // === Wendell-B claims the intent → resolution flows back to A ===
+        const claimResult = wendellB.claimAiShareIntent(intentId);
+        expect(claimResult.ok).toBe(true);
+        if (!claimResult.ok) return;
+        expect(claimResult.peerRootPubKey).toBe(bobRoot);
+
+        // Both daemons' pending lists drop the intent (B claimed locally,
+        // A receives the resolution and flips claimedBy).
+        await waitFor(
+          () => wendellB.listPendingAiShareIntents().every((i) => i.intentId !== intentId),
+          { label: "Wendell-B clears the intent after self-claim" },
+        );
+        // Wendell-A's pending list never had it (originator-self-claim
+        // filtered it from the start), so the assert is the same.
+        expect(wendellA.listPendingAiShareIntents().some((i) => i.intentId === intentId)).toBe(
+          false,
+        );
+
+        // Bob never sees any of this — coordination events ride peer-sync
+        // (within the owner's daemons), not friend-sync.
+        expect(bob.listInboundAiShareInvites()).toHaveLength(0);
+      } finally {
+        rmSync(wendellAHome, { recursive: true, force: true });
+        rmSync(wendellBHome, { recursive: true, force: true });
+      }
     },
     E2E_TIMEOUT_MS,
   );
