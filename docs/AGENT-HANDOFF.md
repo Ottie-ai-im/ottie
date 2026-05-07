@@ -346,6 +346,78 @@ candidates:
   accounts. They never see Cloudflare. The user's own Cloudflare
   account is the dev-side dependency only.
 
+## 8.5. Quickest sanity check — run the Phase 3 end-to-end demo
+
+There's a runnable script that walks through the entire pair → chat
+→ restart flow on one machine in ~2 seconds. Use it to confirm the
+identity / friend-sync / chat code paths still work after any
+change you make.
+
+```bash
+cd packages/server && npx tsx scripts/friend-chat-demo.ts
+# DEMO_DEBUG=1 to see daemon-side pino logs
+```
+
+Expected output (last verified on `org/main` HEAD as of this
+handoff). 9 numbered steps; exits 0 on success, non-zero on any
+failure. Suitable for CI smoke-test.
+
+```
+Phase 3 friend-chat demo
+        Mock relay: 127.0.0.1:54023
+        Alice $OTTIE_HOME: /tmp/ottie-demo-alice-XXXXXX
+        Bob   $OTTIE_HOME: /tmp/ottie-demo-bob-XXXXXX
+
+━━━ Step 1: Boot two daemons + initialize identities
+[Alice] identity loaded — root pubkey 3hUFJWXt5a7f…
+[Bob]   identity loaded — root pubkey L4hfwLs9WjxC…
+
+━━━ Step 2: Alice generates a friend-pair offer (the QR Bob would scan)
+[Alice] offer ready, expires at 2026-05-07T01:13:17.395Z
+        deep link: ottie://friend-pair#payload=eyJ2IjoxLCJraW5k…
+
+━━━ Step 3: Bob redeems the link through the relay
+[Bob]   opening friend-pair socket and sending signed candidate…
+[Alice] pending request: "Bob (L4hfwLs9)"
+
+━━━ Step 4: Alice approves the pending request
+[Alice] signed approval reply, sent over the relay
+[Bob]   paired with "Alice"
+        ✔ both peers.json files written
+
+━━━ Step 5: Wait for both sides' friend-sync sessions to establish
+[Alice] session up: 1 active friend session
+[Bob]   session up: 1 active friend session
+
+━━━ Step 6: Send chat messages both directions
+[Bob]   sending "你好 Alice"…
+[Alice] received: "你好 Alice"
+                signature verified, author=L4hfwLs9… via device srv_bob_demo
+[Alice] replying "你好 Bob, 收到!"…
+[Bob]   received: "你好 Bob, 收到!"
+        ✔ bob's history: ["你好 Alice", "你好 Bob, 收到!"]
+
+━━━ Step 7: Inspect on-disk state
+[Alice] peers.json has 1 entry: "Bob" via srv_bob_demo
+[Bob]   peers.json has 1 entry: "Alice" via srv_alice_demo
+        Alice's chat log: /tmp/.../chat/friends/<sha256>.jsonl
+        first message line on Alice's side:
+          {"message":{"id":"fcm_…","roomId":"p2p:3hUFJWXt…|L4hfwLs9…",…
+
+━━━ Step 8: Restart Alice's daemon — confirm history survives
+        alice's daemon stopped
+[Alice] peers.json reloaded: 1 friend ("Bob")
+[Alice] chat history reloaded: ["你好 Alice", "你好 Bob, 收到!"]
+        ✔ history survived restart
+
+━━━ Step 9: Demo complete
+
+  All steps passed. ✓
+```
+
+If this script ever fails on a clean tree, something's broken in
+the Phase 3 chain — investigate before adding more code.
+
 ## 9. If you're confused about state, run this
 
 ```bash
