@@ -135,6 +135,7 @@
       "sending": "发送中…"
     },
     "activeShareBanner": "AI 分享进行中 — {{label}}",
+    "activeShareBannerOffline": "AI 分享 — {{label}}(对方离线)",
     "activeShareEnd": "结束会话",
     "activeShareEnding": "结束中…",
     "activeShareOpen": "打开",
@@ -147,6 +148,7 @@
   "aiShare": {
     "headerTitle": "正在分享 {{label}}",
     "headerSubtitle": "与 {{peer}}",
+    "headerSubtitleOffline": "与 {{peer}} · 对方离线",
     "endedTitle": "AI 分享已结束",
     "endedBody": "此分享已不再有效。可能你或主人已结束,或主人的守护进程已重启。",
     "invalidRoute": "分享链接无效",

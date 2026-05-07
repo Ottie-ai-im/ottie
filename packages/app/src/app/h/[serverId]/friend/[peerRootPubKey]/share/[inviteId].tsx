@@ -403,10 +403,15 @@ export default function FriendShareInvitePage() {
       })
     : t("aiShare.endedTitle", { defaultValue: "AI share ended" });
   const subtitle = session
-    ? t("aiShare.headerSubtitle", {
-        peer: peerRootPubKey.slice(0, 8),
-        defaultValue: "with {{peer}}",
-      })
+    ? session.peerOnline === false
+      ? t("aiShare.headerSubtitleOffline", {
+          peer: peerRootPubKey.slice(0, 8),
+          defaultValue: "with {{peer}} · peer offline",
+        })
+      : t("aiShare.headerSubtitle", {
+          peer: peerRootPubKey.slice(0, 8),
+          defaultValue: "with {{peer}}",
+        })
     : "";
 
   return (

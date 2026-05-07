@@ -80,6 +80,7 @@ import {
 import { AiShareInviteRegistry } from "./ai-share-registry.js";
 import { redactAgentEventForShare } from "./ai-share-timeline-redactor.js";
 import { AiShareTimelineStore, type AiShareTimelineRecord } from "./ai-share-timeline-buffer.js";
+import { AiShareTranscriptStore } from "./ai-share-transcript-store.js";
 import type {
   AiShareAcceptEnvelope,
   AiShareDeclineEnvelope,
@@ -238,6 +239,13 @@ export class IdentityService {
    * friend's UI between polls.
    */
   private readonly aiShareTimelineStore = new AiShareTimelineStore();
+  /**
+   * Phase 4 v2/e — append-only on-disk transcript per inviteId per
+   * side, at `$OTTIE_HOME/ai-shares/{inviteId}.jsonl`. Constructor
+   * initializes lazily so test paths that don't pass an OTTIE_HOME
+   * still work (the store handles missing dirs by warn-and-no-op).
+   */
+  private readonly aiShareTranscripts: AiShareTranscriptStore;
   /** Phase 3.b/2d: handle for the periodic inbox poller (clearable). */
   private inboxPollHandle: ReturnType<typeof setInterval> | null = null;
   /** Phase 3.b/2d: tracks an in-flight inbox round so kicks dedupe. */
@@ -259,6 +267,10 @@ export class IdentityService {
     this.events = DeviceListEventStore.loadOrCreate(options.ottieHome, options.logger);
     this.peerSessions = new PeerSessionRegistry(options.logger);
     this.friendSessions = new FriendSessionRegistry(options.logger);
+    this.aiShareTranscripts = new AiShareTranscriptStore({
+      ottieHome: options.ottieHome,
+      logger: options.logger,
+    });
     this.state = this.loadInitialState();
     if (this.state.kind === "loaded" && this.selfDeviceContext) {
       // Existing daemons that pre-date Phase 2.a have a root identity but no
@@ -1108,6 +1120,13 @@ export class IdentityService {
         return;
       }
       this.aiShareInvites.recordInbound({ invite: input.parsed.envelope });
+      // Phase 4 v2/e: open the friend-side transcript so the friend's
+      // daemon also keeps an auditable log.
+      this.aiShareTranscripts.open({
+        inviteId: input.parsed.envelope.inviteId,
+        side: "inbound",
+        invite: input.parsed.envelope,
+      });
       return;
     }
     if (input.parsed.kind === "accept") {
@@ -1123,6 +1142,17 @@ export class IdentityService {
         return;
       }
       this.aiShareInvites.applyOutboundAccept(input.parsed.envelope);
+      // Phase 4 v2/e: log peer's accept on the owner-side transcript.
+      this.aiShareTranscripts.append({
+        inviteId: input.parsed.envelope.inviteId,
+        line: {
+          v: 1,
+          kind: "accept",
+          origin: "peer",
+          acceptedAt: input.parsed.envelope.acceptedAt,
+          signatureB64: input.parsed.envelope.signatureB64,
+        },
+      });
       // Phase 4 v2/d: friend just accepted — start broadcasting redacted
       // agent timeline events back to them. Idempotent (safe to call on
       // re-delivery; attachOutboundBroadcaster tears down any prior
@@ -1143,6 +1173,20 @@ export class IdentityService {
         return;
       }
       this.aiShareInvites.applyOutboundDecline(input.parsed.envelope);
+      // Phase 4 v2/e: log peer's decline on the owner-side transcript.
+      this.aiShareTranscripts.append({
+        inviteId: input.parsed.envelope.inviteId,
+        line: {
+          v: 1,
+          kind: "decline",
+          origin: "peer",
+          declinedAt: input.parsed.envelope.declinedAt,
+          ...(input.parsed.envelope.reason !== undefined
+            ? { reason: input.parsed.envelope.reason }
+            : {}),
+          signatureB64: input.parsed.envelope.signatureB64,
+        },
+      });
       return;
     }
     if (input.parsed.kind === "end") {
@@ -1216,6 +1260,21 @@ export class IdentityService {
     };
     this.aiShareInvites.applyOutboundEnd(args);
     this.aiShareInvites.applyInboundEnd(args);
+    // Phase 4 v2/e: log peer's end on the local transcript. Same line
+    // shape applies whether this daemon was the owner or the friend —
+    // origin="peer" tells you who initiated, side (header) tells you
+    // whose transcript this is.
+    this.aiShareTranscripts.append({
+      inviteId: envelope.inviteId,
+      line: {
+        v: 1,
+        kind: "end",
+        origin: "peer",
+        endedAt: envelope.endedAt,
+        ...(envelope.reason !== undefined ? { reason: envelope.reason } : {}),
+        signatureB64: envelope.signatureB64,
+      },
+    });
     this.logger.info(
       { inviteId: envelope.inviteId, peerPrefix: peerRootPubKey.slice(0, 8) },
       "ai_share_invite_ended_by_peer",
@@ -1276,6 +1335,19 @@ export class IdentityService {
     // `user_message` timeline forward (which AgentManager emits as
     // soon as runAgent records it) carries the promptId back.
     this.aiShareInvites.setLastInboundPromptId(envelope.inviteId, envelope.promptId);
+    // Phase 4 v2/e: log peer's prompt on the owner-side transcript.
+    this.aiShareTranscripts.append({
+      inviteId: envelope.inviteId,
+      line: {
+        v: 1,
+        kind: "prompt",
+        origin: "received",
+        promptId: envelope.promptId,
+        sentAt: envelope.sentAt,
+        body: envelope.body,
+        signatureB64: envelope.signatureB64,
+      },
+    });
     this.logger.info(
       { inviteId: envelope.inviteId, agentId, promptId: envelope.promptId, peerPrefix },
       "ai_share_prompt_routing_to_agent",
@@ -1415,6 +1487,22 @@ export class IdentityService {
             "ai_share_timeline_send_failed",
           );
         }
+        // Phase 4 v2/e: log forwarded timeline frame on the owner-side
+        // transcript regardless of whether the wire send succeeded —
+        // the local record is the source of truth for an offline
+        // post-mortem.
+        this.aiShareTranscripts.append({
+          inviteId,
+          line: {
+            v: 1,
+            kind: "timeline",
+            origin: "sent",
+            eventId,
+            sentAt: envelope.sentAt,
+            entry,
+            signatureB64: envelope.signatureB64,
+          },
+        });
       },
     });
     this.aiShareInvites.attachOutboundBroadcaster(inviteId, unsubscribe);
@@ -1464,6 +1552,21 @@ export class IdentityService {
       eventId: envelope.eventId,
       sentAt: envelope.sentAt,
       entry: envelope.entry,
+    });
+    // Phase 4 v2/e: log received timeline frame on the friend-side
+    // transcript so the friend has an auditable copy independent of
+    // the in-memory ring buffer.
+    this.aiShareTranscripts.append({
+      inviteId: envelope.inviteId,
+      line: {
+        v: 1,
+        kind: "timeline",
+        origin: "received",
+        eventId: envelope.eventId,
+        sentAt: envelope.sentAt,
+        entry: envelope.entry,
+        signatureB64: envelope.signatureB64,
+      },
     });
     this.logger.debug(
       {
@@ -1758,6 +1861,14 @@ export class IdentityService {
       invite,
       peerRootPubKeyB64: input.peerRootPubKey,
     });
+    // Phase 4 v2/e: open the auditable on-disk transcript on the
+    // owner side. The header carries the invite envelope so a forensic
+    // tool can replay the share end-to-end.
+    this.aiShareTranscripts.open({
+      inviteId: invite.inviteId,
+      side: "outbound",
+      invite,
+    });
     this.logger.info(
       {
         inviteId: invite.inviteId,
@@ -1817,6 +1928,17 @@ export class IdentityService {
       acceptedAt: accept.acceptedAt,
       signatureB64: accept.signatureB64,
     });
+    // Phase 4 v2/e: log self-emitted accept on the friend-side transcript.
+    this.aiShareTranscripts.append({
+      inviteId,
+      line: {
+        v: 1,
+        kind: "accept",
+        origin: "self",
+        acceptedAt: accept.acceptedAt,
+        signatureB64: accept.signatureB64,
+      },
+    });
     this.logger.info({ inviteId }, "ai_share_invite_accepted");
     return { ok: true, accept };
   }
@@ -1857,6 +1979,18 @@ export class IdentityService {
       declinedAt: decline.declinedAt,
       signatureB64: decline.signatureB64,
       ...(reason !== undefined ? { reason } : {}),
+    });
+    // Phase 4 v2/e: log self-emitted decline on the friend-side transcript.
+    this.aiShareTranscripts.append({
+      inviteId,
+      line: {
+        v: 1,
+        kind: "decline",
+        origin: "self",
+        declinedAt: decline.declinedAt,
+        ...(reason !== undefined ? { reason } : {}),
+        signatureB64: decline.signatureB64,
+      },
     });
     this.logger.info({ inviteId, reason }, "ai_share_invite_declined");
     return { ok: true, decline };
@@ -1900,6 +2034,11 @@ export class IdentityService {
    * Phase 4 v2/a — list active ai-share sessions on this daemon
    * (either side). Drives the active-share banner UI: each entry
    * gets a banner row + an End button.
+   *
+   * Phase 4 v2/e — each row carries a `peerOnline` bit derived from
+   * whether `friendSessions` currently has a live session keyed by
+   * the peer pubkey. Friend's UI flips to "owner offline" when this
+   * goes false.
    */
   listActiveAiShares(): ReadonlyArray<{
     inviteId: string;
@@ -1908,8 +2047,12 @@ export class IdentityService {
     agentLabel: string;
     agentProvider: string;
     acceptedAt: string;
+    peerOnline: boolean;
   }> {
-    return this.aiShareInvites.listActive();
+    return this.aiShareInvites.listActive().map((entry) => ({
+      ...entry,
+      peerOnline: this.friendSessions.get(entry.peerRootPubKeyB64) !== undefined,
+    }));
   }
 
   /**
@@ -1959,6 +2102,18 @@ export class IdentityService {
     };
     this.aiShareInvites.applyOutboundEnd(args);
     this.aiShareInvites.applyInboundEnd(args);
+    // Phase 4 v2/e: log self-emitted end on the local transcript.
+    this.aiShareTranscripts.append({
+      inviteId,
+      line: {
+        v: 1,
+        kind: "end",
+        origin: "self",
+        endedAt: envelope.endedAt,
+        ...(reason !== undefined ? { reason } : {}),
+        signatureB64: envelope.signatureB64,
+      },
+    });
     this.logger.info({ inviteId, reason }, "ai_share_session_ended");
     return { ok: true, envelope };
   }
@@ -2024,6 +2179,19 @@ export class IdentityService {
       );
       return { ok: false, error: message };
     }
+    // Phase 4 v2/e: log self-sent prompt on the friend-side transcript.
+    this.aiShareTranscripts.append({
+      inviteId: input.inviteId,
+      line: {
+        v: 1,
+        kind: "prompt",
+        origin: "sent",
+        promptId,
+        sentAt: envelope.sentAt,
+        body: trimmed,
+        signatureB64: envelope.signatureB64,
+      },
+    });
     this.logger.info(
       {
         inviteId: input.inviteId,

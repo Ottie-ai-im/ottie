@@ -901,10 +901,15 @@ function ActiveShareBanner({
         <Sparkles size={16} color={theme.colors.palette.white} />
       </View>
       <Text style={styles.activeShareText} numberOfLines={1}>
-        {t("p2pChat.activeShareBanner", {
-          label: session.agentLabel,
-          defaultValue: "AI share active — {{label}}",
-        })}
+        {session.peerOnline === false
+          ? t("p2pChat.activeShareBannerOffline", {
+              label: session.agentLabel,
+              defaultValue: "AI share — {{label}} (peer offline)",
+            })
+          : t("p2pChat.activeShareBanner", {
+              label: session.agentLabel,
+              defaultValue: "AI share active — {{label}}",
+            })}
       </Text>
       {showOpenButton ? (
         <Pressable

@@ -135,6 +135,7 @@
       "sending": "Sending…"
     },
     "activeShareBanner": "AI share active — {{label}}",
+    "activeShareBannerOffline": "AI share — {{label}} (peer offline)",
     "activeShareEnd": "End session",
     "activeShareEnding": "Ending…",
     "activeShareOpen": "Open",
@@ -147,6 +148,7 @@
   "aiShare": {
     "headerTitle": "Sharing {{label}}",
     "headerSubtitle": "with {{peer}}",
+    "headerSubtitleOffline": "with {{peer}} · peer offline",
     "endedTitle": "AI share ended",
     "endedBody": "This share is no longer active. Either you or the owner ended it, or the owner's daemon restarted.",
     "invalidRoute": "Invalid share link",

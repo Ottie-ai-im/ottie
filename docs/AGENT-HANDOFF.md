@@ -399,12 +399,24 @@ send-prompt` ships it. No friend-side UI yet — verified via
   deduping by `promptId` once the owner's daemon echoes the
   user_message back.
 - **v2/e — auditable transcript + disconnect handling +
-  e2e tests.** Persist invite + every prompt/timeline event
-  to `$OTTIE_HOME/ai-shares/{inviteId}.json` on both sides as
-  the session flows. Disconnect detection: if the owner's
-  daemon drops mid-session, friend's banner flips to "owner
-  offline" + in-flight prompts fail-fast. Mock-relay e2e
-  test covering the full Wendell ↔ Bob lifecycle.
+  e2e tests.** ✅ shipped. Adds the on-disk transcript store
+  at `$OTTIE_HOME/ai-shares/{inviteId}.jsonl` — append-only
+  JSONL, one file per share per side. Each lifecycle
+  transition appends a typed line: `header` (with the verified
+  invite envelope), `accept`/`decline`/`end` (origin = self
+  | peer), `prompt` (origin = sent | received), `timeline`
+  (origin = sent | received with the redacted entry +
+  signature). Friend's transcript only carries entries that
+  passed the v2/d redactor on the owner's side, so §7's "Bob
+  does not see" still holds at the audit-trail layer.
+  Disconnect detection: `listActiveAiShares` consults
+  `friendSessions` and stamps a `peerOnline` flag on each
+  row; banner + share-screen subtitle flip to "(peer offline)"
+  when the friend-sync session drops. Mock-relay e2e covers
+  the full Wendell ↔ Bob lifecycle (220ms): pair → invite →
+  accept → send-prompt → mock-agent stream → redactor strips
+  tool_call → friend's buffer fills with 4 entries (no tool
+  call) → end → both transcripts on disk audit-clean.
 
 **v3 — multi-daemon picker (§7.5):**
 

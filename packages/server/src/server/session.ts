@@ -2319,6 +2319,7 @@ export class Session {
           agentLabel: s.agentLabel,
           agentProvider: s.agentProvider,
           acceptedAt: s.acceptedAt,
+          peerOnline: s.peerOnline,
         })),
         error: null,
       },

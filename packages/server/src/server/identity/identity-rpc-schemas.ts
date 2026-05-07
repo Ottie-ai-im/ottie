@@ -698,6 +698,14 @@ export const AiShareActiveOnWireSchema = z.object({
   agentLabel: z.string().min(1),
   agentProvider: z.string().min(1),
   acceptedAt: z.string(),
+  /**
+   * Phase 4 v2/e — true when this daemon currently has an open
+   * friend-sync session with the share's peer. Friend's UI flips the
+   * banner to "owner offline" when this goes false; owner's UI shows
+   * "friend disconnected". Optional + defaults to true on the wire so
+   * pre-v2/e clients keep working.
+   */
+  peerOnline: z.boolean().optional().default(true),
 });
 export type AiShareActiveOnWire = z.infer<typeof AiShareActiveOnWireSchema>;
 
