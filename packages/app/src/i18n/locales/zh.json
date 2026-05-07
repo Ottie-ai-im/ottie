@@ -507,7 +507,11 @@
     "aiShareSubtitle": "{{provider}} · 在下方接受或拒绝",
     "aiShareLimits": "最多 {{maxPrompts}} 条 prompt · {{maxTokens}}k tokens · {{timeoutMin}} 分钟",
     "aiShareAccept": "接受",
-    "aiShareDecline": "拒绝"
+    "aiShareDecline": "拒绝",
+    "aiShareIntentTitle": "待办分享 — 朋友 {{peer}}…",
+    "aiShareIntentSubtitle": "在 {{source}}… 设备发起 — 点这里用本设备来分享",
+    "aiShareClaim": "用本设备",
+    "aiShareClaiming": "认领中…"
   },
   "assistants": {
     "title": "助理",

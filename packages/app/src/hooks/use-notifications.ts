@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import type {
+  AiShareIntentOnWire,
   AiShareInviteOnWire,
   PendingFriendPairCandidateOnWire,
 } from "@server/server/identity/identity-rpc-schemas";
@@ -39,6 +40,12 @@ export type NotificationItem =
       kind: "ai-share-invite";
       receivedAt: string;
       payload: { invite: AiShareInviteOnWire };
+    }
+  | {
+      id: string;
+      kind: "ai-share-pending-intent";
+      receivedAt: string;
+      payload: { intent: AiShareIntentOnWire };
     };
 
 const PENDING_POLL_MS = 5_000;
@@ -84,6 +91,21 @@ export function useNotifications(serverId: string | null): UseNotificationsResul
     staleTime: 0,
   });
 
+  // Phase 4 v3/c §7.5.1 — pending share-intents broadcast from sibling
+  // owner-daemons. Each row offers "use this device" to claim.
+  const aiShareIntentsQuery = useQuery<readonly AiShareIntentOnWire[], Error>({
+    queryKey: ["notifications-ai-share-pending-intents", serverId],
+    queryFn: async () => {
+      if (!client) return [];
+      const response = await client.chatP2pAiShareListPendingIntents();
+      if (response.error) throw new Error(response.error);
+      return response.intents ?? [];
+    },
+    enabled: !!client,
+    refetchInterval: PENDING_POLL_MS,
+    staleTime: 0,
+  });
+
   const items = useMemo<ReadonlyArray<NotificationItem>>(() => {
     const out: NotificationItem[] = [];
     for (const candidate of candidatesQuery.data ?? []) {
@@ -105,15 +127,24 @@ export function useNotifications(serverId: string | null): UseNotificationsResul
         payload: { invite },
       });
     }
+    for (const intent of aiShareIntentsQuery.data ?? []) {
+      out.push({
+        id: `ai-share-intent:${intent.intentId}`,
+        kind: "ai-share-pending-intent",
+        receivedAt: intent.generatedAt,
+        payload: { intent },
+      });
+    }
     // Newest first.
     out.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
     return out;
-  }, [candidatesQuery.data, aiShareInvitesQuery.data]);
+  }, [candidatesQuery.data, aiShareInvitesQuery.data, aiShareIntentsQuery.data]);
 
   return {
     items,
     count: items.length,
-    isLoading: candidatesQuery.isLoading || aiShareInvitesQuery.isLoading,
-    hasError: !!candidatesQuery.error || !!aiShareInvitesQuery.error,
+    isLoading:
+      candidatesQuery.isLoading || aiShareInvitesQuery.isLoading || aiShareIntentsQuery.isLoading,
+    hasError: !!candidatesQuery.error || !!aiShareInvitesQuery.error || !!aiShareIntentsQuery.error,
   };
 }

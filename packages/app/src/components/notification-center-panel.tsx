@@ -1,7 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useRouter } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Sparkles, UserPlus } from "lucide-react-native";
 
@@ -207,9 +207,114 @@ function NotificationRow({
     );
   }
 
+  if (item.kind === "ai-share-pending-intent") {
+    return (
+      <PendingShareIntentRow
+        intent={item.payload.intent}
+        client={client}
+        serverId={serverId}
+        queryClient={queryClient}
+        onActioned={onActioned}
+      />
+    );
+  }
+
   // Future kinds land here — exhaustiveness check via never:
   const _exhaustive: never = item;
   return _exhaustive;
+}
+
+/**
+ * Phase 4 v3/c §7.5.1 — pending intent row. Tapping "Use this device"
+ * claims the intent on this daemon and routes the user into the
+ * ShareAi flow with the picker prefilled to the friend the intent
+ * targets.
+ */
+function PendingShareIntentRow({
+  intent,
+  client,
+  serverId,
+  queryClient,
+  onActioned,
+}: {
+  intent: import("@server/server/identity/identity-rpc-schemas").AiShareIntentOnWire;
+  client: ReturnType<typeof useHostRuntimeClient>;
+  serverId: string | null;
+  queryClient: ReturnType<typeof useQueryClient>;
+  onActioned: () => void;
+}) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const router = useRouter();
+  const [isClaiming, setIsClaiming] = useState(false);
+
+  const handleClaim = useCallback(async () => {
+    if (!client || isClaiming) return;
+    setIsClaiming(true);
+    try {
+      const response = await client.chatP2pAiShareClaimIntent({ intentId: intent.intentId });
+      if (response.error || !response.peerRootPubKeyB64) {
+        return;
+      }
+      // Navigate to the friend chat where the v2/b ShareAi modal is
+      // surfaced. The user picks the agent there.
+      if (serverId) {
+        router.push({
+          pathname: "/h/[serverId]/friend/[peerRootPubKey]",
+          params: { serverId, peerRootPubKey: response.peerRootPubKeyB64 },
+        });
+      }
+    } finally {
+      setIsClaiming(false);
+      await queryClient.invalidateQueries({
+        queryKey: ["ai-share-pending-intents", serverId],
+      });
+      onActioned();
+    }
+  }, [client, intent.intentId, isClaiming, onActioned, queryClient, router, serverId]);
+
+  const peerPrefix = intent.peerRootPubKeyB64.slice(0, 8);
+  const sourcePrefix = intent.sourceDeviceId.slice(0, 8);
+  return (
+    <View style={styles.row} testID={`notification-row-ai-share-intent-${peerPrefix}`}>
+      <View style={styles.iconCircle}>
+        <Sparkles size={18} color={theme.colors.foregroundMuted} />
+      </View>
+      <View style={styles.rowBody}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {t("notifications.aiShareIntentTitle", {
+            peer: peerPrefix,
+            defaultValue: "Pending share with {{peer}}…",
+          })}
+        </Text>
+        <Text style={styles.rowSubtitle} numberOfLines={1}>
+          {t("notifications.aiShareIntentSubtitle", {
+            source: sourcePrefix,
+            defaultValue: "Started on {{source}}… — claim to share from this device",
+          })}
+        </Text>
+        <View style={styles.aiShareActions}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleClaim}
+            disabled={isClaiming || !client}
+            style={({ hovered }) => [
+              styles.actionButton,
+              styles.actionButtonAccept,
+              hovered ? styles.actionButtonHovered : null,
+            ]}
+            testID={`notification-ai-share-claim-${peerPrefix}`}
+          >
+            <Text style={styles.actionButtonAcceptText}>
+              {isClaiming
+                ? t("notifications.aiShareClaiming", { defaultValue: "Claiming…" })
+                : t("notifications.aiShareClaim", { defaultValue: "Use this device" })}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create((theme) => ({

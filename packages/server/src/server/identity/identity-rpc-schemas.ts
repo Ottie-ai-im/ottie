@@ -817,6 +817,63 @@ export const ChatP2pAiShareListTimelineResponseSchema = z.object({
   }),
 });
 
+// Phase 4 v3/c §7.5.1 — cross-daemon intent broadcast/claim/list-pending.
+
+export const AiShareIntentOnWireSchema = z.object({
+  intentId: z.string().min(1),
+  peerRootPubKeyB64: z.string().min(1),
+  sourceDeviceId: z.string().min(1),
+  generatedAt: z.string(),
+  expiresAt: z.string(),
+});
+export type AiShareIntentOnWire = z.infer<typeof AiShareIntentOnWireSchema>;
+
+export const ChatP2pAiShareBroadcastIntentRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/broadcast-intent"),
+  requestId: z.string(),
+  peerRootPubKey: z.string().min(1),
+});
+
+export const ChatP2pAiShareBroadcastIntentResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/broadcast-intent/response"),
+  payload: z.object({
+    requestId: z.string(),
+    intentId: z.string().nullable(),
+    expiresAt: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ChatP2pAiShareClaimIntentRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/claim-intent"),
+  requestId: z.string(),
+  intentId: z.string().min(1),
+});
+
+export const ChatP2pAiShareClaimIntentResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/claim-intent/response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** The friend's pubkey the caller should now call sendAiShareInvite for. */
+    peerRootPubKeyB64: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ChatP2pAiShareListPendingIntentsRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-pending-intents"),
+  requestId: z.string(),
+});
+
+export const ChatP2pAiShareListPendingIntentsResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-pending-intents/response"),
+  payload: z.object({
+    requestId: z.string(),
+    intents: z.array(AiShareIntentOnWireSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 // ----- device/remove (Phase 2.g) -----------------------------------------
 // Remove a peer device from THIS user's device list. Refused for self
 // (a daemon can't sign its own revocation — use another device).

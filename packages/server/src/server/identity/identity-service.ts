@@ -81,6 +81,12 @@ import { AiShareInviteRegistry } from "./ai-share-registry.js";
 import { redactAgentEventForShare } from "./ai-share-timeline-redactor.js";
 import { AiShareTimelineStore, type AiShareTimelineRecord } from "./ai-share-timeline-buffer.js";
 import { AiShareTranscriptStore } from "./ai-share-transcript-store.js";
+import {
+  buildAiShareIntentBroadcastEvent,
+  buildAiShareIntentResolutionEvent,
+  verifyAiShareCoordinationEvent,
+} from "./ai-share-coordination-crypto.js";
+import type { AiShareCoordinationEvent } from "./ai-share-coordination-types.js";
 import { DEFAULT_AI_SHARE_LIMITS } from "./ai-share-types.js";
 import type {
   AiShareAcceptEnvelope,
@@ -248,6 +254,31 @@ export class IdentityService {
    * still work (the store handles missing dirs by warn-and-no-op).
    */
   private readonly aiShareTranscripts: AiShareTranscriptStore;
+  /**
+   * Phase 4 v3/c §7.5.1 — pending ai-share intents this daemon
+   * has heard about (either originated locally or received from a
+   * sibling owner-daemon over peer-sync). UI polls
+   * `listPendingAiShareIntents` to render the picker on every online
+   * owner-device. Entries auto-evict on `expiresAt` so a forgotten
+   * intent doesn't stick around forever.
+   */
+  private readonly aiShareIntents = new Map<
+    string,
+    {
+      intentId: string;
+      peerRootPubKeyB64: string;
+      sourceDeviceId: string;
+      generatedAt: string;
+      expiresAt: string;
+      claimedByDeviceId: string | null;
+    }
+  >();
+  /**
+   * Phase 4 v3/c §7.5.1 — monotonic counter for coordination events
+   * this daemon emits. Separate from the device-list event seq so
+   * the two domains don't interfere.
+   */
+  private aiShareCoordinationSeq = 0;
   /** Phase 3.b/2d: handle for the periodic inbox poller (clearable). */
   private inboxPollHandle: ReturnType<typeof setInterval> | null = null;
   /** Phase 3.b/2d: tracks an in-flight inbox round so kicks dedupe. */
@@ -800,6 +831,9 @@ export class IdentityService {
         // that everything else funnels through.
         this.applyInboundDeviceListEvent(event);
       },
+      applyInboundCoordinationEvent: (event) => {
+        this.applyInboundAiShareCoordinationEvent(event);
+      },
       onSessionEstablished: (peerDeviceId) => {
         this.replayEventsToPeer(peerDeviceId);
       },
@@ -832,6 +866,7 @@ export class IdentityService {
       getLocalDeviceList: () => this.deviceList?.devices ?? [],
       sessions: this.peerSessions,
       applyInboundEvent: (event) => this.applyInboundDeviceListEvent(event),
+      applyInboundCoordinationEvent: (event) => this.applyInboundAiShareCoordinationEvent(event),
       onSessionEstablished: (peerDeviceId) => {
         this.replayEventsToPeer(peerDeviceId);
       },
@@ -1416,6 +1451,252 @@ export class IdentityService {
    */
   listAiShareTimeline(inviteId: string): readonly AiShareTimelineRecord[] {
     return this.aiShareTimelineStore.list(inviteId);
+  }
+
+  // -------------------------------------------------------------------
+  // Phase 4 v3/c §7.5.1 — cross-daemon ai-share intent coordination.
+  //
+  // The v2/b "Share AI" flow has the owner pick an agent locally and
+  // immediately fire `sendAiShareInvite` from that daemon. v3/c
+  // doesn't replace that flow; it adds a parallel flow for owners
+  // running multiple daemons:
+  //
+  //   1. The user taps "Share AI" on Device A (any of their daemons).
+  //   2. Device A calls `broadcastAiShareIntent({peerRootPubKey})`
+  //      which mints an intentId + emits a signed
+  //      `ai-share-intent-broadcast` to every peer-sync session it
+  //      has open. Every other owner-daemon picks up the intent and
+  //      surfaces it in their UI alongside Device A.
+  //   3. The user picks whichever device they want (could be A, B,
+  //      C, …). That device calls `claimAiShareIntent(intentId)`
+  //      which broadcasts an `ai-share-intent-resolution` so the
+  //      others dismiss their pending UI.
+  //   4. The picked device hands off to the existing v2/b flow:
+  //      open the agent picker, fire `sendAiShareInvite` directly.
+  //
+  // The intent broadcast carries only the friend's pubkey + an
+  // intentId. No agent details — those are picked AFTER claim, on
+  // the chosen device. This matches §7.5's two-step modal: step 1
+  // is "which daemon", step 2 is "which agent on that daemon".
+  // -------------------------------------------------------------------
+
+  /**
+   * Phase 4 v3/c §7.5.1 — owner taps "Share AI" on any device. Mint
+   * an intent, register locally as `claimedBy = self`, broadcast to
+   * sibling daemons. The originating device can immediately proceed
+   * to the v2/b agent picker without waiting for resolution; the
+   * broadcast is just so other devices know about it.
+   */
+  broadcastAiShareIntent(input: {
+    peerRootPubKey: string;
+    /** Override TTL ms (tests). Default 5 minutes. */
+    ttlMs?: number;
+  }): { ok: true; intentId: string; expiresAt: string } | { ok: false; error: string } {
+    if (this.state.kind !== "loaded") {
+      return { ok: false, error: "Cannot broadcast — root identity not loaded" };
+    }
+    if (!this.selfDevice || !this.selfDeviceContext) {
+      return { ok: false, error: "Cannot broadcast — self-device not configured" };
+    }
+    const peer = this.peerList?.peers.find(
+      (p) => p.peerRootSignPublicKeyB64 === input.peerRootPubKey,
+    );
+    if (!peer) return { ok: false, error: "Peer is not in your friend list" };
+    const now = new Date();
+    const ttlMs = input.ttlMs ?? 5 * 60 * 1000;
+    const expiresAt = new Date(now.getTime() + ttlMs).toISOString();
+    const intentId = `ais_intent_${randomUuid().slice(0, 12)}`;
+    const sourceDeviceId = this.selfDeviceContext.serverId;
+    const event = buildAiShareIntentBroadcastEvent({
+      intentId,
+      peerRootPubKeyB64: input.peerRootPubKey,
+      expiresAt,
+      sourceDeviceId,
+      signPrivateKey: this.selfDevice.signPrivateKey,
+      emittedAt: now.toISOString(),
+      seq: this.aiShareCoordinationSeq++,
+    });
+    // Register locally first — claimedBy = self because the
+    // originator is implicitly already going to claim it (UI
+    // continues to the picker on this device).
+    this.aiShareIntents.set(intentId, {
+      intentId,
+      peerRootPubKeyB64: input.peerRootPubKey,
+      sourceDeviceId,
+      generatedAt: now.toISOString(),
+      expiresAt,
+      claimedByDeviceId: sourceDeviceId,
+    });
+    this.broadcastCoordinationEvent(event);
+    this.logger.info(
+      { intentId, peerPrefix: input.peerRootPubKey.slice(0, 8) },
+      "ai_share_intent_broadcast_sent",
+    );
+    return { ok: true, intentId, expiresAt };
+  }
+
+  /**
+   * Phase 4 v3/c §7.5.1 — sibling owner-daemon claims the intent.
+   * Marks the local entry, broadcasts a resolution so the other
+   * daemons dismiss their pending UI, and returns the metadata the
+   * caller needs to proceed with the v2/b agent picker.
+   */
+  claimAiShareIntent(
+    intentId: string,
+  ): { ok: true; peerRootPubKey: string } | { ok: false; error: string } {
+    if (this.state.kind !== "loaded") {
+      return { ok: false, error: "Cannot claim — root identity not loaded" };
+    }
+    if (!this.selfDevice || !this.selfDeviceContext) {
+      return { ok: false, error: "Cannot claim — self-device not configured" };
+    }
+    this.evictExpiredAiShareIntents();
+    const entry = this.aiShareIntents.get(intentId);
+    if (!entry) return { ok: false, error: "Intent not found or already expired" };
+    if (entry.claimedByDeviceId !== null) {
+      return { ok: false, error: "Intent already claimed" };
+    }
+    const sourceDeviceId = this.selfDeviceContext.serverId;
+    entry.claimedByDeviceId = sourceDeviceId;
+    const now = new Date();
+    const event = buildAiShareIntentResolutionEvent({
+      intentId,
+      claimedByDeviceId: sourceDeviceId,
+      resolvedAt: now.toISOString(),
+      sourceDeviceId,
+      signPrivateKey: this.selfDevice.signPrivateKey,
+      emittedAt: now.toISOString(),
+      seq: this.aiShareCoordinationSeq++,
+    });
+    this.broadcastCoordinationEvent(event);
+    this.logger.info({ intentId }, "ai_share_intent_resolution_sent");
+    return { ok: true, peerRootPubKey: entry.peerRootPubKeyB64 };
+  }
+
+  /**
+   * Phase 4 v3/c §7.5.1 — read-only snapshot for the UI poller.
+   * Filters out claimed/expired entries so the bell only surfaces
+   * actionable intents.
+   */
+  listPendingAiShareIntents(): ReadonlyArray<{
+    intentId: string;
+    peerRootPubKeyB64: string;
+    sourceDeviceId: string;
+    generatedAt: string;
+    expiresAt: string;
+  }> {
+    this.evictExpiredAiShareIntents();
+    const out: Array<{
+      intentId: string;
+      peerRootPubKeyB64: string;
+      sourceDeviceId: string;
+      generatedAt: string;
+      expiresAt: string;
+    }> = [];
+    for (const entry of this.aiShareIntents.values()) {
+      if (entry.claimedByDeviceId !== null) continue;
+      out.push({
+        intentId: entry.intentId,
+        peerRootPubKeyB64: entry.peerRootPubKeyB64,
+        sourceDeviceId: entry.sourceDeviceId,
+        generatedAt: entry.generatedAt,
+        expiresAt: entry.expiresAt,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Phase 4 v3/c §7.5.1 — peer-sync receiver dispatches verified
+   * coordination events here. Verifies the signature against the
+   * source device's pubkey from the local device list (events from
+   * unknown devices are dropped — same anti-replay guarantee as
+   * device-list events).
+   */
+  private applyInboundAiShareCoordinationEvent(event: AiShareCoordinationEvent): void {
+    const sourceDevice = this.deviceList?.devices.find((d) => d.deviceId === event.sourceDeviceId);
+    if (!sourceDevice) {
+      this.logger.warn(
+        { sourceDeviceIdPrefix: event.sourceDeviceId.slice(0, 12) },
+        "ai_share_coordination_unknown_source_device",
+      );
+      return;
+    }
+    const verifyOutcome = verifyAiShareCoordinationEvent({
+      event,
+      expectedSignPublicKeyB64: sourceDevice.signPublicKeyB64,
+    });
+    if (!verifyOutcome.ok) {
+      this.logger.warn(
+        { reason: verifyOutcome.reason, kind: event.kind },
+        "ai_share_coordination_sig_invalid",
+      );
+      return;
+    }
+    if (event.kind === "ai-share-intent-broadcast") {
+      this.aiShareIntents.set(event.intentId, {
+        intentId: event.intentId,
+        peerRootPubKeyB64: event.peerRootPubKeyB64,
+        sourceDeviceId: event.sourceDeviceId,
+        generatedAt: event.emittedAt,
+        expiresAt: event.expiresAt,
+        claimedByDeviceId: null,
+      });
+      this.logger.info(
+        {
+          intentId: event.intentId,
+          sourceDeviceIdPrefix: event.sourceDeviceId.slice(0, 12),
+        },
+        "ai_share_intent_broadcast_received",
+      );
+      return;
+    }
+    if (event.kind === "ai-share-intent-resolution") {
+      const entry = this.aiShareIntents.get(event.intentId);
+      if (!entry) return;
+      entry.claimedByDeviceId = event.claimedByDeviceId;
+      this.logger.info(
+        {
+          intentId: event.intentId,
+          claimedByPrefix: event.claimedByDeviceId.slice(0, 12),
+        },
+        "ai_share_intent_resolution_received",
+      );
+    }
+  }
+
+  private broadcastCoordinationEvent(event: AiShareCoordinationEvent): void {
+    const sessions = this.peerSessions.list();
+    if (sessions.length === 0) return;
+    const payload = JSON.stringify(event);
+    for (const session of sessions) {
+      try {
+        const frame = encryptPeerSyncFrame({
+          sharedKey: session.sharedKey,
+          plaintext: payload,
+        });
+        session.socket.send(JSON.stringify(frame));
+      } catch (err) {
+        this.logger.warn(
+          {
+            err,
+            peerDeviceIdPrefix: session.peerDeviceId.slice(0, 12),
+            kind: event.kind,
+          },
+          "ai_share_coordination_send_failed",
+        );
+      }
+    }
+  }
+
+  private evictExpiredAiShareIntents(): void {
+    const now = Date.now();
+    for (const [id, entry] of this.aiShareIntents.entries()) {
+      const expires = Date.parse(entry.expiresAt);
+      if (Number.isFinite(expires) && expires <= now) {
+        this.aiShareIntents.delete(id);
+      }
+    }
   }
 
   /**

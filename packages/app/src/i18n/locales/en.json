@@ -507,7 +507,11 @@
     "aiShareSubtitle": "{{provider}} · accept or decline below",
     "aiShareLimits": "max {{maxPrompts}} prompts · {{maxTokens}}k tokens · {{timeoutMin}} min",
     "aiShareAccept": "Accept",
-    "aiShareDecline": "Decline"
+    "aiShareDecline": "Decline",
+    "aiShareIntentTitle": "Pending share with {{peer}}…",
+    "aiShareIntentSubtitle": "Started on {{source}}… — claim to share from this device",
+    "aiShareClaim": "Use this device",
+    "aiShareClaiming": "Claiming…"
   },
   "assistants": {
     "title": "Assistants",

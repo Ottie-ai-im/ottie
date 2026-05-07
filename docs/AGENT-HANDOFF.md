@@ -418,13 +418,12 @@ send-prompt` ships it. No friend-side UI yet — verified via
   tool_call → friend's buffer fills with 4 entries (no tool
   call) → end → both transcripts on disk audit-clean.
 
-**v3 — multi-daemon picker (§7.5) (✅ all four bullets shipped):**
+**v3 — multi-daemon picker (§7.5) (✅ all five sub-commits shipped):**
 
 All of v3 is now done — real agent picker (v2/b), limits (v3/a),
-first-share friction (v3/b), multi-daemon picker (v3/c). The
-cross-daemon broadcast piece from §7.5.1 ("modal renders on every
-owner-device simultaneously") is deferred — see v3/c entry below
-for what's left to build there.
+first-share friction (v3/b), multi-daemon picker (v3/c), and the
+cross-daemon coordination layer (v3/d) that makes the picker
+appear on every online owner-device per §7.5.1.
 
 **Done:**
 
@@ -481,18 +480,59 @@ for what's left to build there.
   the new step entirely. Bilingual i18n
   (`p2pChat.shareAi.daemonIntro/Online/Offline`).
 
-  **Deferred from §7.5.1 ("modal renders on every device
-  simultaneously"):** today the picker only fires on the
-  device the user is currently looking at. Implementing the
-  cross-daemon broadcast needs a new peer-sync envelope —
-  e.g., `share-intent` (broadcast across owner's daemons on
-  Share AI tap) + `share-resolution` (broadcast back from the
-  picked daemon so other devices dismiss their modal). The
-  daemon-side machinery already has the peer-sync transport
-  (Phase 2.f) and the existing `applyInboundEvent` dispatch
-  for DeviceListEvent — adding a new event variant + a
-  pending-share-intent registry is the implementation skeleton.
-  Re-prioritize when real multi-daemon-owner usage demands it.
+  **§7.5.1 ("modal renders on every owner-device") shipped
+  in v3/d** — the cross-daemon broadcast layer below is now
+  in place. The picker UX in v3/c stays as the single-device
+  path; multi-device users get the bell notification + claim
+  flow.
+
+- **v3/d — §7.5.1 cross-daemon coordination broadcast.** ✅
+  shipped. New `AiShareCoordinationEvent` family rides the
+  existing peer-sync transport (Phase 2.f) — same SIGMA-I
+  encrypted lane the device-list events use, just a second
+  schema dispatched in parallel. Two kinds:
+  · `ai-share-intent-broadcast`: emitted when the user taps
+  "Share AI" on any owner-device. Carries `intentId` +
+  `peerRootPubKeyB64` + `expiresAt`. Other owner-daemons
+  register the intent in an in-memory `aiShareIntents`
+  map.
+  · `ai-share-intent-resolution`: emitted when any device
+  claims the intent. Carries `intentId` + `claimedBy
+    DeviceId`. Other devices flip the registry entry to
+  claimed; UI dismisses.
+  Both kinds are signed by the source-device's self-device
+  Ed25519 privkey, verified at the receiver against the local
+  device list (events from unknown devices are dropped — same
+  anti-replay rule as device-list events).
+
+  Daemon API: `broadcastAiShareIntent({peerRootPubKey})` from
+  the originating device, `claimAiShareIntent(intentId)` from
+  whichever device picks it up, `listPendingAiShareIntents()`
+  for the polled UI feed. Three new WS RPCs:
+  `chat/p2p/ai-share/broadcast-intent`,
+  `chat/p2p/ai-share/claim-intent`,
+  `chat/p2p/ai-share/list-pending-intents`.
+
+  UI: new `usePendingShareIntents` hook (3s polled). The bell
+  notification center renders a third row kind
+  (`ai-share-pending-intent`) with a "Use this device" button.
+  Tapping claims the intent (broadcasts resolution → others
+  dismiss) and routes the user to the friend chat where v2/b's
+  ShareAi modal proceeds with the agent picker. Bilingual i18n
+  under `notifications.aiShareIntent*` (en + zh).
+
+  Receiver dispatch refactor in `peer-sync-receiver.ts` and
+  `peer-sync-dialer.ts`: both now try `DeviceListEventSchema`
+  first, then `AiShareCoordinationEventSchema`. Old peers that
+  never emit coordination events keep working unchanged. New
+  optional `applyInboundCoordinationEvent` callback so
+  consumers without ai-share support stay valid.
+
+  Tests: 7 new cases in
+  `ai-share-coordination-crypto.test.ts` (build/verify
+  roundtrips for both kinds, peer-mismatch fail, post-sign
+  tamper fail, dispatcher routing). 53 ai-share tests pass
+  total.
 
 **Out-of-scope for the whole Phase 4 chain (defer to Phase 5+):**
 

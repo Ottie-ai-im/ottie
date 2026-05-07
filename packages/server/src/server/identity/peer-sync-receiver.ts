@@ -2,6 +2,10 @@ import type { KeyObject } from "node:crypto";
 
 import type { RelayConnectionHandler } from "../relay-transport.js";
 
+import {
+  AiShareCoordinationEventSchema,
+  type AiShareCoordinationEvent,
+} from "./ai-share-coordination-types.js";
 import { DeviceListEventSchema, type DeviceListEvent } from "./device-list-event-types.js";
 import type { StoredDevice } from "./device-types.js";
 import { PeerSessionRegistry } from "./peer-session-registry.js";
@@ -66,6 +70,14 @@ export interface PeerSyncReceiverDeps {
    * Phase 2.f/3+ may add an ack/nack channel).
    */
   applyInboundEvent: (event: DeviceListEvent) => void;
+  /**
+   * Phase 4 v3/c §7.5.1 — second event-family dispatched on the same
+   * peer-sync session. Optional so existing callers (tests, older
+   * IdentityService versions) keep working without coordination
+   * support. When present, the receiver tries this schema after
+   * `DeviceListEventSchema` rejects.
+   */
+  applyInboundCoordinationEvent?: (event: AiShareCoordinationEvent) => void;
   /**
    * Phase 2.f/3 hook: called once per session right after the SIGMA-I
    * handshake completes and the session is registered. Used by
@@ -254,26 +266,38 @@ export function createPeerSyncConnectionHandler(
           return;
         }
 
-        const eventValidated = DeviceListEventSchema.safeParse(payload);
-        if (!eventValidated.success) {
-          logger.warn(
-            { issues: eventValidated.error.issues },
-            "peer_sync_handler_event_schema_rejected",
-          );
-          // Unknown payload type — Phase 2.f/3+ may add other kinds, but
-          // for now reject unknowns. Don't close the socket because the
-          // session is still valid.
+        const deviceListValidated = DeviceListEventSchema.safeParse(payload);
+        if (deviceListValidated.success) {
+          try {
+            deps.applyInboundEvent(deviceListValidated.data);
+          } catch (err) {
+            logger.warn({ err }, "peer_sync_handler_apply_threw");
+          }
           return;
         }
 
-        try {
-          deps.applyInboundEvent(eventValidated.data);
-        } catch (err) {
-          logger.warn({ err }, "peer_sync_handler_apply_threw");
-          // Application-level apply errors are non-fatal — the peer
-          // doesn't need to know, and other events on this session
-          // may still apply cleanly.
+        // Phase 4 v3/c §7.5.1: try the ai-share coordination schema.
+        // If neither matches, the payload is genuinely unknown.
+        const coordValidated = AiShareCoordinationEventSchema.safeParse(payload);
+        if (coordValidated.success && deps.applyInboundCoordinationEvent) {
+          try {
+            deps.applyInboundCoordinationEvent(coordValidated.data);
+          } catch (err) {
+            logger.warn({ err }, "peer_sync_handler_coordination_apply_threw");
+          }
+          return;
         }
+
+        logger.warn(
+          {
+            deviceListIssues: deviceListValidated.error.issues,
+            ...(coordValidated.success ? {} : { coordinationIssues: coordValidated.error.issues }),
+          },
+          "peer_sync_handler_event_schema_rejected",
+        );
+        // Unknown payload type — Phase 2.f/3+ may add other kinds, but
+        // for now reject unknowns. Don't close the socket because the
+        // session is still valid.
       };
 
       socket.on("close", (code, reason) => {

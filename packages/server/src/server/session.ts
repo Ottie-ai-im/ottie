@@ -2323,9 +2323,100 @@ export class Session {
         return this.handleChatP2pAiShareListShareableAgentsRequest(msg);
       case "chat/p2p/ai-share/list-timeline":
         return this.handleChatP2pAiShareListTimelineRequest(msg);
+      case "chat/p2p/ai-share/broadcast-intent":
+        return this.handleChatP2pAiShareBroadcastIntentRequest(msg);
+      case "chat/p2p/ai-share/claim-intent":
+        return this.handleChatP2pAiShareClaimIntentRequest(msg);
+      case "chat/p2p/ai-share/list-pending-intents":
+        return this.handleChatP2pAiShareListPendingIntentsRequest(msg);
       default:
         return undefined;
     }
+  }
+
+  private async handleChatP2pAiShareBroadcastIntentRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/broadcast-intent" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/broadcast-intent/response",
+        payload: {
+          requestId: request.requestId,
+          intentId: null,
+          expiresAt: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.broadcastAiShareIntent({
+      peerRootPubKey: request.peerRootPubKey,
+    });
+    this.emit({
+      type: "chat/p2p/ai-share/broadcast-intent/response",
+      payload: {
+        requestId: request.requestId,
+        intentId: result.ok ? result.intentId : null,
+        expiresAt: result.ok ? result.expiresAt : null,
+        error: result.ok ? null : result.error,
+      },
+    });
+  }
+
+  private async handleChatP2pAiShareClaimIntentRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/claim-intent" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/claim-intent/response",
+        payload: {
+          requestId: request.requestId,
+          peerRootPubKeyB64: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.claimAiShareIntent(request.intentId);
+    this.emit({
+      type: "chat/p2p/ai-share/claim-intent/response",
+      payload: {
+        requestId: request.requestId,
+        peerRootPubKeyB64: result.ok ? result.peerRootPubKey : null,
+        error: result.ok ? null : result.error,
+      },
+    });
+  }
+
+  private async handleChatP2pAiShareListPendingIntentsRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/list-pending-intents" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/list-pending-intents/response",
+        payload: {
+          requestId: request.requestId,
+          intents: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const intents = this.identityService.listPendingAiShareIntents();
+    this.emit({
+      type: "chat/p2p/ai-share/list-pending-intents/response",
+      payload: {
+        requestId: request.requestId,
+        intents: intents.map((i) => ({
+          intentId: i.intentId,
+          peerRootPubKeyB64: i.peerRootPubKeyB64,
+          sourceDeviceId: i.sourceDeviceId,
+          generatedAt: i.generatedAt,
+          expiresAt: i.expiresAt,
+        })),
+        error: null,
+      },
+    });
   }
 
   private async handleChatP2pAiShareEndRequest(

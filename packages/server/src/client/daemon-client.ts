@@ -1990,6 +1990,83 @@ export class DaemonClient {
     });
   }
 
+  async chatP2pAiShareBroadcastIntent(args: {
+    peerRootPubKey: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{
+    intentId: string | null;
+    expiresAt: string | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "chat/p2p/ai-share/broadcast-intent",
+        requestId,
+        peerRootPubKey: args.peerRootPubKey,
+      },
+      timeout: args.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/broadcast-intent/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return {
+          intentId: msg.payload.intentId,
+          expiresAt: msg.payload.expiresAt,
+          error: msg.payload.error,
+        };
+      },
+    });
+  }
+
+  async chatP2pAiShareClaimIntent(args: {
+    intentId: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{ peerRootPubKeyB64: string | null; error: string | null }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "chat/p2p/ai-share/claim-intent",
+        requestId,
+        intentId: args.intentId,
+      },
+      timeout: args.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/claim-intent/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return {
+          peerRootPubKeyB64: msg.payload.peerRootPubKeyB64,
+          error: msg.payload.error,
+        };
+      },
+    });
+  }
+
+  async chatP2pAiShareListPendingIntents(params?: {
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{
+    intents:
+      | readonly import("../server/identity/identity-rpc-schemas.js").AiShareIntentOnWire[]
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "chat/p2p/ai-share/list-pending-intents", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/list-pending-intents/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { intents: msg.payload.intents, error: msg.payload.error };
+      },
+    });
+  }
+
   async deviceLinkRedeem(args: {
     deepLink: string;
     deviceLabel: string;

@@ -4,6 +4,10 @@ import type pino from "pino";
 
 import { buildRelayWebSocketUrl } from "../../shared/daemon-endpoints.js";
 
+import {
+  AiShareCoordinationEventSchema,
+  type AiShareCoordinationEvent,
+} from "./ai-share-coordination-types.js";
 import { DeviceListEventSchema, type DeviceListEvent } from "./device-list-event-types.js";
 import type { StoredDevice } from "./device-types.js";
 import type { PeerSessionRegistry, PeerSessionSocket } from "./peer-session-registry.js";
@@ -61,6 +65,12 @@ export interface PeerSyncDialerOptions {
   sessions: PeerSessionRegistry;
   /** Bridges decrypted inbound events into IdentityService.applyInboundDeviceListEvent. */
   applyInboundEvent: (event: DeviceListEvent) => void;
+  /**
+   * Phase 4 v3/c §7.5.1 — secondary dispatch for ai-share coordination
+   * events on the same peer-sync session. Optional so older callers
+   * keep working.
+   */
+  applyInboundCoordinationEvent?: (event: AiShareCoordinationEvent) => void;
   /**
    * Phase 2.f/3 hook: called once per session right after the SIGMA-I
    * handshake completes and the session is registered. Used by
@@ -471,19 +481,32 @@ export class PeerSyncDialer {
       return;
     }
     const eventValidated = DeviceListEventSchema.safeParse(payload);
-    if (!eventValidated.success) {
-      // Unknown payload type — leave session up; this may be a future
-      // message kind from a newer peer.
+    if (eventValidated.success) {
+      try {
+        this.options.applyInboundEvent(eventValidated.data);
+      } catch (err) {
+        this.log.warn(
+          { err, peerDeviceIdPrefix: args.peerDeviceId.slice(0, 12) },
+          "peer_sync_dialer_apply_threw",
+        );
+      }
       return;
     }
-    try {
-      this.options.applyInboundEvent(eventValidated.data);
-    } catch (err) {
-      this.log.warn(
-        { err, peerDeviceIdPrefix: args.peerDeviceId.slice(0, 12) },
-        "peer_sync_dialer_apply_threw",
-      );
+    // Phase 4 v3/c §7.5.1: try the ai-share coordination schema.
+    const coordValidated = AiShareCoordinationEventSchema.safeParse(payload);
+    if (coordValidated.success && this.options.applyInboundCoordinationEvent) {
+      try {
+        this.options.applyInboundCoordinationEvent(coordValidated.data);
+      } catch (err) {
+        this.log.warn(
+          { err, peerDeviceIdPrefix: args.peerDeviceId.slice(0, 12) },
+          "peer_sync_dialer_coordination_apply_threw",
+        );
+      }
+      return;
     }
+    // Unknown payload type — leave session up; this may be a future
+    // message kind from a newer peer.
   }
 
   private scheduleReconnect(peerDeviceId: string): void {
