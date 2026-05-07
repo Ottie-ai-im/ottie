@@ -1165,13 +1165,48 @@ addedAt}`). `ChatMessageSchema` gains optional
         payload signature, peer authorization signature) is
         unaffected. The trust model is documented inline in
         `friend-pair-redeem-types.ts`.
-    - ⏳ 3.b/2b — Cloudflare relay-side: KV namespace, POST
-      `/inbox/{recipientRootPubKeyB64Url}` (anyone can drop;
-      envelope is encrypted to recipient's X25519), GET `/inbox`
-      with auth challenge (recipient signs `{nonce, timestamp}`
-      with their root sign privkey to prove ownership), and
-      DELETE `/inbox/{seq}` ack. KV key shape per §8.2.2;
-      per-recipient cap 10MB / 1000 messages, 7-day TTL.
+    - ✅ 3.b/2b — Cloudflare relay-side. New KV namespace
+      binding `OTTIE_INBOX` (declared in `wrangler.toml`; ID
+      to be filled in at first deploy via `wrangler kv:namespace
+create OTTIE_INBOX`). Three HTTP routes added to the
+      Worker fetch handler ahead of `/ws`:
+      - `POST /inbox/{recipientRootPubKeyB64Url}` — anyone
+        can drop; body is the opaque ciphertext. Limits:
+        64KB per blob, 1000 entries / 10MB per recipient,
+        7-day TTL on each entry (KV `expirationTtl`).
+        Returns `{seq, deliveredAt}` on 200.
+      - `GET /inbox/{recipientRootPubKeyB64Url}?since=...` —
+        recipient signs a fetch payload with their root sign
+        privkey (Ed25519); Worker verifies via Web Crypto's
+        `crypto.subtle.verify("Ed25519")`. Returns oldest-
+        first entries newer than the cursor, the next cursor
+        to use, and a `hasMore` flag from KV's pagination.
+      - `DELETE /inbox/{recipientRootPubKeyB64Url}/{seq}` —
+        same auth, but the signed payload also binds the
+        specific seq so a leaked delete proof can only wipe
+        that one entry, not the whole inbox.
+        Storage layout (matches §8.2.2):
+      - `inbox:msg:{recipientPubKey}:{seq}` → ciphertext.
+        `seq` is `{16-digit ms ts}-{8-byte hex}` so KV LIST
+        returns oldest-first naturally and collisions across
+        parallel POSTs land at ~1-in-4-billion per ms.
+      - `inbox:meta:{recipientPubKey}` → JSON
+        `{entryCount, totalBytes, lastDeliveredAt}` for
+        quota gating. Updates are intentionally non-atomic;
+        KV's eventual consistency means we may briefly over-
+        or under-count under heavy concurrent writes, which
+        is fine for soft-quota spam defense.
+        Auth payload format (pinned; version-bumped on any
+        change):
+      - fetch: `ottie-inbox-fetch-v1\n{pubkey}\n{ts}`
+      - delete: `ottie-inbox-delete-v1\n{pubkey}\n{ts}\n{seq}`
+        Auth timestamp window: ±60s. Stale → 410 Gone.
+        Tested via in-memory KV mock (`inbox-handler.test.ts`,
+        19 cases): path matching, POST happy path + size +
+        quota gating, GET auth (missing/stale/wrong-sig/recipient-
+        mismatch), GET pagination + cursor, DELETE auth + seq
+        validation + meta shrink, end-to-end POST→GET→DELETE→GET
+        roundtrip.
     - ⏳ 3.b/2c — daemon outbound: `sendFriendChatMessage`
       offline branch builds + signs envelope as today, then NaCl-
       boxes it under the peer's X25519 pubkey + a fresh sender

@@ -16,3 +16,20 @@ class_name = "RelayDurableObject"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RelayDurableObject"]
+
+# Phase 3.b/2b: offline-message inbox. Each entry is a NaCl-box ciphertext
+# (≤ 64KB) addressed to a recipient root pubkey, with a 7-day TTL. Senders
+# POST blindly; recipients fetch with an Ed25519-signed challenge proving
+# control of their root key. Storage is keyed by recipient pubkey; KV is
+# eventually consistent across regions but that's fine — recipients
+# converge after a brief delay, which is the same property they tolerate
+# for live friend-sync.
+#
+# To create the namespace before the first deploy:
+#   pnpm --filter @ottie/relay exec wrangler kv:namespace create OTTIE_INBOX
+#   pnpm --filter @ottie/relay exec wrangler kv:namespace create OTTIE_INBOX --preview
+# Then paste the returned ids into the `id` and `preview_id` fields below.
+[[kv_namespaces]]
+binding = "OTTIE_INBOX"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_NAMESPACE_PREVIEW_ID"

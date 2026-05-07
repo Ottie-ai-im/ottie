@@ -17,6 +17,7 @@
  * ```
  */
 
+import { handleInboxRequest, type InboxKV } from "./inbox-handler.js";
 import type { ConnectionRole, RelaySessionAttachment } from "./types.js";
 
 type RelayProtocolVersion = "1" | "2";
@@ -51,6 +52,14 @@ interface WebSocketWithAttachment extends WebSocket {
 
 interface Env {
   RELAY: DurableObjectNamespace;
+  /**
+   * Phase 3.b/2b: KV namespace for the offline-message inbox. See
+   * `inbox-handler.ts` for routes and storage layout. Bound in
+   * wrangler.toml as `OTTIE_INBOX`. May be undefined in tests + during
+   * local dev before the namespace is provisioned — the inbox routes
+   * return 503 in that case rather than crashing.
+   */
+  OTTIE_INBOX?: InboxKV;
 }
 
 interface DurableObjectNamespace {
@@ -521,6 +530,18 @@ export default {
       return new Response(JSON.stringify({ status: "ok" }), {
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // Phase 3.b/2b: offline message inbox (HTTP).
+    if (url.pathname.startsWith("/inbox/")) {
+      if (!env.OTTIE_INBOX) {
+        return new Response(JSON.stringify({ error: "inbox_kv_not_configured" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const inboxResponse = await handleInboxRequest(request, url, { inbox: env.OTTIE_INBOX });
+      if (inboxResponse) return inboxResponse;
     }
 
     // Relay endpoint
