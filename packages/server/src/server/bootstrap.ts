@@ -1006,6 +1006,9 @@ export async function createOttieDaemon(
             // long-lived chat sessions with each paired peer whose
             // routing info we captured in 3.b/1a.
             identityService.startFriendSync();
+            // Phase 3.b/2d: drain offline inbox on startup + every
+            // 5 minutes thereafter. No-op until identity is loaded.
+            identityService.startInboxReceiver();
           }
         };
 

@@ -45,6 +45,7 @@ afterEach(async () => {
     await t.stop();
   }
   for (const s of services.splice(0)) {
+    s.stopInboxReceiver();
     await s.stopFriendSync();
     await s.stopPeerSync();
   }

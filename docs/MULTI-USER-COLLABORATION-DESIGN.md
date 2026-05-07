@@ -1245,11 +1245,59 @@ create OTTIE_INBOX`). Three HTTP routes added to the
     X25519-private-key fan-out across recipient's own
     devices remains the only outstanding piece (deferred,
     handled alongside 3.b/2d's daemon-inbound work or as a
-    follow-up alongside peer-sync). - ⏳ 3.b/2d — daemon inbound: on startup + on relay
-    reconnect, GET `/inbox` with cursor, decrypt each entry,
-    verify the envelope's root signature, persist via the
-    existing `friendChatStore`, then DELETE-ack. Cursor lives
-    in `$OTTIE_HOME/identity/inbox-cursor.json`. - ⏳ 3.b/2e — UI delivery status: per-message indicator
+    follow-up alongside peer-sync). - ✅ 3.b/2d — daemon inbound. Closes the offline loop:
+    Bob's daemon comes back online, pulls every inbox entry
+    relay has for him, decrypts + verifies + persists each,
+    ACKs to free relay storage. Wendell's "queued" message
+    lands in Bob's chat history within seconds of Bob
+    reconnecting. New modules (under
+    packages/server/src/server/identity/): - `friend-inbox-cursor-store.ts` — load/save the
+    `lastSeenSeq` cursor at
+    `$OTTIE_HOME/identity/inbox-cursor.json`. Corrupt
+    file → resets to empty cursor (worst case is a
+    re-pull within the 7-day TTL window, dedup'd at the
+    UI layer by clientMessageId). - `friend-inbox-client.ts` — extended with `getInbox`
+    (signs `inboxFetchAuthPayload` with root sign privkey
+    via `InboxAuthSigner` callback) and `deleteInbox`
+    (signs `inboxDeleteAuthPayload` bound to the specific
+    seq). - `friend-inbox-receiver.ts` — the orchestrator. Each
+    round of `processInboxOnce`: 1. Loads cursor. 2. GETs `/inbox/{ownPubKey}?since=cursor`. 3. For each entry oldest-first: decrypt with own
+    X25519 privkey, lookup peer by
+    `authorRootPubKey`, verify Ed25519 root
+    signature, persist via `appendFriendChatMessage`
+    with `deliveryStatus: "delivered"`, advance
+    cursor, best-effort DELETE. 4. Loops while `hasMore` reports more pages, with
+    a per-call `INBOX_RECEIVER_MAX_PAGES_PER_CALL`
+    cap (20) so an unbounded inbox can't lock the
+    IO loop. - Wired into `IdentityService` as
+    `startInboxReceiver` / `stopInboxReceiver` /
+    `kickInboxOnce`. Bootstrap calls `startInboxReceiver`
+    alongside `startFriendSync`. Subsequent
+    `initialize()` and `adoptIdentityFromLink()` calls
+    also kick it (matches the 3.b/2a pattern). Default
+    poll interval: 5 minutes; `kickInboxOnce` coalesces
+    overlapping calls so a manual nudge from a future
+    relay-reconnect handler doesn't fire parallel rounds.
+    Failure handling per entry: - decrypt / schema / sig / unknown-peer → drop, advance
+    cursor, ACK (poison entries don't accumulate). - persist → abort the round, do NOT advance cursor;
+    retry on the next poll. - GET / DELETE network failure → log, exit the round
+    early; relay TTL cleans up if DELETE never ACKs.
+    Tested via two new files (18 cases total, alongside the
+    existing 367 identity tests still passing): - `friend-inbox-cursor-store.test.ts` (5) — empty
+    cursor when no file, save+load roundtrip, corrupt /
+    schema-mismatch resilience, advance persists. - `friend-inbox-receiver.test.ts` (13) — happy decrypt
+    → verify → persist → ACK, dedup via cursor, missing
+    peer → drop + ACK, decrypt failure (encrypted to
+    someone else's pubkey) → drop, empty inbox, abort
+    on persist error keeps cursor, multi-sender entries
+    land in per-peer JSONL, signed-headers shape.
+    Multi-device note: the X25519 priv key still lives only
+    on the device that minted (or first-loaded) the
+    identity. A peer-sync extension to ferry it across
+    same-identity devices is the last piece — deferred to a
+    follow-up commit since it requires peer-sync schema
+    changes. Single-device users (today's testbed: Wendell
+    on Mac, Bob on Mac) work end-to-end with this commit. - ⏳ 3.b/2e — UI delivery status: per-message indicator
     `sending` → `queued (offline)` → `delivered`. Builds on
     the same chat row component used for live messages. - Multi-device fan-out caveat: the X25519 keypair is
     **per-identity** (not per-device). Today only the device

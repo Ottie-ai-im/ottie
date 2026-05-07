@@ -94,7 +94,7 @@ export async function postInbox(input: PostInboxInput): Promise<PostInboxOutcome
   return { ok: true, seq: parsed.seq, deliveredAt: parsed.deliveredAt };
 }
 
-// ----- 3.b/2d shape (kept exported so the recipient module can import) ---
+// ----- 3.b/2d: GET / DELETE clients ---------------------------------------
 
 export interface InboxAuthSigner {
   /**
@@ -105,6 +105,189 @@ export interface InboxAuthSigner {
    * `KeyObject` from the loaded RootIdentityBundle.
    */
   sign: (payload: string) => string | Promise<string>;
+}
+
+export interface InboxFetchEntry {
+  seq: string;
+  /** Raw ciphertext bytes as the relay returned them, base64-encoded. */
+  ciphertextB64: string;
+  /** Server's ISO timestamp at storage time. */
+  deliveredAt: string;
+}
+
+export interface GetInboxInput {
+  relayEndpoint: string;
+  /** Recipient's root sign pubkey (JWK 'x' base64url) — used in URL + auth. */
+  recipientRootPubKeyB64Url: string;
+  /** "" to start from the oldest entry. */
+  since: string;
+  /** Recipient's signer (wraps the loaded root sign privkey). */
+  authSigner: InboxAuthSigner;
+  /** ms-since-epoch the recipient is currently using. */
+  nowMs: number;
+  /** Override fetch (tests). */
+  fetchImpl?: typeof fetch;
+  /** Optional ?limit hint. Server clamps. */
+  limit?: number;
+}
+
+export type GetInboxOutcome =
+  | {
+      ok: true;
+      entries: ReadonlyArray<InboxFetchEntry>;
+      nextCursor: string;
+      hasMore: boolean;
+    }
+  | { ok: false; status: number; error: string };
+
+export async function getInbox(input: GetInboxInput): Promise<GetInboxOutcome> {
+  const params = new URLSearchParams();
+  if (input.since) params.set("since", input.since);
+  if (input.limit) params.set("limit", String(input.limit));
+  const qs = params.toString();
+  const url = `${buildInboxUrl(input.relayEndpoint, input.recipientRootPubKeyB64Url)}${
+    qs ? `?${qs}` : ""
+  }`;
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const headers = await buildAuthHeaders({
+    recipient: input.recipientRootPubKeyB64Url,
+    payload: inboxFetchAuthPayload({
+      recipientRootPubKeyB64Url: input.recipientRootPubKeyB64Url,
+      timestampMs: input.nowMs,
+    }),
+    timestampMs: input.nowMs,
+    authSigner: input.authSigner,
+  });
+  let response: Response;
+  try {
+    response = await fetchImpl(url, { method: "GET", headers });
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      error: `Inbox GET network error: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  if (!response.ok) {
+    return readErrorBody(response, "Inbox GET failed");
+  }
+  let parsed: {
+    entries?: unknown;
+    nextCursor?: unknown;
+    hasMore?: unknown;
+  };
+  try {
+    parsed = (await response.json()) as typeof parsed;
+  } catch (err) {
+    return {
+      ok: false,
+      status: response.status,
+      error: `Inbox GET response was not valid JSON: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+  if (
+    !Array.isArray(parsed.entries) ||
+    typeof parsed.nextCursor !== "string" ||
+    typeof parsed.hasMore !== "boolean"
+  ) {
+    return {
+      ok: false,
+      status: response.status,
+      error: "Inbox GET response missing entries / nextCursor / hasMore",
+    };
+  }
+  const validEntries: InboxFetchEntry[] = [];
+  for (const raw of parsed.entries) {
+    if (
+      typeof raw === "object" &&
+      raw !== null &&
+      typeof (raw as { seq?: unknown }).seq === "string" &&
+      typeof (raw as { ciphertextB64?: unknown }).ciphertextB64 === "string" &&
+      typeof (raw as { deliveredAt?: unknown }).deliveredAt === "string"
+    ) {
+      validEntries.push(raw as InboxFetchEntry);
+    }
+  }
+  return {
+    ok: true,
+    entries: validEntries,
+    nextCursor: parsed.nextCursor,
+    hasMore: parsed.hasMore,
+  };
+}
+
+export interface DeleteInboxInput {
+  relayEndpoint: string;
+  recipientRootPubKeyB64Url: string;
+  seq: string;
+  authSigner: InboxAuthSigner;
+  nowMs: number;
+  fetchImpl?: typeof fetch;
+}
+
+export type DeleteInboxOutcome = { ok: true } | { ok: false; status: number; error: string };
+
+export async function deleteInbox(input: DeleteInboxInput): Promise<DeleteInboxOutcome> {
+  const url = `${buildInboxUrl(input.relayEndpoint, input.recipientRootPubKeyB64Url)}/${encodeURIComponent(
+    input.seq,
+  )}`;
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const headers = await buildAuthHeaders({
+    recipient: input.recipientRootPubKeyB64Url,
+    payload: inboxDeleteAuthPayload({
+      recipientRootPubKeyB64Url: input.recipientRootPubKeyB64Url,
+      timestampMs: input.nowMs,
+      seq: input.seq,
+    }),
+    timestampMs: input.nowMs,
+    authSigner: input.authSigner,
+  });
+  let response: Response;
+  try {
+    response = await fetchImpl(url, { method: "DELETE", headers });
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      error: `Inbox DELETE network error: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  if (!response.ok) {
+    return readErrorBody(response, "Inbox DELETE failed");
+  }
+  return { ok: true };
+}
+
+// ----- internal: auth headers + error body --------------------------------
+
+async function buildAuthHeaders(args: {
+  recipient: string;
+  payload: string;
+  timestampMs: number;
+  authSigner: InboxAuthSigner;
+}): Promise<Record<string, string>> {
+  const sig = await args.authSigner.sign(args.payload);
+  return {
+    [INBOX_HEADER_RECIPIENT]: args.recipient,
+    [INBOX_HEADER_TIMESTAMP]: String(args.timestampMs),
+    [INBOX_HEADER_SIGNATURE]: sig,
+  };
+}
+
+async function readErrorBody(
+  response: Response,
+  prefix: string,
+): Promise<{ ok: false; status: number; error: string }> {
+  let serverError = "";
+  try {
+    const text = await response.text();
+    serverError = text.length > 0 ? text : response.statusText;
+  } catch {
+    serverError = response.statusText;
+  }
+  return { ok: false, status: response.status, error: `${prefix}: ${serverError}` };
 }
 
 /**

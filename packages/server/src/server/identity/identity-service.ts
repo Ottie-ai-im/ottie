@@ -1,4 +1,4 @@
-import { randomUUID as randomUuid, type KeyObject } from "node:crypto";
+import { randomUUID as randomUuid, sign as nodeSign, type KeyObject } from "node:crypto";
 import type pino from "pino";
 
 import type { RelayConnectionHandler } from "../relay-transport.js";
@@ -59,7 +59,8 @@ import { FriendSyncDialer } from "./friend-sync-dialer.js";
 import { encryptFriendSyncFrame } from "./friend-sync-handshake.js";
 import { createFriendSyncConnectionHandler } from "./friend-sync-receiver.js";
 import { encryptInboxBlob } from "./friend-inbox-crypto.js";
-import { postInbox } from "./friend-inbox-client.js";
+import { postInbox, type InboxAuthSigner } from "./friend-inbox-client.js";
+import { processInboxOnce } from "./friend-inbox-receiver.js";
 import { loadPeerList, savePeerList, upsertPeer } from "./peer-store.js";
 import type { StoredPeer, StoredPeerList } from "./peer-types.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
@@ -143,6 +144,10 @@ export class IdentityService {
   private peerDialer: PeerSyncDialer | null = null;
   private readonly friendSessions: FriendSessionRegistry;
   private friendDialer: FriendSyncDialer | null = null;
+  /** Phase 3.b/2d: handle for the periodic inbox poller (clearable). */
+  private inboxPollHandle: ReturnType<typeof setInterval> | null = null;
+  /** Phase 3.b/2d: tracks an in-flight inbox round so kicks dedupe. */
+  private inboxInFlight: Promise<void> | null = null;
   private state: IdentityState;
   private selfDevice: SelfDeviceBundle | null = null;
   private deviceList: StoredDeviceList | null = null;
@@ -256,6 +261,9 @@ export class IdentityService {
     // so they auto-light up too.
     this.startPeerSync();
     this.startFriendSync();
+    // Phase 3.b/2d: start draining the offline inbox now that we know
+    // the recipient X25519 priv key (just generated/migrated above).
+    this.startInboxReceiver();
     return bundle;
   }
 
@@ -794,6 +802,91 @@ export class IdentityService {
   }
 
   /**
+   * Phase 3.b/2d: drive the offline-inbox poller. Fires one round
+   * immediately, then re-fires every `pollEveryMs` (default 5 minutes).
+   * Skips quietly if prerequisites (loaded identity, relay endpoint,
+   * encryption privkey) aren't ready — bootstrap calls this once at
+   * daemon-up regardless, so a fresh-onboarding daemon picks it up
+   * automatically once `initialize()` populates the rest.
+   *
+   * Idempotent: a second start while already running is a no-op.
+   */
+  startInboxReceiver(options?: { pollEveryMs?: number }): void {
+    if (this.inboxPollHandle) return;
+    const pollEveryMs = options?.pollEveryMs ?? 5 * 60 * 1000;
+
+    // Fire once now (don't wait the first interval tick).
+    void this.kickInboxOnce();
+    this.inboxPollHandle = setInterval(() => {
+      void this.kickInboxOnce();
+    }, pollEveryMs);
+    this.logger.info({ pollEveryMs }, "Inbox receiver started");
+  }
+
+  /** Cancel the periodic poller. Idempotent. */
+  stopInboxReceiver(): void {
+    if (this.inboxPollHandle) {
+      clearInterval(this.inboxPollHandle);
+      this.inboxPollHandle = null;
+    }
+  }
+
+  /**
+   * Trigger a single inbox round on demand. Coalesces overlapping
+   * calls — if a round is in-flight, return its promise rather than
+   * firing a parallel one.
+   */
+  kickInboxOnce(): Promise<void> {
+    if (this.inboxInFlight) return this.inboxInFlight;
+    this.inboxInFlight = this.runInboxRound().finally(() => {
+      this.inboxInFlight = null;
+    });
+    return this.inboxInFlight;
+  }
+
+  private async runInboxRound(): Promise<void> {
+    if (this.state.kind !== "loaded") return;
+    if (!this.relayEndpoint) return;
+    const encPriv = this.state.bundle.encryptionPrivateKeyB64;
+    if (!encPriv) return;
+
+    const rootSignPriv = this.state.bundle.signPrivateKey;
+    const authSigner: InboxAuthSigner = {
+      sign: (payload: string) => {
+        const sig = nodeSign(null, Buffer.from(payload, "utf8"), rootSignPriv);
+        return sig.toString("base64").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+      },
+    };
+
+    try {
+      const result = await processInboxOnce({
+        ottieHome: this.ottieHome,
+        selfRootSignPublicKeyB64: this.state.bundle.stored.signPublicKeyB64,
+        selfEncryptionPrivateKeyB64: encPriv,
+        authSigner,
+        relayEndpoint: this.relayEndpoint,
+        findPeer: (peerRootSignPublicKeyB64) =>
+          this.peerList?.peers.find(
+            (p) => p.peerRootSignPublicKeyB64 === peerRootSignPublicKeyB64,
+          ) ?? null,
+        logger: this.logger,
+      });
+      if (result.persisted > 0 || result.dropped > 0 || result.hitMaxPagesCap) {
+        this.logger.info(
+          {
+            persisted: result.persisted,
+            dropped: result.dropped,
+            hitMaxPagesCap: result.hitMaxPagesCap,
+          },
+          "inbox_round_complete",
+        );
+      }
+    } catch (err) {
+      this.logger.warn({ err }, "inbox_round_failed");
+    }
+  }
+
+  /**
    * Phase 3.b/1c: refresh the friend-sync dialer's view of peers.json.
    * Called after a peer is added (Phase 3.a/3 approve) so the dialer
    * picks them up without waiting for a daemon restart.
@@ -1218,6 +1311,7 @@ export class IdentityService {
     // identity is loaded; both calls are idempotent.
     this.startPeerSync();
     this.startFriendSync();
+    this.startInboxReceiver();
   }
 
   /**
