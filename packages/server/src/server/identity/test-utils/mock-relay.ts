@@ -146,6 +146,22 @@ export class MockRelay {
     );
     ws.on("close", () => {
       if (this.serverData.get(key) === ws) this.serverData.delete(key);
+      // Propagate close to client sockets bound to this connectionId.
+      // Without this, when a daemon's data socket goes down (e.g. the
+      // daemon shuts down), the dialer on the far side keeps a stale
+      // open WebSocket and never sees its `close` event — sessions
+      // hang forever and offline-detection tests time out. Real
+      // Cloudflare Workers propagate the close; MockRelay must too.
+      const clients = this.clients.get(key);
+      if (clients) {
+        for (const client of clients) {
+          try {
+            client.close(1001, "server_data_closed");
+          } catch {
+            // ignore
+          }
+        }
+      }
     });
   }
 
