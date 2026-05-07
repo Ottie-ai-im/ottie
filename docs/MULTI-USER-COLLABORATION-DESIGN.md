@@ -1134,100 +1134,131 @@ addedAt}`). `ChatMessageSchema` gains optional
         sides could end up with two sessions each, "most-recent-
         wins" picks mismatched socket pairs, and writes go into
         closed sockets.
-  - 🚧 3.b/2 — offline inbox. Sub-commits:
-    - ✅ 3.b/2a — per-identity X25519 encryption keypair + cross-
-      identity exchange at friend-pair time. Fixes the zero-
-      knowledge gap: friend-sync session keys are forward-secret
-      and gone by the time a recipient picks up an offline
-      message, so we can't store session-encrypted bytes in KV
-      (or the relay sees the friend-sync handshake's plaintext-
-      envelope sibling either way). Solution:
-      - Each root identity gets a long-lived X25519 keypair
-        stored alongside the Ed25519 signing keypair in
-        `root.json`. New identities mint one at create time;
-        old identities synthesize one on the next load and
-        persist (in-place migration).
-      - Friend-pair candidate (Bob → Alice) and approval
-        (Alice → Bob) each carry the sender's X25519 pubkey as
-        an optional field (back-compat with pre-3.b/2a peers
-        on the wire — the field is `.optional()` per the
-        backward-compat schema rule).
-      - Both sides store the peer's X25519 pubkey in
-        `peers.json` as `peerEncryptionPublicKeyB64`. Peers
-        paired before 3.b/2a have the field absent; sends to
-        those peers continue to fall back to the live-only
-        error path until the pair is re-done.
-      - The X25519 key is **not** covered by the Ed25519
-        authorization signature. Treat it as advisory routing
-        metadata: a tampered key means the recipient just
-        can't decrypt their own inbox and re-pairs. The
-        signing-key trust anchor (root pubkey, candidate
-        payload signature, peer authorization signature) is
-        unaffected. The trust model is documented inline in
-        `friend-pair-redeem-types.ts`.
-    - ✅ 3.b/2b — Cloudflare relay-side. New KV namespace
-      binding `OTTIE_INBOX` (declared in `wrangler.toml`; ID
-      to be filled in at first deploy via `wrangler kv:namespace
+  - 🚧 3.b/2 — offline inbox. Sub-commits: - ✅ 3.b/2a — per-identity X25519 encryption keypair + cross-
+    identity exchange at friend-pair time. Fixes the zero-
+    knowledge gap: friend-sync session keys are forward-secret
+    and gone by the time a recipient picks up an offline
+    message, so we can't store session-encrypted bytes in KV
+    (or the relay sees the friend-sync handshake's plaintext-
+    envelope sibling either way). Solution: - Each root identity gets a long-lived X25519 keypair
+    stored alongside the Ed25519 signing keypair in
+    `root.json`. New identities mint one at create time;
+    old identities synthesize one on the next load and
+    persist (in-place migration). - Friend-pair candidate (Bob → Alice) and approval
+    (Alice → Bob) each carry the sender's X25519 pubkey as
+    an optional field (back-compat with pre-3.b/2a peers
+    on the wire — the field is `.optional()` per the
+    backward-compat schema rule). - Both sides store the peer's X25519 pubkey in
+    `peers.json` as `peerEncryptionPublicKeyB64`. Peers
+    paired before 3.b/2a have the field absent; sends to
+    those peers continue to fall back to the live-only
+    error path until the pair is re-done. - The X25519 key is **not** covered by the Ed25519
+    authorization signature. Treat it as advisory routing
+    metadata: a tampered key means the recipient just
+    can't decrypt their own inbox and re-pairs. The
+    signing-key trust anchor (root pubkey, candidate
+    payload signature, peer authorization signature) is
+    unaffected. The trust model is documented inline in
+    `friend-pair-redeem-types.ts`. - ✅ 3.b/2b — Cloudflare relay-side. New KV namespace
+    binding `OTTIE_INBOX` (declared in `wrangler.toml`; ID
+    to be filled in at first deploy via `wrangler kv:namespace
 create OTTIE_INBOX`). Three HTTP routes added to the
-      Worker fetch handler ahead of `/ws`:
-      - `POST /inbox/{recipientRootPubKeyB64Url}` — anyone
-        can drop; body is the opaque ciphertext. Limits:
-        64KB per blob, 1000 entries / 10MB per recipient,
-        7-day TTL on each entry (KV `expirationTtl`).
-        Returns `{seq, deliveredAt}` on 200.
-      - `GET /inbox/{recipientRootPubKeyB64Url}?since=...` —
-        recipient signs a fetch payload with their root sign
-        privkey (Ed25519); Worker verifies via Web Crypto's
-        `crypto.subtle.verify("Ed25519")`. Returns oldest-
-        first entries newer than the cursor, the next cursor
-        to use, and a `hasMore` flag from KV's pagination.
-      - `DELETE /inbox/{recipientRootPubKeyB64Url}/{seq}` —
-        same auth, but the signed payload also binds the
-        specific seq so a leaked delete proof can only wipe
-        that one entry, not the whole inbox.
-        Storage layout (matches §8.2.2):
-      - `inbox:msg:{recipientPubKey}:{seq}` → ciphertext.
-        `seq` is `{16-digit ms ts}-{8-byte hex}` so KV LIST
-        returns oldest-first naturally and collisions across
-        parallel POSTs land at ~1-in-4-billion per ms.
-      - `inbox:meta:{recipientPubKey}` → JSON
-        `{entryCount, totalBytes, lastDeliveredAt}` for
-        quota gating. Updates are intentionally non-atomic;
-        KV's eventual consistency means we may briefly over-
-        or under-count under heavy concurrent writes, which
-        is fine for soft-quota spam defense.
-        Auth payload format (pinned; version-bumped on any
-        change):
-      - fetch: `ottie-inbox-fetch-v1\n{pubkey}\n{ts}`
-      - delete: `ottie-inbox-delete-v1\n{pubkey}\n{ts}\n{seq}`
-        Auth timestamp window: ±60s. Stale → 410 Gone.
-        Tested via in-memory KV mock (`inbox-handler.test.ts`,
-        19 cases): path matching, POST happy path + size +
-        quota gating, GET auth (missing/stale/wrong-sig/recipient-
-        mismatch), GET pagination + cursor, DELETE auth + seq
-        validation + meta shrink, end-to-end POST→GET→DELETE→GET
-        roundtrip.
-    - ⏳ 3.b/2c — daemon outbound: `sendFriendChatMessage`
-      offline branch builds + signs envelope as today, then NaCl-
-      boxes it under the peer's X25519 pubkey + a fresh sender
-      ephemeral, POSTs to relay. Returns `ok` with status
-      `"queued"` instead of the current error.
-    - ⏳ 3.b/2d — daemon inbound: on startup + on relay
-      reconnect, GET `/inbox` with cursor, decrypt each entry,
-      verify the envelope's root signature, persist via the
-      existing `friendChatStore`, then DELETE-ack. Cursor lives
-      in `$OTTIE_HOME/identity/inbox-cursor.json`.
-    - ⏳ 3.b/2e — UI delivery status: per-message indicator
-      `sending` → `queued (offline)` → `delivered`. Builds on
-      the same chat row component used for live messages.
-    - Multi-device fan-out caveat: the X25519 keypair is
-      **per-identity** (not per-device). Today only the device
-      that minted the identity has the matching private key, so
-      only that device can decrypt the inbox. Once peer-sync
-      (Phase 2.f) is extended to ferry the X25519 private key
-      across devices under the same identity (planned alongside
-      3.b/2c), all of the user's devices can decrypt offline
-      messages addressed to their identity.
+    Worker fetch handler ahead of `/ws`: - `POST /inbox/{recipientRootPubKeyB64Url}` — anyone
+    can drop; body is the opaque ciphertext. Limits:
+    64KB per blob, 1000 entries / 10MB per recipient,
+    7-day TTL on each entry (KV `expirationTtl`).
+    Returns `{seq, deliveredAt}` on 200. - `GET /inbox/{recipientRootPubKeyB64Url}?since=...` —
+    recipient signs a fetch payload with their root sign
+    privkey (Ed25519); Worker verifies via Web Crypto's
+    `crypto.subtle.verify("Ed25519")`. Returns oldest-
+    first entries newer than the cursor, the next cursor
+    to use, and a `hasMore` flag from KV's pagination. - `DELETE /inbox/{recipientRootPubKeyB64Url}/{seq}` —
+    same auth, but the signed payload also binds the
+    specific seq so a leaked delete proof can only wipe
+    that one entry, not the whole inbox.
+    Storage layout (matches §8.2.2): - `inbox:msg:{recipientPubKey}:{seq}` → ciphertext.
+    `seq` is `{16-digit ms ts}-{8-byte hex}` so KV LIST
+    returns oldest-first naturally and collisions across
+    parallel POSTs land at ~1-in-4-billion per ms. - `inbox:meta:{recipientPubKey}` → JSON
+    `{entryCount, totalBytes, lastDeliveredAt}` for
+    quota gating. Updates are intentionally non-atomic;
+    KV's eventual consistency means we may briefly over-
+    or under-count under heavy concurrent writes, which
+    is fine for soft-quota spam defense.
+    Auth payload format (pinned; version-bumped on any
+    change): - fetch: `ottie-inbox-fetch-v1\n{pubkey}\n{ts}` - delete: `ottie-inbox-delete-v1\n{pubkey}\n{ts}\n{seq}`
+    Auth timestamp window: ±60s. Stale → 410 Gone.
+    Tested via in-memory KV mock (`inbox-handler.test.ts`,
+    19 cases): path matching, POST happy path + size +
+    quota gating, GET auth (missing/stale/wrong-sig/recipient-
+    mismatch), GET pagination + cursor, DELETE auth + seq
+    validation + meta shrink, end-to-end POST→GET→DELETE→GET
+    roundtrip. - ✅ 3.b/2c — daemon outbound. `sendFriendChatMessage` is
+    now async and routes around an offline peer: - Build the `FriendChatMessageEnvelope` (signed by root
+    key) regardless of transport — same bytes go either
+    way, so the recipient verifies authorship the same
+    way for live and queued. - If a friend-sync session is open: encrypt under the
+    session shared key + send through the socket
+    (existing live path), tag the persisted line as
+    `deliveryStatus: "delivered"`. - Else if the peer record has `peerEncryptionPublicKeyB64`
+    (only true for peers paired post-3.b/2a) AND this
+    daemon has a `relayEndpoint` configured: NaCl-box the
+    envelope under a fresh sender X25519 ephemeral
+    targeting the peer's long-lived X25519 pubkey, JSON-
+    serialize the resulting `InboxBlob`, POST to relay
+    `/inbox/{recipientPubKey}`. Tag the persisted line as
+    `"queued"`. - Else (peer paired pre-3.b/2a OR no relay configured):
+    return a specific error string the UI can use to
+    prompt re-pair.
+    New modules: - `friend-inbox-types.ts` — `InboxBlob` zod schema
+    (`{v: 1, ephPublicKeyB64, ciphertextB64}`). - `friend-inbox-crypto.ts` — `encryptInboxBlob` /
+    `decryptInboxBlob`, sharing the same NaCl-box +
+    base64 helpers used by `friend-pair-redeem`. Returns
+    a `Result`-style outcome on decrypt so callers can
+    surface clean errors instead of try/catching. - `friend-inbox-client.ts` — `postInbox(...)` thin
+    `fetch` wrapper. Mirrors `inboxFetchAuthPayload` /
+    `inboxDeleteAuthPayload` from the relay side
+    verbatim — drift between the two would silently
+    break GET/DELETE auth when 3.b/2d wires it in.
+    Schema bump (back-compat): - `StoredFriendChatMessage` gets an optional
+    `deliveryStatus: "delivered" | "queued"`. Old lines
+    (no field) parse cleanly and resolve to `undefined`;
+    `.catch(undefined)` on the union means a future
+    unknown enum value also doesn't poison the line.
+    Tested via three test files (22 cases total): - `friend-inbox-crypto.test.ts` (7) — happy roundtrip,
+    ephemeral freshness, wrong-privkey rejection,
+    schema-invalid blob, non-JSON blob, parsed-object
+    input, empty-pubkey rejection. - `friend-inbox-client.test.ts` (7) — POST URL +
+    method + body, error propagation on 4xx/5xx, fetch
+    throw → network-error wrapper, JSON / shape
+    validation on 200, plus pinned-format mirror checks
+    on the auth payload helpers (catches drift from the
+    relay side). - `friend-chat-service.test.ts` (+2 new) — queues to
+    inbox when peer is offline + has encryption pubkey +
+    relay endpoint, and surfaces relay error when the
+    POST returns non-2xx. The 3.b/2a-back-compat case
+    (pre-3.b/2a peer with no encryption pubkey) now
+    returns a "re-pair" hint instead of the old generic
+    offline error.
+    Multi-device note: this commit covers the SENDER side.
+    The recipient pulls inbox + decrypts in 3.b/2d; the
+    X25519-private-key fan-out across recipient's own
+    devices remains the only outstanding piece (deferred,
+    handled alongside 3.b/2d's daemon-inbound work or as a
+    follow-up alongside peer-sync). - ⏳ 3.b/2d — daemon inbound: on startup + on relay
+    reconnect, GET `/inbox` with cursor, decrypt each entry,
+    verify the envelope's root signature, persist via the
+    existing `friendChatStore`, then DELETE-ack. Cursor lives
+    in `$OTTIE_HOME/identity/inbox-cursor.json`. - ⏳ 3.b/2e — UI delivery status: per-message indicator
+    `sending` → `queued (offline)` → `delivered`. Builds on
+    the same chat row component used for live messages. - Multi-device fan-out caveat: the X25519 keypair is
+    **per-identity** (not per-device). Today only the device
+    that minted the identity has the matching private key, so
+    only that device can decrypt the inbox. Once peer-sync
+    (Phase 2.f) is extended to ferry the X25519 private key
+    across devices under the same identity (planned alongside
+    3.b/2c), all of the user's devices can decrypt offline
+    messages addressed to their identity.
   - 🚧 3.b/3 — read receipts + UI integration. Done in sub-commits:
     - ✅ 3.b/3 UI v1 — standalone friend chat screen at
       `/h/[serverId]/friend/[peerRootPubKey]` (message bubbles,

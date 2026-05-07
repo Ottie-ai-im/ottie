@@ -2665,7 +2665,7 @@ export class Session {
       });
       return;
     }
-    const result = this.identityService.sendFriendChatMessage({
+    const result = await this.identityService.sendFriendChatMessage({
       peerRootPubKey: request.peerRootPubKey,
       body: request.body,
       ...(request.clientMessageId ? { clientMessageId: request.clientMessageId } : {}),

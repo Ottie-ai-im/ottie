@@ -44,6 +44,24 @@ import { ChatMessageSchema, type ChatMessage } from "../chat/chat-types.js";
 const CHAT_DIRNAME = "chat";
 const FRIENDS_DIRNAME = "friends";
 
+/**
+ * Phase 3.b/2c: how this daemon last understood the message's
+ * delivery state. Persisted alongside the message so the UI can
+ * surface "queued offline / delivered live" without a side store.
+ *
+ *   - "delivered": pushed through a live friend-sync session
+ *     (recipient's daemon received it on the wire).
+ *   - "queued":   relayed via the offline KV inbox; recipient picks
+ *     it up next time they connect.
+ *
+ * Optional for back-compat with messages persisted before 3.b/2c —
+ * those default to "delivered" semantics on read since the offline
+ * branch didn't exist when they were written. The on-disk schema
+ * accepts unknown values and falls back to undefined (no panic on
+ * future kinds added under a forward-compatible bump).
+ */
+export type FriendChatMessageDeliveryStatus = "delivered" | "queued";
+
 export interface StoredFriendChatMessage {
   /** Mirrors the in-flight ChatMessage exactly. */
   message: ChatMessage;
@@ -57,6 +75,8 @@ export interface StoredFriendChatMessage {
    * Phase 3.b/3 do "everything after seq N" cursor sync.
    */
   storedSeq: number;
+  /** Phase 3.b/2c — see FriendChatMessageDeliveryStatus. */
+  deliveryStatus?: FriendChatMessageDeliveryStatus;
 }
 
 export function friendChatDirPath(ottieHome: string): string {
@@ -182,6 +202,13 @@ const StoredFriendChatMessageInternal = z.object({
   authorSignatureB64: z.string().min(1),
   persistedAt: z.string(),
   storedSeq: z.number().int().positive(),
+  // Phase 3.b/2c: optional + .catch() so a future enum value doesn't
+  // poison the whole line (forward-compat). Old lines simply omit
+  // the field and resolve to undefined.
+  deliveryStatus: z
+    .union([z.literal("delivered"), z.literal("queued")])
+    .optional()
+    .catch(undefined),
 });
 
 function sha256Hex(input: string): string {

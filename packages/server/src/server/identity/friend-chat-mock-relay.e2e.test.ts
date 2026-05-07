@@ -156,7 +156,7 @@ describe("Phase 3.b/1d mock-relay e2e — pair then chat over friend-sync", () =
       });
 
       // === Bob → Alice: "hello alice" ===
-      const bobToAlice = bob.sendFriendChatMessage({
+      const bobToAlice = await bob.sendFriendChatMessage({
         peerRootPubKey: alice.requireBundle().stored.signPublicKeyB64,
         body: "hello alice",
       });
@@ -177,7 +177,7 @@ describe("Phase 3.b/1d mock-relay e2e — pair then chat over friend-sync", () =
       expect(aliceReceived[0]?.message.authorDeviceId).toBe("srv_bob_fc_e2e");
 
       // === Alice → Bob: "hi bob" ===
-      const aliceToBob = alice.sendFriendChatMessage({
+      const aliceToBob = await alice.sendFriendChatMessage({
         peerRootPubKey: bob.requireBundle().stored.signPublicKeyB64,
         body: "hi bob",
       });

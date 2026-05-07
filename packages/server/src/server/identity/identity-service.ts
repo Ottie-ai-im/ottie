@@ -58,6 +58,8 @@ import { FriendSessionRegistry } from "./friend-session-registry.js";
 import { FriendSyncDialer } from "./friend-sync-dialer.js";
 import { encryptFriendSyncFrame } from "./friend-sync-handshake.js";
 import { createFriendSyncConnectionHandler } from "./friend-sync-receiver.js";
+import { encryptInboxBlob } from "./friend-inbox-crypto.js";
+import { postInbox } from "./friend-inbox-client.js";
 import { loadPeerList, savePeerList, upsertPeer } from "./peer-store.js";
 import type { StoredPeer, StoredPeerList } from "./peer-types.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
@@ -884,12 +886,12 @@ export class IdentityService {
    * + optional clientMessageId; the daemon mints id/createdAt and
    * stamps in author root + device.
    */
-  sendFriendChatMessage(input: {
+  async sendFriendChatMessage(input: {
     peerRootPubKey: string;
     body: string;
     clientMessageId?: string;
     replyToMessageId?: string;
-  }): { ok: true; stored: StoredFriendChatMessage } | { ok: false; error: string } {
+  }): Promise<{ ok: true; stored: StoredFriendChatMessage } | { ok: false; error: string }> {
     if (this.state.kind !== "loaded") {
       return { ok: false, error: "Cannot send chat — root identity not loaded" };
     }
@@ -909,17 +911,6 @@ export class IdentityService {
     }
     if (peer.status !== "active") {
       return { ok: false, error: `Peer is ${peer.status}, refusing to send` };
-    }
-
-    const session = this.friendSessions.get(input.peerRootPubKey);
-    if (!session) {
-      // Phase 3.b/2 will queue these into a Cloudflare KV inbox so
-      // they reach the friend on next connect. For 3.b/1d the
-      // semantics are strictly live-only.
-      return {
-        ok: false,
-        error: "Friend is offline — message not delivered (offline inbox arrives in Phase 3.b/2)",
-      };
     }
 
     const roomId = p2pRoomId({
@@ -954,29 +945,94 @@ export class IdentityService {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
 
-    // Encrypt + send through the live session.
-    let frame;
-    try {
-      frame = encryptFriendSyncFrame({
-        sharedKey: session.sharedKey,
-        plaintext: JSON.stringify(envelope),
+    // Phase 3.b/2c: pick live (friend-sync session) or queued (offline
+    // inbox at relay). Both paths build the same envelope; only the
+    // transport differs. If neither is available, surface an explicit
+    // error so the UI can prompt the user to re-pair.
+    const session = this.friendSessions.get(input.peerRootPubKey);
+    let deliveryStatus: "delivered" | "queued";
+
+    if (session) {
+      let frame;
+      try {
+        frame = encryptFriendSyncFrame({
+          sharedKey: session.sharedKey,
+          plaintext: JSON.stringify(envelope),
+        });
+      } catch (err) {
+        return {
+          ok: false,
+          error: `Failed to encrypt message: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+      try {
+        session.socket.send(JSON.stringify(frame));
+      } catch (err) {
+        return {
+          ok: false,
+          error: `Failed to send through session: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        };
+      }
+      deliveryStatus = "delivered";
+    } else if (peer.peerEncryptionPublicKeyB64 && this.relayEndpoint) {
+      // Friend is offline; encrypt to their long-lived X25519 pubkey
+      // (captured at friend-pair time in 3.b/2a) and POST to the relay
+      // KV inbox (3.b/2b). Recipient picks up + decrypts on their next
+      // connect (3.b/2d).
+      let serializedBlob: string;
+      try {
+        serializedBlob = encryptInboxBlob({
+          envelope,
+          recipientEncryptionPublicKeyB64: peer.peerEncryptionPublicKeyB64,
+        }).serializedBlob;
+      } catch (err) {
+        return {
+          ok: false,
+          error: `Failed to encrypt for inbox: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+      const postOutcome = await postInbox({
+        relayEndpoint: this.relayEndpoint,
+        recipientRootPubKeyB64Url: input.peerRootPubKey,
+        body: serializedBlob,
       });
-    } catch (err) {
-      return {
-        ok: false,
-        error: `Failed to encrypt message: ${err instanceof Error ? err.message : String(err)}`,
-      };
-    }
-    try {
-      session.socket.send(JSON.stringify(frame));
-    } catch (err) {
-      return {
-        ok: false,
-        error: `Failed to send through session: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      if (!postOutcome.ok) {
+        this.logger.warn(
+          {
+            peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
+            status: postOutcome.status,
+            error: postOutcome.error,
+          },
+          "friend_chat_inbox_post_failed",
+        );
+        return {
+          ok: false,
+          error: `Friend is offline and inbox POST failed (${postOutcome.status}): ${postOutcome.error}`,
+        };
+      }
+      this.logger.info(
+        {
+          peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
+          inboxSeq: postOutcome.seq,
+        },
+        "friend_chat_inbox_post_succeeded",
+      );
+      deliveryStatus = "queued";
+    } else {
+      // Either the peer was paired before 3.b/2a (no encryption pubkey)
+      // or this daemon has no relay endpoint configured. Surface a
+      // specific message so the UI can suggest the right fix.
+      const reason = !peer.peerEncryptionPublicKeyB64
+        ? "Friend was paired before offline inbox shipped — re-pair to enable queued delivery"
+        : "Friend is offline and this daemon is not connected to a relay";
+      return { ok: false, error: reason };
     }
 
-    // Persist locally so the sender's UI can render it immediately.
+    // Persist locally so the sender's UI can render it immediately,
+    // tagged with the path it took. UI surfaces "queued" with a
+    // distinct visual treatment in 3.b/2e.
     let stored: StoredFriendChatMessage;
     try {
       stored = appendFriendChatMessage(
@@ -986,6 +1042,7 @@ export class IdentityService {
           message,
           authorSignatureB64: envelope.authorSignatureB64,
           persistedAt: now.toISOString(),
+          deliveryStatus,
         },
         this.logger,
       );
@@ -1003,6 +1060,7 @@ export class IdentityService {
         peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
         messageId,
         storedSeq: stored.storedSeq,
+        deliveryStatus,
       },
       "friend_chat_message_sent",
     );
