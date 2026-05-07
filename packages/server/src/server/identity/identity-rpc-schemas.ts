@@ -574,6 +574,105 @@ export const ChatP2pListResponseSchema = z.object({
   }),
 });
 
+// ----- chat/p2p/ai-share (Phase 4 v1) ------------------------------------
+// Owner sends an invitation, friend lists pending + accepts/declines.
+// All four ride the same WS message family for symmetry with chat/p2p/*.
+// Wire shapes mirror the canonical envelopes in `ai-share-types.ts`
+// (see docs/MULTI-USER-COLLABORATION-DESIGN.md §11.5).
+
+export const AiShareInviteOnWireSchema = z.object({
+  inviteId: z.string().min(1),
+  ownerRootPubKeyB64: z.string().min(1),
+  ownerDeviceId: z.string().min(1),
+  agentId: z.string().min(1),
+  agentLabel: z.string().min(1),
+  agentProvider: z.string().min(1),
+  generatedAt: z.string(),
+  expiresAt: z.string(),
+  /** Daemon-side state: only populated on owner-side list responses. */
+  state: z.enum(["pending", "accepted", "declined", "expired"]).optional(),
+  /** Peer pubkey the invite was sent to (owner-side list responses). */
+  peerRootPubKeyB64: z.string().optional(),
+});
+export type AiShareInviteOnWire = z.infer<typeof AiShareInviteOnWireSchema>;
+
+export const ChatP2pAiShareInviteRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/invite"),
+  requestId: z.string(),
+  peerRootPubKey: z.string().min(1),
+  agentId: z.string().min(1),
+  agentLabel: z.string().min(1).max(64),
+  agentProvider: z.string().min(1).max(32),
+});
+
+export const ChatP2pAiShareInviteResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/invite/response"),
+  payload: z.object({
+    requestId: z.string(),
+    invite: AiShareInviteOnWireSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ChatP2pAiShareListInboundRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-inbound"),
+  requestId: z.string(),
+});
+
+export const ChatP2pAiShareListInboundResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-inbound/response"),
+  payload: z.object({
+    requestId: z.string(),
+    invites: z.array(AiShareInviteOnWireSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ChatP2pAiShareAcceptRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/accept"),
+  requestId: z.string(),
+  inviteId: z.string().min(1),
+});
+
+export const ChatP2pAiShareAcceptResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/accept/response"),
+  payload: z.object({
+    requestId: z.string(),
+    accepted: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ChatP2pAiShareDeclineRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/decline"),
+  requestId: z.string(),
+  inviteId: z.string().min(1),
+  reason: z.string().max(200).optional(),
+});
+
+export const ChatP2pAiShareDeclineResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/decline/response"),
+  payload: z.object({
+    requestId: z.string(),
+    declined: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ChatP2pAiShareListOutboundRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-outbound"),
+  requestId: z.string(),
+});
+
+export const ChatP2pAiShareListOutboundResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-outbound/response"),
+  payload: z.object({
+    requestId: z.string(),
+    invites: z.array(AiShareInviteOnWireSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 // ----- device/remove (Phase 2.g) -----------------------------------------
 // Remove a peer device from THIS user's device list. Refused for self
 // (a daemon can't sign its own revocation — use another device).

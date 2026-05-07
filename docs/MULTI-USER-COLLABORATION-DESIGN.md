@@ -730,6 +730,187 @@ All transitions are `ChatMessage`s with appropriate `kind`. They appear in the c
 
 ---
 
+## 11.5. Phase 4 — AI sharing — implementation spec
+
+This section is the concrete v1+v2+v3 split for the design questions
+§7.5 and §11 already locked. v1 ships in the multi-user-collab branch
+and is invitation-handshake only (no actual agent streaming yet);
+v2 wires the live timeline + prompt-injection; v3 adds the
+multi-daemon picker from §7.5.
+
+### 11.5.1. Why the split
+
+§7 / §7.5 lock the **product** decisions (privacy carve-outs, modal
+flow, cancel UX, switching rules). They don't lock the technical
+ordering. In practice the implementation breaks naturally into:
+
+- **The handshake** — invite, accept, decline, expire. Pure
+  metadata; no per-tool-call permissions involved. Owner picks an
+  agent; friend says yes/no. Nothing actually streams. This is
+  v1.
+- **The live channel** — owner's agent timeline events fan out to
+  the friend; friend's chat-style prompts inject into the owner's
+  agent. Wires deeply into AgentManager + permission flow + UI.
+  This is v2.
+- **Multi-daemon picker** — §7.5's two-step modal across all of
+  the owner's online devices. Requires peer-sync to coordinate
+  "which device picks up". v3.
+
+Shipping v1 alone is a real product surface (you can prove the
+invitation flow on two real daemons), and it doesn't dead-end —
+v2 layers on top with the same channel and message envelope.
+
+### 11.5.2. Channel choice
+
+**Reuse the existing `friend-sync:<nonce>` connection.** Don't open
+a new `ai-share:<sessionId>` prefix. Reasons:
+
+- Friend-sync is already the cross-identity encrypted bidi tube.
+  Adding a new prefix would duplicate dialer + receiver +
+  session-registry plumbing.
+- The session is already long-lived (3.b/1c) and its forward-
+  secrecy properties are what we want for sharing too.
+- Disambiguation lives in the envelope: the existing
+  `FriendChatMessageEnvelope` has `kind: "friend-chat-message"`;
+  the new envelopes add their own `kind` value
+  (`"ai-share-invite"`, `"ai-share-accept"`, etc.) under the same
+  signed-by-root pattern.
+
+The receiver in `handleInboundFriendSyncPayload` (currently chat-
+only) gains a small dispatcher: parse the JSON, route by `kind`.
+
+### 11.5.3. Wire schemas (v1)
+
+All envelopes ride inside a `FriendSyncFrame` (existing 3.b/1b
+encryption layer). Each envelope carries its own Ed25519 signature
+by the sender's root sign privkey — making the underlying
+authorship verifiable independent of the friend-sync session.
+
+```ts
+// Sent by owner → friend, opens a pending invite on the friend's
+// side. Owner-side persists nothing yet (waits for accept).
+{ v: 1, kind: "ai-share-invite",
+  inviteId: string,           // "ais_<uuid>"
+  ownerRootPubKeyB64: string, // sender; mirrored from envelope for self-containment
+  ownerDeviceId: string,      // which of the owner's daemons hosts the agent
+  agentId: string,            // local id (only meaningful on owner side)
+  agentLabel: string,         // "Claude Code" / "Codex" / a user-set label
+  agentProvider: string,      // "claude" | "codex" | "opencode" | …
+  expiresAt: string,          // ISO; auto-decline after this
+  inviteSignatureB64: string, // Ed25519 sig over the canonical payload below
+}
+
+// Friend → owner, after the friend taps Accept. inviteId echoes back
+// so the owner can find the in-flight invite.
+{ v: 1, kind: "ai-share-accept",
+  inviteId: string,
+  acceptedAt: string,
+  acceptSignatureB64: string,
+}
+
+// Friend → owner, on tap Decline OR auto-decline at expiry.
+{ v: 1, kind: "ai-share-decline",
+  inviteId: string,
+  declinedAt: string,
+  reason?: string,            // human-readable; UI shows verbatim
+  declineSignatureB64: string,
+}
+```
+
+Canonical signed payload (v1 — pinned format, version-bumped on
+any change):
+
+```
+ottie-ai-share-invite-v1
+{inviteId}
+{ownerRootPubKeyB64}
+{ownerDeviceId}
+{agentProvider}
+{agentLabel}
+{expiresAt}
+```
+
+Accept / decline use parallel forms with `ottie-ai-share-{accept,
+decline}-v1` headers.
+
+### 11.5.4. Daemon-side state (v1)
+
+Two in-memory stores — both small and short-lived, no disk yet:
+
+- **Outbound (owner side):** `OutboundAiShareInviteStore`. Map
+  keyed by `inviteId`. Records the pending state until the friend
+  responds or the invite expires. Auto-evicts on TTL (default 5
+  min — same window as friend-pair offers).
+- **Inbound (friend side):** `InboundAiShareInviteStore`. Map
+  keyed by `inviteId`. Holds invitations the user hasn't yet
+  accepted / declined. The notification center reads from this.
+
+When the friend accepts, the owner's outbound store transitions
+the invite to "accepted" and the daemon emits a
+`ai-share/state/update` WS event so the owner's UI can render
+"Bob accepted — share is now active". v2 then takes over the
+session; v1 leaves it in "active stub" state.
+
+### 11.5.5. WS RPCs (v1)
+
+```
+chat/p2p/ai-share/invite          # owner → daemon: send invite
+chat/p2p/ai-share/list-inbound    # friend → daemon: get pending invites
+chat/p2p/ai-share/accept          # friend → daemon: accept inviteId
+chat/p2p/ai-share/decline         # friend → daemon: decline inviteId
+chat/p2p/ai-share/list-outbound   # owner → daemon: own in-flight invites
+```
+
+All request types carry a `requestId` and respond with a matching
+`/response` event (existing pattern). All responses are
+`.optional()`-additive over the WS schema rule.
+
+### 11.5.6. UI (v1)
+
+- **Friend chat header** (existing
+  `/h/[serverId]/friend/[peerRootPubKey]` screen): new
+  "Share AI" button next to the title. Tap → modal.
+- **Share modal** (v1 simplification): single step (skip §7.5's
+  two-step picker for v1). Lists local agents → owner picks one →
+  taps Confirm. Daemon mints an inviteId, sends through friend-
+  sync.
+- **Notification center** (just shipped in §6.3): add a new
+  `kind: "ai-share-invite"` to `NotificationItem`. Renders as
+  "Wendell wants to share Codex with you". Tap → accept/decline
+  modal.
+- **Accept/decline modal**: shows what's being shared (provider +
+  label) and the privacy disclaimer (§7 carve-outs).
+- **Active state banner** (v1 stub): after accept, both sides see
+  "AI share active — live timeline + prompt injection ship in v2".
+  v2 replaces this with the real banner from §7.5.
+
+### 11.5.7. Out of scope for v1
+
+- Owner's agent timeline streaming to friend → v2.
+- Friend's prompts injecting into owner's running agent → v2.
+- Multi-daemon picker (§7.5's two-step modal) → v3.
+- Per-tool-call permission UI on owner side → v2 (already
+  partially exists in `agent_permission_request`; needs to fan
+  out to friend's view too).
+- Auditable transcript persistence (§7 last bullet) → v2.
+- Limits enforcement (max prompts, max tokens, session timeout)
+  → v3.
+- First-share extra friction (Q2) → v3 — implement once v2's
+  share is real. v1's bare modal is enough to validate the
+  product loop.
+- End-session button → v2 (only needed once there's something
+  active to end).
+
+### 11.5.8. v1 success criterion
+
+Wendell on his Mac shares Codex with Bob on his Mac. Bob's bell
+shows the invite. Bob accepts. Wendell's UI updates to "Bob
+accepted". Wendell's ottie-ai-share log on disk records the
+invitation + acceptance. Both daemons' tests + the existing
+3.b/1d / 3.b/2 tests still pass.
+
+---
+
 ## 11. PRODUCT.md Update (proposed addition)
 
 Add to PRODUCT.md after the existing "Current target" section:

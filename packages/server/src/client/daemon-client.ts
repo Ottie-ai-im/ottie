@@ -1736,6 +1736,119 @@ export class DaemonClient {
     });
   }
 
+  // ----- Phase 4 v1: AI-share invitations ------------------------------
+
+  async chatP2pAiShareInvite(args: {
+    peerRootPubKey: string;
+    agentId: string;
+    agentLabel: string;
+    agentProvider: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{
+    invite: import("../server/identity/identity-rpc-schemas.js").AiShareInviteOnWire | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "chat/p2p/ai-share/invite",
+        requestId,
+        peerRootPubKey: args.peerRootPubKey,
+        agentId: args.agentId,
+        agentLabel: args.agentLabel,
+        agentProvider: args.agentProvider,
+      },
+      timeout: args.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/invite/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { invite: msg.payload.invite, error: msg.payload.error };
+      },
+    });
+  }
+
+  async chatP2pAiShareListInbound(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    invites:
+      | readonly import("../server/identity/identity-rpc-schemas.js").AiShareInviteOnWire[]
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "chat/p2p/ai-share/list-inbound", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/list-inbound/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { invites: msg.payload.invites, error: msg.payload.error };
+      },
+    });
+  }
+
+  async chatP2pAiShareAccept(args: {
+    inviteId: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{ accepted: boolean; error: string | null }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "chat/p2p/ai-share/accept", requestId, inviteId: args.inviteId },
+      timeout: args.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/accept/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { accepted: msg.payload.accepted, error: msg.payload.error };
+      },
+    });
+  }
+
+  async chatP2pAiShareDecline(args: {
+    inviteId: string;
+    reason?: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{ declined: boolean; error: string | null }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "chat/p2p/ai-share/decline",
+        requestId,
+        inviteId: args.inviteId,
+        ...(args.reason !== undefined ? { reason: args.reason } : {}),
+      },
+      timeout: args.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/decline/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { declined: msg.payload.declined, error: msg.payload.error };
+      },
+    });
+  }
+
+  async chatP2pAiShareListOutbound(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    invites:
+      | readonly import("../server/identity/identity-rpc-schemas.js").AiShareInviteOnWire[]
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "chat/p2p/ai-share/list-outbound", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/list-outbound/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { invites: msg.payload.invites, error: msg.payload.error };
+      },
+    });
+  }
+
   async deviceLinkRedeem(args: {
     deepLink: string;
     deviceLabel: string;

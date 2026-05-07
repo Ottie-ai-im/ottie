@@ -3,10 +3,12 @@ import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { UserPlus } from "lucide-react-native";
+import { Sparkles, UserPlus } from "lucide-react-native";
 
 import { AdaptiveModalSheet } from "./adaptive-modal-sheet";
 import { useNotifications, type NotificationItem } from "@/hooks/use-notifications";
+import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { useQueryClient } from "@tanstack/react-query";
 
 /**
  * Phase 3.b/3 — notification center panel. Surfaces the things that
@@ -52,7 +54,7 @@ export function NotificationCenterPanel({
       ) : (
         <View style={styles.list}>
           {items.map((item) => (
-            <NotificationRow key={item.id} item={item} onActioned={onClose} />
+            <NotificationRow key={item.id} item={item} onActioned={onClose} serverId={serverId} />
           ))}
         </View>
       )}
@@ -60,19 +62,54 @@ export function NotificationCenterPanel({
   );
 }
 
-function NotificationRow({ item, onActioned }: { item: NotificationItem; onActioned: () => void }) {
+function NotificationRow({
+  item,
+  onActioned,
+  serverId,
+}: {
+  item: NotificationItem;
+  onActioned: () => void;
+  serverId: string | null;
+}) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const handlePress = useCallback(() => {
-    if (item.kind === "friend-pair-candidate") {
-      // Deep-link to the Identity page where the existing
-      // `PendingFriendRequestsSection` renders the Approve / Reject
-      // buttons against the same candidate. The user lands directly
-      // on the section that takes action.
-      router.push("/settings/identity");
-    }
+  const client = useHostRuntimeClient(serverId ?? "");
+  const queryClient = useQueryClient();
+
+  const handleFriendPairPress = useCallback(() => {
+    router.push("/settings/identity");
     onActioned();
-  }, [item, onActioned]);
+  }, [onActioned]);
+
+  const handleAiShareAccept = useCallback(
+    async (inviteId: string) => {
+      if (!client) return;
+      try {
+        await client.chatP2pAiShareAccept({ inviteId });
+        await queryClient.invalidateQueries({
+          queryKey: ["notifications-ai-share-invites-inbound", serverId],
+        });
+      } finally {
+        onActioned();
+      }
+    },
+    [client, onActioned, queryClient, serverId],
+  );
+
+  const handleAiShareDecline = useCallback(
+    async (inviteId: string) => {
+      if (!client) return;
+      try {
+        await client.chatP2pAiShareDecline({ inviteId });
+        await queryClient.invalidateQueries({
+          queryKey: ["notifications-ai-share-invites-inbound", serverId],
+        });
+      } finally {
+        onActioned();
+      }
+    },
+    [client, onActioned, queryClient, serverId],
+  );
 
   if (item.kind === "friend-pair-candidate") {
     const candidate = item.payload.candidate;
@@ -80,7 +117,7 @@ function NotificationRow({ item, onActioned }: { item: NotificationItem; onActio
     return (
       <Pressable
         accessibilityRole="button"
-        onPress={handlePress}
+        onPress={handleFriendPairPress}
         style={({ hovered }) => [styles.row, hovered ? styles.rowHovered : null]}
         testID={`notification-row-friend-pair-${candidate.nonceB64.slice(0, 8)}`}
       >
@@ -104,8 +141,63 @@ function NotificationRow({ item, onActioned }: { item: NotificationItem; onActio
       </Pressable>
     );
   }
+
+  if (item.kind === "ai-share-invite") {
+    const invite = item.payload.invite;
+    return (
+      <View style={styles.row} testID={`notification-row-ai-share-${invite.inviteId.slice(0, 8)}`}>
+        <View style={styles.iconCircle}>
+          <Sparkles size={18} color={theme.colors.foregroundMuted} />
+        </View>
+        <View style={styles.rowBody}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {t("notifications.aiShareTitle", {
+              label: invite.agentLabel,
+              defaultValue: "Wants to share {{label}}",
+            })}
+          </Text>
+          <Text style={styles.rowSubtitle} numberOfLines={1}>
+            {t("notifications.aiShareSubtitle", {
+              provider: invite.agentProvider,
+              defaultValue: "{{provider}} · accept or decline below",
+            })}
+          </Text>
+          <View style={styles.aiShareActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void handleAiShareAccept(invite.inviteId)}
+              style={({ hovered }) => [
+                styles.actionButton,
+                styles.actionButtonAccept,
+                hovered ? styles.actionButtonHovered : null,
+              ]}
+              testID={`notification-ai-share-accept-${invite.inviteId.slice(0, 8)}`}
+            >
+              <Text style={styles.actionButtonAcceptText}>
+                {t("notifications.aiShareAccept", { defaultValue: "Accept" })}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void handleAiShareDecline(invite.inviteId)}
+              style={({ hovered }) => [
+                styles.actionButton,
+                hovered ? styles.actionButtonHovered : null,
+              ]}
+              testID={`notification-ai-share-decline-${invite.inviteId.slice(0, 8)}`}
+            >
+              <Text style={styles.actionButtonText}>
+                {t("notifications.aiShareDecline", { defaultValue: "Decline" })}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   // Future kinds land here — exhaustiveness check via never:
-  const _exhaustive: never = item.kind;
+  const _exhaustive: never = item;
   return _exhaustive;
 }
 
@@ -160,5 +252,36 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     marginTop: 2,
+  },
+  aiShareActions: {
+    flexDirection: "row",
+    gap: theme.spacing[2],
+    marginTop: theme.spacing[2],
+  },
+  actionButton: {
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[3],
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+  },
+  actionButtonAccept: {
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.accent,
+  },
+  actionButtonHovered: {
+    backgroundColor: theme.colors.surfaceGlassHover,
+  },
+  actionButtonText: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  actionButtonAcceptText: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.palette.white,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
   },
 }));

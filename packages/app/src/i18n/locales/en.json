@@ -125,6 +125,15 @@
     "sending": "Sending…",
     "sendFailedGeneric": "Couldn't send message.",
     "statusQueued": "queued (offline)",
+    "shareAi": {
+      "button": "Share AI",
+      "modalTitle": "Share an AI agent",
+      "intro": "Send your friend an invite to share {{label}}. They'll get a notification and can accept or decline.",
+      "disclaimer": "v1 ships the invitation handshake only; live agent timeline + prompt-injection arrive in v2.",
+      "sent": "Invite for {{label}} sent. Friend will see it in their bell.",
+      "send": "Send invite",
+      "sending": "Sending…"
+    },
     "peerStatus": {
       "active": "Active",
       "blocked": "Blocked",
@@ -442,7 +451,11 @@
     "title": "Notifications",
     "empty": "You're all caught up.",
     "friendPairTitle": "Friend request from {{name}}",
-    "friendPairSubtitle": "{{pubkey}}… · tap to approve"
+    "friendPairSubtitle": "{{pubkey}}… · tap to approve",
+    "aiShareTitle": "Wants to share {{label}}",
+    "aiShareSubtitle": "{{provider}} · accept or decline below",
+    "aiShareAccept": "Accept",
+    "aiShareDecline": "Decline"
   },
   "assistants": {
     "title": "Assistants",

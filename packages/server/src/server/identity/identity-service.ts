@@ -61,6 +61,21 @@ import { createFriendSyncConnectionHandler } from "./friend-sync-receiver.js";
 import { encryptInboxBlob } from "./friend-inbox-crypto.js";
 import { postInbox, type InboxAuthSigner } from "./friend-inbox-client.js";
 import { processInboxOnce } from "./friend-inbox-receiver.js";
+import {
+  buildAiShareAcceptEnvelope,
+  buildAiShareDeclineEnvelope,
+  buildAiShareInviteEnvelope,
+  tryParseAiShareEnvelope,
+  verifyAiShareAcceptEnvelope,
+  verifyAiShareDeclineEnvelope,
+  verifyAiShareInviteEnvelope,
+} from "./ai-share-crypto.js";
+import { AiShareInviteRegistry } from "./ai-share-registry.js";
+import type {
+  AiShareAcceptEnvelope,
+  AiShareDeclineEnvelope,
+  AiShareInviteEnvelope,
+} from "./ai-share-types.js";
 import { loadPeerList, savePeerList, upsertPeer } from "./peer-store.js";
 import type { StoredPeer, StoredPeerList } from "./peer-types.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
@@ -144,6 +159,10 @@ export class IdentityService {
   private peerDialer: PeerSyncDialer | null = null;
   private readonly friendSessions: FriendSessionRegistry;
   private friendDialer: FriendSyncDialer | null = null;
+  /** Phase 4 v1: in-memory ai-share invitation registry (both directions). */
+  private readonly aiShareInvites = new AiShareInviteRegistry({
+    logger: undefined,
+  });
   /** Phase 3.b/2d: handle for the periodic inbox poller (clearable). */
   private inboxPollHandle: ReturnType<typeof setInterval> | null = null;
   /** Phase 3.b/2d: tracks an in-flight inbox round so kicks dedupe. */
@@ -908,6 +927,32 @@ export class IdentityService {
     peerRootPubKey: string;
     payload: unknown;
   }): void {
+    if (this.state.kind !== "loaded") {
+      this.logger.warn("friend_sync_inbound_envelope_dropped_no_identity");
+      return;
+    }
+
+    // Phase 4 v1: dispatch on the envelope `kind` discriminator. Chat
+    // envelopes (kind="friend-chat-message") and ai-share envelopes
+    // ("ai-share-invite" / "ai-share-accept" / "ai-share-decline")
+    // share the same friend-sync transport; we route by kind here so
+    // each handler stays focused on its own schema + verification.
+    const aiShare = tryParseAiShareEnvelope(input.payload);
+    if (aiShare) {
+      this.handleInboundAiShareEnvelope({
+        peerRootPubKey: input.peerRootPubKey,
+        parsed: aiShare,
+      });
+      return;
+    }
+    this.handleInboundFriendChatEnvelope(input);
+  }
+
+  private handleInboundFriendChatEnvelope(input: {
+    peerRootPubKey: string;
+    payload: unknown;
+  }): void {
+    if (this.state.kind !== "loaded") return;
     const validated = FriendChatMessageEnvelopeSchema.safeParse(input.payload);
     if (!validated.success) {
       this.logger.warn(
@@ -917,10 +962,6 @@ export class IdentityService {
         },
         "friend_chat_envelope_schema_rejected",
       );
-      return;
-    }
-    if (this.state.kind !== "loaded") {
-      this.logger.warn("friend_chat_inbound_envelope_dropped_no_identity");
       return;
     }
     const expectedRoomId = p2pRoomId({
@@ -966,6 +1007,63 @@ export class IdentityService {
         { err, peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8) },
         "friend_chat_persist_failed",
       );
+    }
+  }
+
+  /**
+   * Phase 4 v1: route an inbound ai-share envelope to the matching
+   * registry path. Verifies the sender's signature against the
+   * expected peer pubkey before mutating state.
+   */
+  private handleInboundAiShareEnvelope(input: {
+    peerRootPubKey: string;
+    parsed: NonNullable<ReturnType<typeof tryParseAiShareEnvelope>>;
+  }): void {
+    const peerPrefix = input.peerRootPubKey.slice(0, 8);
+    if (input.parsed.kind === "invite") {
+      const verifyOutcome = verifyAiShareInviteEnvelope({
+        envelope: input.parsed.envelope,
+        expectedOwnerRootSignPublicKeyB64: input.peerRootPubKey,
+      });
+      if (!verifyOutcome.ok) {
+        this.logger.warn(
+          { reason: verifyOutcome.reason, peerPrefix },
+          "ai_share_invite_sig_invalid",
+        );
+        return;
+      }
+      this.aiShareInvites.recordInbound({ invite: input.parsed.envelope });
+      return;
+    }
+    if (input.parsed.kind === "accept") {
+      const verifyOutcome = verifyAiShareAcceptEnvelope({
+        envelope: input.parsed.envelope,
+        expectedResponderRootSignPublicKeyB64: input.peerRootPubKey,
+      });
+      if (!verifyOutcome.ok) {
+        this.logger.warn(
+          { reason: verifyOutcome.reason, peerPrefix },
+          "ai_share_accept_sig_invalid",
+        );
+        return;
+      }
+      this.aiShareInvites.applyOutboundAccept(input.parsed.envelope);
+      return;
+    }
+    if (input.parsed.kind === "decline") {
+      const verifyOutcome = verifyAiShareDeclineEnvelope({
+        envelope: input.parsed.envelope,
+        expectedResponderRootSignPublicKeyB64: input.peerRootPubKey,
+      });
+      if (!verifyOutcome.ok) {
+        this.logger.warn(
+          { reason: verifyOutcome.reason, peerPrefix },
+          "ai_share_decline_sig_invalid",
+        );
+        return;
+      }
+      this.aiShareInvites.applyOutboundDecline(input.parsed.envelope);
+      return;
     }
   }
 
@@ -1167,6 +1265,226 @@ export class IdentityService {
    */
   listFriendChatMessages(peerRootPubKey: string): readonly StoredFriendChatMessage[] {
     return listFriendChatMessages(this.ottieHome, peerRootPubKey, this.logger);
+  }
+
+  // ----- Phase 4 v1: AI share invitations -------------------------------
+
+  /**
+   * Phase 4 v1: send an ai-share invitation to a paired friend through
+   * the existing friend-sync session. Returns the minted invite (UI
+   * uses `inviteId` for state tracking) on success, or an error string
+   * on failure (no session, peer absent, sign/encrypt error, etc.).
+   *
+   * The actual agent timeline streaming is NOT shipped in v1 — see
+   * §11.5 for the v1/v2/v3 split. Acceptance just records the state
+   * change; v2 will hook the active-share state into AgentManager.
+   */
+  sendAiShareInvite(input: {
+    peerRootPubKey: string;
+    agentId: string;
+    agentLabel: string;
+    agentProvider: string;
+    /** Override TTL ms (tests). Default 5 minutes. */
+    ttlMs?: number;
+  }): { ok: true; invite: AiShareInviteEnvelope } | { ok: false; error: string } {
+    if (this.state.kind !== "loaded") {
+      return { ok: false, error: "Cannot send ai-share invite — root identity not loaded" };
+    }
+    if (!this.selfDeviceContext) {
+      return { ok: false, error: "Cannot send ai-share invite — selfDeviceContext not configured" };
+    }
+    const peer = this.peerList?.peers.find(
+      (p) => p.peerRootSignPublicKeyB64 === input.peerRootPubKey,
+    );
+    if (!peer) return { ok: false, error: "Peer is not in your friend list" };
+    if (peer.status !== "active") return { ok: false, error: `Peer is ${peer.status}` };
+
+    const session = this.friendSessions.get(input.peerRootPubKey);
+    if (!session) {
+      // v1 doesn't queue ai-share invites through the offline inbox.
+      // Friend-sync session must be live; re-prompt user to retry
+      // once the friend is reachable.
+      return {
+        ok: false,
+        error: "Friend is offline — try again once the friend-sync session is open",
+      };
+    }
+
+    const now = new Date();
+    const ttlMs = input.ttlMs ?? 5 * 60 * 1000;
+    const invite = buildAiShareInviteEnvelope({
+      inviteId: `ais_${randomUuid()}`,
+      ownerRootSignPrivateKey: this.state.bundle.signPrivateKey,
+      ownerRootPubKeyB64: this.state.bundle.stored.signPublicKeyB64,
+      ownerDeviceId: this.selfDeviceContext.serverId,
+      agentId: input.agentId,
+      agentLabel: input.agentLabel,
+      agentProvider: input.agentProvider,
+      generatedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
+    });
+
+    let frame;
+    try {
+      frame = encryptFriendSyncFrame({
+        sharedKey: session.sharedKey,
+        plaintext: JSON.stringify(invite),
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Failed to encrypt ai-share invite: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    try {
+      session.socket.send(JSON.stringify(frame));
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Failed to send ai-share invite: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
+    this.aiShareInvites.recordOutbound({
+      invite,
+      peerRootPubKeyB64: input.peerRootPubKey,
+    });
+    this.logger.info(
+      {
+        inviteId: invite.inviteId,
+        peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
+        agentLabel: input.agentLabel,
+      },
+      "ai_share_invite_sent",
+    );
+    return { ok: true, invite };
+  }
+
+  /**
+   * Phase 4 v1: friend taps Accept on a pending ai-share invite.
+   * Builds + sends a signed accept envelope, marks the local inbound
+   * record accepted, returns the accept envelope for caller logging.
+   */
+  acceptAiShareInvite(inviteId: string):
+    | {
+        ok: true;
+        accept: AiShareAcceptEnvelope;
+      }
+    | { ok: false; error: string } {
+    if (this.state.kind !== "loaded") {
+      return { ok: false, error: "Cannot accept — root identity not loaded" };
+    }
+    const entry = this.aiShareInvites.getInboundPending(inviteId);
+    if (!entry) {
+      return { ok: false, error: "Invite not found, already acted on, or expired" };
+    }
+    const session = this.friendSessions.get(entry.ownerRootPubKeyB64);
+    if (!session) {
+      return {
+        ok: false,
+        error: "Owner is offline — accept once the friend-sync session is open",
+      };
+    }
+
+    const accept = buildAiShareAcceptEnvelope({
+      inviteId,
+      responderRootSignPrivateKey: this.state.bundle.signPrivateKey,
+      responderRootPubKeyB64: this.state.bundle.stored.signPublicKeyB64,
+      acceptedAt: new Date().toISOString(),
+    });
+    const frame = encryptFriendSyncFrame({
+      sharedKey: session.sharedKey,
+      plaintext: JSON.stringify(accept),
+    });
+    try {
+      session.socket.send(JSON.stringify(frame));
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Failed to send ai-share accept: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    this.aiShareInvites.applyInboundAccept(inviteId, {
+      acceptedAt: accept.acceptedAt,
+      signatureB64: accept.signatureB64,
+    });
+    this.logger.info({ inviteId }, "ai_share_invite_accepted");
+    return { ok: true, accept };
+  }
+
+  /** Phase 4 v1: friend taps Decline (or auto-decline on expiry). */
+  declineAiShareInvite(
+    inviteId: string,
+    reason?: string,
+  ): { ok: true; decline: AiShareDeclineEnvelope } | { ok: false; error: string } {
+    if (this.state.kind !== "loaded") {
+      return { ok: false, error: "Cannot decline — root identity not loaded" };
+    }
+    const entry = this.aiShareInvites.getInboundPending(inviteId);
+    if (!entry) {
+      return { ok: false, error: "Invite not found, already acted on, or expired" };
+    }
+    const decline = buildAiShareDeclineEnvelope({
+      inviteId,
+      responderRootSignPrivateKey: this.state.bundle.signPrivateKey,
+      responderRootPubKeyB64: this.state.bundle.stored.signPublicKeyB64,
+      declinedAt: new Date().toISOString(),
+      ...(reason !== undefined ? { reason } : {}),
+    });
+    // Best-effort: try the live session, but mark locally regardless.
+    const session = this.friendSessions.get(entry.ownerRootPubKeyB64);
+    if (session) {
+      try {
+        const frame = encryptFriendSyncFrame({
+          sharedKey: session.sharedKey,
+          plaintext: JSON.stringify(decline),
+        });
+        session.socket.send(JSON.stringify(frame));
+      } catch (err) {
+        this.logger.warn({ err, inviteId }, "ai_share_decline_send_failed_marking_locally");
+      }
+    }
+    this.aiShareInvites.applyInboundDecline(inviteId, {
+      declinedAt: decline.declinedAt,
+      signatureB64: decline.signatureB64,
+      ...(reason !== undefined ? { reason } : {}),
+    });
+    this.logger.info({ inviteId, reason }, "ai_share_invite_declined");
+    return { ok: true, decline };
+  }
+
+  /** Phase 4 v1: list invitations this daemon has received that are still pending. */
+  listInboundAiShareInvites(): ReadonlyArray<{
+    inviteId: string;
+    ownerRootPubKeyB64: string;
+    agentLabel: string;
+    agentProvider: string;
+    receivedAt: string;
+    expiresAt: string;
+  }> {
+    return this.aiShareInvites.listInboundPending().map((entry) => ({
+      inviteId: entry.invite.inviteId,
+      ownerRootPubKeyB64: entry.invite.ownerRootPubKeyB64,
+      agentLabel: entry.invite.agentLabel,
+      agentProvider: entry.invite.agentProvider,
+      receivedAt: new Date(entry.receivedAtMs).toISOString(),
+      expiresAt: entry.invite.expiresAt,
+    }));
+  }
+
+  /** Phase 4 v1: list invites this daemon has sent (any state). */
+  listOutboundAiShareInvites(): ReadonlyArray<{
+    inviteId: string;
+    peerRootPubKeyB64: string;
+    agentLabel: string;
+    state: "pending" | "accepted" | "declined" | "expired";
+  }> {
+    return this.aiShareInvites.listOutbound().map((entry) => ({
+      inviteId: entry.invite.inviteId,
+      peerRootPubKeyB64: entry.peerRootPubKeyB64,
+      agentLabel: entry.invite.agentLabel,
+      state: entry.state.kind,
+    }));
   }
 
   /**

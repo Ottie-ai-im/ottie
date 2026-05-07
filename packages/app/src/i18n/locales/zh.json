@@ -125,6 +125,15 @@
     "sending": "发送中…",
     "sendFailedGeneric": "无法发送消息。",
     "statusQueued": "已暂存(对方离线)",
+    "shareAi": {
+      "button": "分享 AI",
+      "modalTitle": "分享一个 AI 代理",
+      "intro": "邀请好友共用你的 {{label}}。对方会收到通知,可接受或拒绝。",
+      "disclaimer": "v1 仅实现邀请握手;实时 agent 时间线 + 注入对话由 v2 上线。",
+      "sent": "已发送 {{label}} 的邀请。对方会在铃铛里看到。",
+      "send": "发送邀请",
+      "sending": "发送中…"
+    },
     "peerStatus": {
       "active": "正常",
       "blocked": "已屏蔽",
@@ -442,7 +451,11 @@
     "title": "通知",
     "empty": "暂时没有新通知。",
     "friendPairTitle": "{{name}} 想加你为好友",
-    "friendPairSubtitle": "{{pubkey}}… · 点这里去批准"
+    "friendPairSubtitle": "{{pubkey}}… · 点这里去批准",
+    "aiShareTitle": "想跟你分享 {{label}}",
+    "aiShareSubtitle": "{{provider}} · 在下方接受或拒绝",
+    "aiShareAccept": "接受",
+    "aiShareDecline": "拒绝"
   },
   "assistants": {
     "title": "助理",

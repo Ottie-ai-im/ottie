@@ -38,14 +38,11 @@ from here.
      end-to-end as a side-effect of 3.b/2a's design; today's
      commit added the explicit e2e assertion proving it. See
      §6.1 below.
-  2. **Phase 4 — AI sharing** — design + v1. The actual product
-     value of this whole side-quest. Cross-identity AI agent
-     sharing (Wendell shares his Claude Code session with Bob; Bob
-     prompts; Wendell sees the full transcript + revokes any time).
-     Design hasn't been done yet — share what (whole agent vs
-     turns), how (snapshot vs realtime), permission model, channel
-     reuse vs new prefix. Spec first, then v1 implementation.
-     Multi-session.
+  2. ~~Phase 4 — AI sharing — design + v1~~ — ✅ design done
+     (§11.5 of the design doc) and v1 (invitation handshake)
+     shipped. v2 (live agent timeline + prompt injection +
+     active-share banner) and v3 (real agent picker + §7.5
+     multi-daemon flow) are the remaining Phase 4 work.
   3. ~~Bell button → notification center~~ — ✅ v1 done. Bell
      polls friend-pair candidates from the active host and opens
      a panel on tap; rows deep-link to `/settings/identity`. See
@@ -314,35 +311,89 @@ JSONL lines. UI dedup by `clientMessageId` is one fix; cursor
 sync via peer-sync is another. Defer to 3.b/3-multidevice
 alongside chat-history fan-out.
 
-### 6.2. Phase 4 — AI sharing (multi-session, the core feature)
+### 6.2. Phase 4 — AI sharing (v1 done; v2 + v3 to ship)
 
-This is the actual product-value piece of the whole side-quest.
-Currently NOT designed. Skim:
+**v1 shipped this session.** Invitation handshake works end-to-
+end on the daemon + UI: owner taps "Share AI" in the friend
+chat header → confirm modal → invite envelope encrypts through
+the existing friend-sync session → friend's bell shows the
+invite → friend's inline Accept / Decline → both sides know
+the state. Crypto + schemas + WS RPCs all in place; 9 tests
+covering signature roundtrip + tampering. See:
 
-- design doc §11 (Phase 4 statement of intent)
-- design doc §7.5 (modal flow already locked: per-share two-step
-  gate, no auto, no per-friend defaults)
+- `packages/server/src/server/identity/ai-share-types.ts` —
+  invite / accept / decline schemas + canonical signed payload.
+- `packages/server/src/server/identity/ai-share-crypto.ts` —
+  Ed25519 sign/verify helpers + `tryParseAiShareEnvelope`
+  dispatcher used by `handleInboundFriendSyncPayload`.
+- `packages/server/src/server/identity/ai-share-registry.ts` —
+  in-memory pending-invite store (5 min TTL).
+- `IdentityService.{sendAiShareInvite, acceptAiShareInvite,
+declineAiShareInvite, listInbound/OutboundAiShareInvites}`.
+- 5 WS RPCs under `chat/p2p/ai-share/*` + matching client
+  wrappers in `daemon-client.ts`.
+- UI: `ShareAiButton` in friend chat header; `NotificationItem`
+  union extended with `"ai-share-invite"`; inline accept /
+  decline buttons on the invite row in
+  `notification-center-panel.tsx`.
 
-**Open questions to nail in the design doc before coding:**
+Design spec lives at `docs/MULTI-USER-COLLABORATION-DESIGN.md`
+§11.5 — explains the v1 / v2 / v3 split + every wire-shape
+decision.
 
-1. **What gets shared**: whole agent (state + history) vs single
-   turn vs live view + suggestion only. Strawman: live view +
-   prompt-injection ("Bob sees Wendell's transcript, can hit
-   send to inject Bob's prompt into Wendell's running agent").
-2. **Routing**: same friend-sync session, or new connection
-   prefix `ai-share:<sessionId>`? New prefix is cleaner but adds
-   a relay-handler.
-3. **Permissions**: read-only / can-comment / can-control-agent.
-   §7.5 says owner sees everything, friend sees what owner sends.
-4. **Lifecycle**: who ends the session? §7.5 says owner has hard
-   "end" button; what happens if owner's daemon disconnects?
-5. **Multi-device**: which owner-device hosts the share? §7.5
-   says "first owner-device the friend's request hits". Needs a
-   modal on every online owner-device — first-tap-wins.
+**v2 — live channel (next session of meaningful Phase 4 work):**
 
-Recommended sequence: spec doc as new section §11.5 → walk
-Wendell through it → small v1 (one daemon hosts; live view only;
-explicit end button) → iterate.
+The active-share state currently has nothing in it (banner
+text reads "live timeline + prompt-injection ship in v2"). v2
+must:
+
+- Add `ai-share-prompt` envelope (friend → owner): a chat-style
+  message that the owner's daemon injects into the running
+  shared agent's message channel. Schema mirrors
+  `friend-chat-types.ts` but routes into AgentManager
+  instead of the chat store.
+- Add `ai-share-timeline` envelope (owner → friend): each
+  agent timeline event the owner produces (assistant text
+  chunk, tool call, tool result) gets a redacted-for-friend
+  version sent through the friend-sync session. Owner sees
+  full detail; friend sees prompt + response only (per §7
+  Q10).
+- Per-tool-call permission UI on owner side that ALSO mirrors
+  to friend's view — `agent_permission_request` already has
+  the owner-side surface; needs to fan out (or block) to the
+  friend's banner.
+- Active-share banner replaces the stub text. Both sides see
+  "AI share active with {peer} — {agentLabel}". Owner has an
+  "End session" button that emits an `ai-share-end` envelope
+  - transitions both daemons to idle.
+- Auditable transcript persistence per §7 last bullet — write
+  to `$OTTIE_HOME/ai-shares/{inviteId}.json` on both sides as
+  events flow.
+- Handle disconnects: if the owner's daemon drops mid-session,
+  friend's banner flips to "owner offline" and any in-flight
+  prompt fails-fast.
+
+**v3 — multi-daemon picker (§7.5):**
+
+Today's v1 hardcodes a placeholder agent
+(`agentLabel: "Claude Code"`). v3 wires:
+
+- Real local agent list — owner picks which agent from the
+  modal (replaces the placeholder).
+- §7.5's two-step picker when the owner has multiple online
+  daemons. Requires peer-sync to broadcast "which device picked
+  up" so the other devices' modals dismiss.
+- First-share friction (Q2) — extra confirm gate on the first
+  share to a new friend.
+- Limits enforcement (max prompts / max tokens / session
+  timeout). Probably a small `share-limits-store.json` per
+  invite, daemon-enforced.
+
+**Out-of-scope for the whole Phase 4 chain (defer to Phase 5+):**
+
+- Cross-friend sharing (A shares to B who shares to C).
+- Mobile-as-leaf without a daemon.
+- Mid-session daemon switching (locked closed in §7.5.3).
 
 ### 6.3. Bell button → notification center (✅ v1 done)
 

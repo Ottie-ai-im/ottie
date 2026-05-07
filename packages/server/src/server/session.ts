@@ -2243,9 +2243,191 @@ export class Session {
         return this.handleChatP2pSendRequest(msg);
       case "chat/p2p/list":
         return this.handleChatP2pListRequest(msg);
+      case "chat/p2p/ai-share/invite":
+        return this.handleChatP2pAiShareInviteRequest(msg);
+      case "chat/p2p/ai-share/list-inbound":
+        return this.handleChatP2pAiShareListInboundRequest(msg);
+      case "chat/p2p/ai-share/accept":
+        return this.handleChatP2pAiShareAcceptRequest(msg);
+      case "chat/p2p/ai-share/decline":
+        return this.handleChatP2pAiShareDeclineRequest(msg);
+      case "chat/p2p/ai-share/list-outbound":
+        return this.handleChatP2pAiShareListOutboundRequest(msg);
       default:
         return undefined;
     }
+  }
+
+  private async handleChatP2pAiShareInviteRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/invite" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/invite/response",
+        payload: {
+          requestId: request.requestId,
+          invite: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.sendAiShareInvite({
+      peerRootPubKey: request.peerRootPubKey,
+      agentId: request.agentId,
+      agentLabel: request.agentLabel,
+      agentProvider: request.agentProvider,
+    });
+    if (result.ok) {
+      this.emit({
+        type: "chat/p2p/ai-share/invite/response",
+        payload: {
+          requestId: request.requestId,
+          invite: {
+            inviteId: result.invite.inviteId,
+            ownerRootPubKeyB64: result.invite.ownerRootPubKeyB64,
+            ownerDeviceId: result.invite.ownerDeviceId,
+            agentId: result.invite.agentId,
+            agentLabel: result.invite.agentLabel,
+            agentProvider: result.invite.agentProvider,
+            generatedAt: result.invite.generatedAt,
+            expiresAt: result.invite.expiresAt,
+            state: "pending",
+            peerRootPubKeyB64: request.peerRootPubKey,
+          },
+          error: null,
+        },
+      });
+    } else {
+      this.emit({
+        type: "chat/p2p/ai-share/invite/response",
+        payload: { requestId: request.requestId, invite: null, error: result.error },
+      });
+    }
+  }
+
+  private async handleChatP2pAiShareListInboundRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/list-inbound" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/list-inbound/response",
+        payload: {
+          requestId: request.requestId,
+          invites: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const invites = this.identityService.listInboundAiShareInvites();
+    this.emit({
+      type: "chat/p2p/ai-share/list-inbound/response",
+      payload: {
+        requestId: request.requestId,
+        invites: invites.map((i) => ({
+          inviteId: i.inviteId,
+          ownerRootPubKeyB64: i.ownerRootPubKeyB64,
+          // The OnWire schema requires ownerDeviceId / agentId — for an
+          // inbound list the daemon held them in the registry but we
+          // truncated to the slim DTO. Re-pull is cheap enough.
+          ownerDeviceId: "",
+          agentId: "",
+          agentLabel: i.agentLabel,
+          agentProvider: i.agentProvider,
+          generatedAt: i.receivedAt,
+          expiresAt: i.expiresAt,
+          state: "pending" as const,
+        })),
+        error: null,
+      },
+    });
+  }
+
+  private async handleChatP2pAiShareAcceptRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/accept" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/accept/response",
+        payload: {
+          requestId: request.requestId,
+          accepted: false,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.acceptAiShareInvite(request.inviteId);
+    this.emit({
+      type: "chat/p2p/ai-share/accept/response",
+      payload: {
+        requestId: request.requestId,
+        accepted: result.ok,
+        error: result.ok ? null : result.error,
+      },
+    });
+  }
+
+  private async handleChatP2pAiShareDeclineRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/decline" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/decline/response",
+        payload: {
+          requestId: request.requestId,
+          declined: false,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.declineAiShareInvite(request.inviteId, request.reason);
+    this.emit({
+      type: "chat/p2p/ai-share/decline/response",
+      payload: {
+        requestId: request.requestId,
+        declined: result.ok,
+        error: result.ok ? null : result.error,
+      },
+    });
+  }
+
+  private async handleChatP2pAiShareListOutboundRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/list-outbound" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/list-outbound/response",
+        payload: {
+          requestId: request.requestId,
+          invites: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const invites = this.identityService.listOutboundAiShareInvites();
+    this.emit({
+      type: "chat/p2p/ai-share/list-outbound/response",
+      payload: {
+        requestId: request.requestId,
+        invites: invites.map((i) => ({
+          inviteId: i.inviteId,
+          peerRootPubKeyB64: i.peerRootPubKeyB64,
+          ownerRootPubKeyB64: "",
+          ownerDeviceId: "",
+          agentId: "",
+          agentLabel: i.agentLabel,
+          agentProvider: "",
+          generatedAt: "",
+          expiresAt: "",
+          state: i.state,
+        })),
+        error: null,
+      },
+    });
   }
 
   private async handleDeviceRemoveRequest(

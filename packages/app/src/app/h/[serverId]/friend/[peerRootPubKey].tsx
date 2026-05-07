@@ -4,9 +4,10 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, Send } from "lucide-react-native";
+import { ChevronLeft, Send, Sparkles } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import type { StoredFriendChatMessageOnWire } from "@server/server/identity/identity-rpc-schemas";
 import type { StoredPeer } from "@server/server/identity/peer-types";
@@ -68,6 +69,51 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
     letterSpacing: -0.1,
+  },
+  shareAiButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[3],
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+  },
+  shareAiButtonHovered: {
+    backgroundColor: theme.colors.surfaceGlassHover,
+  },
+  shareAiButtonText: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  shareModalBody: {
+    gap: theme.spacing[3],
+  },
+  shareModalIntro: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    lineHeight: 22,
+  },
+  shareModalDisclaimer: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 20,
+  },
+  shareModalActions: {
+    flexDirection: "row",
+    gap: theme.spacing[2],
+    justifyContent: "flex-end",
+    marginTop: theme.spacing[2],
+  },
+  shareModalError: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.destructive,
+    fontSize: theme.fontSize.sm,
   },
   scroll: {
     flex: 1,
@@ -330,6 +376,9 @@ export default function FriendChatRoute() {
             </Text>
           ) : null}
         </View>
+        {peerRootPubKey ? (
+          <ShareAiButton serverId={serverId} peerRootPubKey={peerRootPubKey} />
+        ) : null}
       </View>
 
       {messagesQuery.isError ? (
@@ -454,5 +503,144 @@ function ChatBubble({
         <Text style={styles.timestamp}>{formatTime(entry.message.createdAt)}</Text>
       )}
     </View>
+  );
+}
+
+/**
+ * Phase 4 v1 — "Share AI" button in the friend chat header. Opens a
+ * single-step confirm modal and fires `chatP2pAiShareInvite` with
+ * placeholder agent details (label / provider hardcoded for v1; the
+ * full agent picker matching §7.5's two-step flow is v3).
+ *
+ * The active-share state isn't shown anywhere yet — once the friend
+ * accepts, the only confirmation the owner gets is a toast-style
+ * success state in this modal, plus the outbound invite list in
+ * `listOutboundAiShareInvites` (no UI for that list either; v2
+ * surfaces it via the active-share banner).
+ */
+function ShareAiButton({
+  serverId,
+  peerRootPubKey,
+}: {
+  serverId: string | null;
+  peerRootPubKey: string;
+}) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const client = useHostRuntimeClient(serverId ?? "");
+  const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sentLabel, setSentLabel] = useState<string | null>(null);
+
+  // v1: placeholder agent details. v1.5 wires this to the daemon's
+  // local agent list so the user can pick which one to share.
+  const placeholderAgentLabel = "Claude Code";
+  const placeholderAgentProvider = "claude";
+  const placeholderAgentId = "ai-share-v1-placeholder";
+
+  const handleOpen = useCallback(() => {
+    setError(null);
+    setSentLabel(null);
+    setOpen(true);
+  }, []);
+  const handleClose = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    if (!client) {
+      setError("Not connected to daemon");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = await client.chatP2pAiShareInvite({
+        peerRootPubKey,
+        agentId: placeholderAgentId,
+        agentLabel: placeholderAgentLabel,
+        agentProvider: placeholderAgentProvider,
+      });
+      if (response.error) {
+        setError(response.error);
+      } else if (response.invite) {
+        setSentLabel(placeholderAgentLabel);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [client, peerRootPubKey]);
+
+  const buttonStyle = useCallback(
+    ({ hovered }: { hovered?: boolean }) => [
+      styles.shareAiButton,
+      hovered ? styles.shareAiButtonHovered : null,
+    ],
+    [],
+  );
+
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("p2pChat.shareAi.button", { defaultValue: "Share AI" })}
+        onPress={handleOpen}
+        style={buttonStyle}
+        testID="friend-chat-share-ai-button"
+      >
+        <Sparkles size={16} color={theme.colors.foreground} />
+        <Text style={styles.shareAiButtonText}>
+          {t("p2pChat.shareAi.button", { defaultValue: "Share AI" })}
+        </Text>
+      </Pressable>
+      <AdaptiveModalSheet
+        title={t("p2pChat.shareAi.modalTitle", { defaultValue: "Share an AI agent" })}
+        visible={open}
+        onClose={handleClose}
+        testID="ai-share-modal"
+        desktopMaxWidth={460}
+      >
+        <View style={styles.shareModalBody}>
+          <Text style={styles.shareModalIntro}>
+            {sentLabel
+              ? t("p2pChat.shareAi.sent", {
+                  label: sentLabel,
+                  defaultValue: "Invite for {{label}} sent. Friend will see it in their bell.",
+                })
+              : t("p2pChat.shareAi.intro", {
+                  label: placeholderAgentLabel,
+                  defaultValue:
+                    "Send your friend an invite to share {{label}}. They'll get a notification and can accept or decline.",
+                })}
+          </Text>
+          {!sentLabel ? (
+            <Text style={styles.shareModalDisclaimer}>
+              {t("p2pChat.shareAi.disclaimer", {
+                defaultValue:
+                  "v1 ships the invitation handshake only; live agent timeline + prompt-injection arrive in v2.",
+              })}
+            </Text>
+          ) : null}
+          {error ? <Text style={styles.shareModalError}>{error}</Text> : null}
+          <View style={styles.shareModalActions}>
+            <Button variant="secondary" onPress={handleClose}>
+              {sentLabel
+                ? t("common.close", { defaultValue: "Close" })
+                : t("common.cancel", { defaultValue: "Cancel" })}
+            </Button>
+            {!sentLabel ? (
+              <Button variant="default" onPress={() => void handleSubmit()} disabled={submitting}>
+                {submitting
+                  ? t("p2pChat.shareAi.sending", { defaultValue: "Sending…" })
+                  : t("p2pChat.shareAi.send", { defaultValue: "Send invite" })}
+              </Button>
+            ) : null}
+          </View>
+        </View>
+      </AdaptiveModalSheet>
+    </>
   );
 }

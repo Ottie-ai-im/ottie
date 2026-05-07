@@ -2,7 +2,10 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
-import type { PendingFriendPairCandidateOnWire } from "@server/server/identity/identity-rpc-schemas";
+import type {
+  AiShareInviteOnWire,
+  PendingFriendPairCandidateOnWire,
+} from "@server/server/identity/identity-rpc-schemas";
 
 /**
  * Phase 3.b/3 (notification center) — aggregates inbox-of-actions
@@ -24,16 +27,19 @@ import type { PendingFriendPairCandidateOnWire } from "@server/server/identity/i
  */
 
 /** Discriminated-union per source so future kinds are additive. */
-export type NotificationItem = {
-  /** Stable id for keying React lists + dedup. */
-  id: string;
-  /** Source kind the panel uses to pick a renderer + handler. */
-  kind: "friend-pair-candidate";
-  /** ISO timestamp the daemon received this. Sort newest-first. */
-  receivedAt: string;
-  /** Source-specific payload. */
-  payload: { candidate: PendingFriendPairCandidateOnWire };
-};
+export type NotificationItem =
+  | {
+      id: string;
+      kind: "friend-pair-candidate";
+      receivedAt: string;
+      payload: { candidate: PendingFriendPairCandidateOnWire };
+    }
+  | {
+      id: string;
+      kind: "ai-share-invite";
+      receivedAt: string;
+      payload: { invite: AiShareInviteOnWire };
+    };
 
 const PENDING_POLL_MS = 5_000;
 
@@ -65,23 +71,49 @@ export function useNotifications(serverId: string | null): UseNotificationsResul
     staleTime: 0,
   });
 
+  const aiShareInvitesQuery = useQuery<readonly AiShareInviteOnWire[], Error>({
+    queryKey: ["notifications-ai-share-invites-inbound", serverId],
+    queryFn: async () => {
+      if (!client) return [];
+      const response = await client.chatP2pAiShareListInbound();
+      if (response.error) throw new Error(response.error);
+      return response.invites ?? [];
+    },
+    enabled: !!client,
+    refetchInterval: PENDING_POLL_MS,
+    staleTime: 0,
+  });
+
   const items = useMemo<ReadonlyArray<NotificationItem>>(() => {
-    const candidates = candidatesQuery.data ?? [];
-    const out: NotificationItem[] = candidates.map((candidate) => ({
-      id: `friend-pair:${candidate.nonceB64}`,
-      kind: "friend-pair-candidate",
-      receivedAt: candidate.receivedAt,
-      payload: { candidate },
-    }));
+    const out: NotificationItem[] = [];
+    for (const candidate of candidatesQuery.data ?? []) {
+      out.push({
+        id: `friend-pair:${candidate.nonceB64}`,
+        kind: "friend-pair-candidate",
+        receivedAt: candidate.receivedAt,
+        payload: { candidate },
+      });
+    }
+    for (const invite of aiShareInvitesQuery.data ?? []) {
+      out.push({
+        id: `ai-share-invite:${invite.inviteId}`,
+        kind: "ai-share-invite",
+        // The wire shape's `generatedAt` doubles as the receive timestamp
+        // for ordering purposes — daemon sets it when the inbound
+        // record is created (see session.handleChatP2pAiShareListInbound).
+        receivedAt: invite.generatedAt,
+        payload: { invite },
+      });
+    }
     // Newest first.
     out.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
     return out;
-  }, [candidatesQuery.data]);
+  }, [candidatesQuery.data, aiShareInvitesQuery.data]);
 
   return {
     items,
     count: items.length,
-    isLoading: candidatesQuery.isLoading,
-    hasError: !!candidatesQuery.error,
+    isLoading: candidatesQuery.isLoading || aiShareInvitesQuery.isLoading,
+    hasError: !!candidatesQuery.error || !!aiShareInvitesQuery.error,
   };
 }
