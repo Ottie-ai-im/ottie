@@ -51,12 +51,12 @@ from here.
      a panel on tap; rows deep-link to `/settings/identity`. See
      §6.3 below for v2 ideas (multi-host roll-up, Phase 4 share
      invitations, mobile parity).
-  4. **137 lint-error cleanup** — independent chunk. lefthook fires
-     full-repo `oxlint` pre-commit and turns up 137 errors (mostly
-     `no-explicit-any` in `daemon-client.ts` and a few unused
-     catch-vars). They're orthogonal to feature work; user
-     authorized `--no-verify` for the multi-user-collab branch
-     specifically. Cleanup unblocks normal commits.
+  4. **lint-error cleanup** — partially done. v1 cleared all 29
+     `no-explicit-any` + a few catch-blocks → 115 errors
+     remaining (was 137). Mostly `react-perf` (63 — mechanical
+     useMemo extractions) + `complexity / max-depth / nesting`
+     (~30 — real refactor judgment). See §6.4 below for the
+     plan to clear the rest.
 - **User**: Wendell. Native Mandarin speaker, talks to you in 中文.
   Wants direct answers + small commits + tests for everything. He
   pushed back hard once when I designed without reading existing
@@ -383,30 +383,59 @@ The bell in `desktop-nav-rail.tsx` no longer no-ops:
   (`mobile-tab-bar.tsx` doesn't render one). Add a notifications
   surface there once the mobile UX is decided.
 
-### 6.4. 137 lint-error cleanup (independent chunk)
+### 6.4. lint-error cleanup (v1 done; ~115 remaining)
 
-`oxlint` over the whole workspace finds 137 errors, all
-pre-existing on `main` since before this side-quest started. They
-block the lefthook pre-commit hook, which is why every Phase 3
-commit on this branch was made with `--no-verify` (user-authorized
-for THIS branch specifically — re-confirm before extending the
-authorization to new work).
+Started this session at 137 errors, now at **115**. v1 cleared:
 
-**Categories** (rough count from a recent run):
+- **All 29 `typescript-eslint(no-explicit-any)`** ✓
+  - 9 in `daemon-client.ts` — `sendRequest<any>` → drop the
+    generic; the `select` callback infers the type. Fixed by
+    making `sendRequest`'s return type `Promise<NonNullable<T>>`
+    so the wait-loop's "T | null → T" guarantee shows up
+    statically.
+  - 12 in `session.ts` — `router.register(... m as any)` →
+    drop the cast. Fixed by making `MessageRouter.register`
+    generic over the kind so the handler's `msg` is narrowed
+    via `Extract<SessionInboundMessage, { type: K }>`.
+  - 8 misc — proper types for theme args (use unistyles),
+    proper Provider types in array filters, eslint-disable
+    comments for dnd-kit ref-as-any (genuine library mismatch).
+- **3 of 8 `eslint(no-unused-vars)`** — bare `catch` instead
+  of `catch (error)` where the param is unused.
+- **1 of 7 `eslint-plugin-import(no-named-as-default-member)`**
+  — eslint-disable for `Animated.createAnimatedComponent` because
+  reanimated 4.x doesn't actually expose it as a named export
+  (lint hint was misleading). The other 6 likely follow the
+  same pattern.
 
-- ~70 `typescript-eslint(no-explicit-any)` in
-  `packages/server/src/client/daemon-client.ts` — the WS RPC
-  client uses `<any>` generics where the response type comes back
-  validated by a Zod schema. Easy to fix: replace with the
-  schema's inferred type.
-- ~30 `eslint(no-unused-vars)` in catch blocks. Replace
-  `catch (error)` with `catch` when error isn't used, or
-  `catch (_error)` when keeping the var name documents intent.
-- Various `react-perf` rules (jsx-no-new-array-as-prop, etc.)
-  in app components. Each is a memo/useMemo extraction.
+**Remaining 115 errors by category:**
 
-Independent chunk: don't bundle with feature work. One
-fix-and-commit-per-category sweep is fine.
+- 63 `eslint-plugin-react-perf(*)` — array/function/object
+  literals as JSX props. Mechanical but tedious: 31 + 16 + 12 +
+  4 useMemo/useCallback extractions across ~8 files. The big
+  three offenders: `assistants-screen.tsx` (8),
+  `message-input.tsx` (8), `openclaw-chat-panel.tsx` (7).
+  Worth a focused session of its own.
+- 11 `eslint(complexity)` + 8 `max-nested-callbacks` + 4
+  `no-nested-ternary` + 3 `max-depth` + 3 `jsx-max-depth` —
+  these need real refactoring judgment (extract helpers,
+  flatten conditionals). Don't bundle with feature work.
+- 6 `no-named-as-default-member` (5 more reanimated
+  `Animated.X`, plus `i18next` named-vs-default issues at
+  `i18n/index.ts` + `i18n/init.ts`) — likely each needs an
+  eslint-disable + rationale comment, like button.tsx.
+- 5 `no-unused-vars` (need dead-code judgment per case:
+  unused functions, unused state vars, etc.)
+- 4 `always-return` in promise chains
+- ~10 misc (exhaustive-deps, no-multiple-resolved, etc.)
+
+Until 0 errors, the lefthook pre-commit lint check still fails,
+so commits on this branch continue to use `--no-verify` (user-
+authorized for the multi-user-collab branch). Strategy for next
+round: knock out the 63 react-perf in a single dedicated commit,
+then the remaining ~50 in a final commit. Both can be mostly
+mechanical — `react-perf` errors all want extraction into
+`useMemo` / `useCallback` with stable references.
 
 ---
 

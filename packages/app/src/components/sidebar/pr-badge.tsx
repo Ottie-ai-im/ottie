@@ -10,7 +10,10 @@ import { ExternalLink, GitPullRequest } from "lucide-react-native";
 import { openExternalUrl } from "@/utils/open-external-url";
 import type { PrHint } from "@/hooks/use-checkout-pr-status-query";
 
-export function getWorkspacePrIconColor(theme: any, state: PrHint["state"]) {
+export function getWorkspacePrIconColor(
+  theme: ReturnType<typeof useUnistyles>["theme"],
+  state: PrHint["state"],
+) {
   switch (state) {
     case "merged":
       return theme.colors.palette.zinc[400];

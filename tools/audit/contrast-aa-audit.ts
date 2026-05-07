@@ -158,8 +158,17 @@ function main() {
     },
   ];
 
-  function getVal(obj: Record<string, any>, path: string) {
-    return path.split(".").reduce((o, key) => o?.[key], obj);
+  // The token tree is `{ surface: { background: "#fff", ... }, ... }` —
+  // dotted-path lookup that returns the leaf string color. Typed as
+  // `unknown → string` because the tree is heterogeneous; callers pass
+  // the result straight to parseColor which validates the string shape.
+  function getVal(obj: Record<string, unknown>, path: string): string {
+    const result = path.split(".").reduce<unknown>(
+      (o, key) =>
+        typeof o === "object" && o !== null ? (o as Record<string, unknown>)[key] : undefined,
+      obj,
+    );
+    return typeof result === "string" ? result : "";
   }
 
   for (const p of pairs) {

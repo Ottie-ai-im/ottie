@@ -40,6 +40,9 @@ export function SidebarProjectDropZone({
   if (!isDraggingProvider || !isWeb) return null;
 
   return (
+    // dnd-kit setNodeRef vs RN View ref shape mismatch (same as
+    // sidebar-workspace-list.tsx).
+    // eslint-disable-next-line typescript-eslint/no-explicit-any
     <View ref={setNodeRef as any} style={style}>
       <Plus
         size={16}

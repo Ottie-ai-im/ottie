@@ -28,6 +28,11 @@ type LeftIcon =
 
 const ICON_SIZE: Record<ButtonSize, number> = { sm: 14, md: 16, lg: 20 };
 
+// eslint-plugin-import flags `Animated.createAnimatedComponent` as
+// "use the named export instead", but `createAnimatedComponent` is
+// only available on the default `Animated` namespace in this
+// reanimated version. Disable this one rule rather than refactor.
+// eslint-disable-next-line eslint-plugin-import/no-named-as-default-member
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const styles = StyleSheet.create((theme) => ({

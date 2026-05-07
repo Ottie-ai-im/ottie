@@ -3,8 +3,16 @@ import type { SessionInboundMessage } from "../../shared/messages.js";
 /**
  * Handler signature for a single inbound message kind. Handlers may be sync or
  * async; the router awaits returned promises in `dispatch`.
+ *
+ * Generic over the message-type discriminator `K` so call sites of
+ * `register("schedule/create", ...)` get the narrowed
+ * `Extract<SessionInboundMessage, { type: "schedule/create" }>` instead
+ * of having to `as any` cast the message inside the handler. The default
+ * `K = SessionInboundMessage["type"]` keeps the wide type for callers
+ * that genuinely want to dispatch on the full union.
  */
-export type RouterHandler = (msg: SessionInboundMessage) => Promise<void> | void;
+export type RouterHandler<K extends SessionInboundMessage["type"] = SessionInboundMessage["type"]> =
+  (msg: Extract<SessionInboundMessage, { type: K }>) => Promise<void> | void;
 
 /**
  * Thrown by `MessageRouter.dispatch` when no handler is registered for `msg.type`.
@@ -43,12 +51,22 @@ export class MessageRouter {
   /**
    * Register a handler for a single discriminator kind. Throws on duplicate
    * registration so misconfiguration surfaces at boot, not at dispatch time.
+   *
+   * The generic on `kind` narrows the handler's `msg` parameter to the
+   * matching variant of `SessionInboundMessage` — no `as any` cast
+   * needed at the call site.
    */
-  register(kind: string, handler: RouterHandler): void {
+  register<K extends SessionInboundMessage["type"]>(kind: K, handler: RouterHandler<K>): void {
     if (this.handlers.has(kind)) {
       throw new Error(`Duplicate handler registration for kind=${kind}`);
     }
-    this.handlers.set(kind, handler);
+    // Internally store as the wide-typed version: dispatch only ever
+    // delivers a message whose `.type === kind`, so the narrowing is
+    // safe regardless of the cast at this boundary. Two-step cast
+    // (handler → unknown → wide) because the parameter-bivariance
+    // rules make the narrow → wide direction "may be a mistake" to
+    // tsc otherwise.
+    this.handlers.set(kind, handler as unknown as RouterHandler);
   }
 
   /**

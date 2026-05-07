@@ -1045,26 +1045,20 @@ export class Session {
       registerPluginHandlers(this.router, pluginInstaller, (msg) => this.emit(msg));
     }
 
-    this.router.register("schedule/create", (m) => this.handleScheduleCreateRequest(m as any));
-    this.router.register("schedule/list", (m) => this.handleScheduleListRequest(m as any));
-    this.router.register("schedule/inspect", (m) => this.handleScheduleInspectRequest(m as any));
-    this.router.register("schedule/logs", (m) => this.handleScheduleLogsRequest(m as any));
-    this.router.register("schedule/pause", (m) => this.handleSchedulePauseRequest(m as any));
-    this.router.register("schedule/resume", (m) => this.handleScheduleResumeRequest(m as any));
-    this.router.register("schedule/delete", (m) => this.handleScheduleDeleteRequest(m as any));
-    this.router.register("usage/list", (m) => this.handleUsageListRequest(m as any));
-    this.router.register("local-services/list", (m) =>
-      this.handleLocalServicesListRequest(m as any),
-    );
+    this.router.register("schedule/create", (m) => this.handleScheduleCreateRequest(m));
+    this.router.register("schedule/list", (m) => this.handleScheduleListRequest(m));
+    this.router.register("schedule/inspect", (m) => this.handleScheduleInspectRequest(m));
+    this.router.register("schedule/logs", (m) => this.handleScheduleLogsRequest(m));
+    this.router.register("schedule/pause", (m) => this.handleSchedulePauseRequest(m));
+    this.router.register("schedule/resume", (m) => this.handleScheduleResumeRequest(m));
+    this.router.register("schedule/delete", (m) => this.handleScheduleDeleteRequest(m));
+    this.router.register("usage/list", (m) => this.handleUsageListRequest(m));
+    this.router.register("local-services/list", (m) => this.handleLocalServicesListRequest(m));
     this.router.register("local-services/install", (m) =>
-      this.handleLocalServicesInstallRequest(m as any),
+      this.handleLocalServicesInstallRequest(m),
     );
-    this.router.register("openclaw/agents/list", (m) =>
-      this.handleOpenclawListAgentsRequest(m as any),
-    );
-    this.router.register("openclaw/chat/send", (m) =>
-      this.handleOpenclawSendMessageRequest(m as any),
-    );
+    this.router.register("openclaw/agents/list", (m) => this.handleOpenclawListAgentsRequest(m));
+    this.router.register("openclaw/chat/send", (m) => this.handleOpenclawSendMessageRequest(m));
 
     void this.initializeAgentMcp();
     this.subscribeToAgentEvents();

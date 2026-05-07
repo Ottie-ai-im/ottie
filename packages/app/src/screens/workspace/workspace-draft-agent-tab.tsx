@@ -321,7 +321,7 @@ export function WorkspaceDraftAgentTab({
     const pendingProvider = useGlobalDragStore.getState().pendingDroppedProvider;
     if (
       pendingProvider &&
-      composerState.providerDefinitions?.some((p: any) => p.id === pendingProvider)
+      composerState.providerDefinitions?.some((p) => p.id === pendingProvider)
     ) {
       useGlobalDragStore.getState().setPendingDroppedProvider(null);
       composerState.setProviderFromUser(pendingProvider);

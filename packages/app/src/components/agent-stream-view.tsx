@@ -959,7 +959,7 @@ function ScheduledMessageItem({
     setIsDeleting(true);
     try {
       await client.deleteSchedule(schedule.id);
-    } catch (error) {
+    } catch {
       // Toast error if needed, but the next snapshot should clear it if successful
     } finally {
       setIsDeleting(false);

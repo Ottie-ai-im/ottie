@@ -1223,7 +1223,7 @@ export class DaemonClient {
     timeout: number;
     select: (msg: SessionOutboundMessage) => T | null;
     options?: { skipQueue?: boolean };
-  }): Promise<T> {
+  }): Promise<NonNullable<T>> {
     const { promise, cancel } = this.waitForWithCancel<RpcWaitResult<T>>(
       (msg) => {
         if (msg.type === "rpc_error" && msg.payload.requestId === params.requestId) {
@@ -1260,7 +1260,12 @@ export class DaemonClient {
     if (result.kind === "error") {
       throw result.error;
     }
-    return result.value;
+    // `select` only resolves the wait when it returns a non-null
+    // value, so `result.value` is structurally `NonNullable<T>` even
+    // though the static type is `T` (TS can't narrow through the
+    // wait-loop predicate). The `as` cast aligns the static type
+    // with the runtime invariant.
+    return result.value as NonNullable<T>;
   }
 
   private async sendCorrelatedRequest<
@@ -4898,7 +4903,7 @@ export class DaemonClient {
     input: CreateScheduleInput & { requestId?: string },
   ): Promise<ScheduleSummary> {
     const requestId = this.createRequestId(input.requestId);
-    const payload = await this.sendRequest<any>({
+    const payload = await this.sendRequest({
       requestId,
       message: {
         type: "schedule/create",
@@ -4927,7 +4932,7 @@ export class DaemonClient {
     installers: InstallerAvailability | undefined;
   }> {
     const requestId = this.createRequestId(params?.requestId);
-    const payload = await this.sendRequest<any>({
+    const payload = await this.sendRequest({
       requestId,
       message: {
         type: "local-services/list",
@@ -4956,7 +4961,7 @@ export class DaemonClient {
     port: number | null;
   }> {
     const requestId = this.createRequestId(args.requestId);
-    const payload = await this.sendRequest<any>({
+    const payload = await this.sendRequest({
       requestId,
       message: {
         type: "local-services/install",
@@ -4984,7 +4989,7 @@ export class DaemonClient {
 
   async listOpenclawAgents(params?: { requestId?: string }): Promise<OpenclawAgent[]> {
     const requestId = this.createRequestId(params?.requestId);
-    const payload = await this.sendRequest<any>({
+    const payload = await this.sendRequest({
       requestId,
       message: { type: "openclaw/agents/list", requestId },
       timeout: 10_000,
@@ -5006,7 +5011,7 @@ export class DaemonClient {
     requestId?: string;
   }): Promise<{ reply: string }> {
     const requestId = this.createRequestId(args.requestId);
-    const payload = await this.sendRequest<any>({
+    const payload = await this.sendRequest({
       requestId,
       message: {
         type: "openclaw/chat/send",
@@ -5029,7 +5034,7 @@ export class DaemonClient {
 
   async getUsage(params?: { requestId?: string }): Promise<UsageSummary> {
     const requestId = this.createRequestId(params?.requestId);
-    const payload = await this.sendRequest<any>({
+    const payload = await this.sendRequest({
       requestId,
       message: {
         type: "usage/list",
@@ -5050,7 +5055,7 @@ export class DaemonClient {
 
   async listSchedules(params?: { requestId?: string }): Promise<ScheduleSummary[]> {
     const requestId = this.createRequestId(params?.requestId);
-    const payload = await this.sendRequest<any>({
+    const payload = await this.sendRequest({
       requestId,
       message: {
         type: "schedule/list",
@@ -5074,7 +5079,7 @@ export class DaemonClient {
     params?: { requestId?: string },
   ): Promise<StoredSchedule> {
     const requestId = this.createRequestId(params?.requestId);
-    const payload = await this.sendRequest<any>({
+    const payload = await this.sendRequest({
       requestId,
       message: {
         type: "schedule/inspect",
@@ -5097,7 +5102,7 @@ export class DaemonClient {
 
   async deleteSchedule(scheduleId: string, params?: { requestId?: string }): Promise<void> {
     const requestId = this.createRequestId(params?.requestId);
-    const payload = await this.sendRequest<any>({
+    const payload = await this.sendRequest({
       requestId,
       message: {
         type: "schedule/delete",

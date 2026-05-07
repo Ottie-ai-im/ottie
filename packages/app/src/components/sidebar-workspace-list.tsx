@@ -2044,6 +2044,10 @@ function SidebarAgentRow({
 
   return (
     <View
+      // dnd-kit's setNodeRef expects an HTMLElement-typed ref; React
+      // Native's <View> ref is a different (RN-internal) shape. The
+      // cast is a known dnd-kit + RN papercut.
+      // eslint-disable-next-line typescript-eslint/no-explicit-any
       ref={setNodeRef as any}
       style={[
         styles.agentRow,
@@ -2111,6 +2115,10 @@ function WorkspaceRowItem({
 
   return (
     <View
+      // dnd-kit's setNodeRef expects an HTMLElement-typed ref; React
+      // Native's <View> ref is a different (RN-internal) shape. The
+      // cast is a known dnd-kit + RN papercut.
+      // eslint-disable-next-line typescript-eslint/no-explicit-any
       ref={setNodeRef as any}
       style={
         isOver && isDraggingProvider && !hasRunningScripts
@@ -2395,6 +2403,9 @@ function ProjectBlock({
   }, [isOver, isDraggingProvider, collapsed, onToggleCollapsed, project.projectKey]);
 
   return (
+    // dnd-kit setNodeRef vs RN View ref shape mismatch — see other
+    // occurrences above for the rationale.
+    // eslint-disable-next-line typescript-eslint/no-explicit-any
     <View ref={setNodeRef as any} style={styles.projectBlock}>
       {rowModel.kind === "workspace_link" ? (
         <FlattenedProjectRow

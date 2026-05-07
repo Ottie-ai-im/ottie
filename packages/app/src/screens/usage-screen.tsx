@@ -40,7 +40,11 @@ function formatCost(usd: number | null | undefined): string {
   return `$${usd.toFixed(2)}`;
 }
 
-function formatRelativeTime(iso: string | null, now: number, t: (k: string, v?: any) => string) {
+function formatRelativeTime(
+  iso: string | null,
+  now: number,
+  t: (k: string, v?: Record<string, unknown>) => string,
+) {
   if (!iso) return t("usage.never");
   const ts = Date.parse(iso);
   if (!Number.isFinite(ts)) return t("usage.never");

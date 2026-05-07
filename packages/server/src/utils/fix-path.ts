@@ -38,7 +38,7 @@ export function fixPathEnv(): void {
       // We don't log here yet because the logger hasn't been initialized
       // at the time this is usually called.
     }
-  } catch (error) {
+  } catch {
     // Best-effort only. If the shell fails to start or times out,
     // we continue with the existing (limited) environment.
   }

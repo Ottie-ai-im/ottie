@@ -20,7 +20,7 @@
         document.documentElement.setAttribute("data-tauri", "true");
       });
     }
-  } catch (_err) {
+  } catch {
     // ignore — this is purely cosmetic chrome.
   }
 
