@@ -61,26 +61,32 @@ import { createFriendSyncConnectionHandler } from "./friend-sync-receiver.js";
 import { encryptInboxBlob } from "./friend-inbox-crypto.js";
 import { postInbox, type InboxAuthSigner } from "./friend-inbox-client.js";
 import { processInboxOnce } from "./friend-inbox-receiver.js";
+import type { AgentManagerEvent } from "../agent/agent-manager.js";
 import {
   buildAiShareAcceptEnvelope,
   buildAiShareDeclineEnvelope,
   buildAiShareEndEnvelope,
   buildAiShareInviteEnvelope,
   buildAiSharePromptEnvelope,
+  buildAiShareTimelineEnvelope,
   tryParseAiShareEnvelope,
   verifyAiShareAcceptEnvelope,
   verifyAiShareDeclineEnvelope,
   verifyAiShareEndEnvelope,
   verifyAiShareInviteEnvelope,
   verifyAiSharePromptEnvelope,
+  verifyAiShareTimelineEnvelope,
 } from "./ai-share-crypto.js";
 import { AiShareInviteRegistry } from "./ai-share-registry.js";
+import { redactAgentEventForShare } from "./ai-share-timeline-redactor.js";
+import { AiShareTimelineStore, type AiShareTimelineRecord } from "./ai-share-timeline-buffer.js";
 import type {
   AiShareAcceptEnvelope,
   AiShareDeclineEnvelope,
   AiShareEndEnvelope,
   AiShareInviteEnvelope,
   AiSharePromptEnvelope,
+  AiShareTimelineEnvelope,
 } from "./ai-share-types.js";
 import { loadPeerList, savePeerList, upsertPeer } from "./peer-store.js";
 import type { StoredPeer, StoredPeerList } from "./peer-types.js";
@@ -169,6 +175,9 @@ export interface ShareableAgentSummary {
  * the real implementation; tests that don't need prompt routing leave
  * it null and `sendAiSharePrompt`/inbound prompt arrival become no-ops
  * (with a logged warning, not a throw).
+ *
+ * Phase 4 v2/d extends this with `subscribeAgent` so the broadcaster
+ * can stream redacted timeline events back to the friend.
  */
 export interface AiShareAgentBridge {
   listShareableAgents(): ShareableAgentSummary[];
@@ -176,9 +185,19 @@ export interface AiShareAgentBridge {
    * Inject a prompt into the named agent. Owner side calls this on
    * receipt of a verified `ai-share-prompt`. Returns the response
    * promise but the dispatcher discards it — v2/d streams the timeline
-   * back, v2/b only logs success/failure.
+   * back via `subscribeAgent`, v2/b only logged success/failure.
    */
   injectPrompt(input: { agentId: string; body: string }): Promise<void>;
+  /**
+   * Phase 4 v2/d — subscribe to agent-stream events for the given
+   * agent. Returns an unsubscribe handle. The broadcaster opens one
+   * subscription per active outbound share and tears it down when the
+   * share ends (registry's `applyOutboundEnd` calls the handle).
+   */
+  subscribeAgent(input: {
+    agentId: string;
+    onEvent: (event: AgentManagerEvent) => void;
+  }): () => void;
 }
 
 /**
@@ -212,6 +231,13 @@ export class IdentityService {
    * constructed; null in tests that don't exercise the prompt path.
    */
   private aiShareAgentBridge: AiShareAgentBridge | null = null;
+  /**
+   * Phase 4 v2/d — friend-side ring buffer for inbound shared-agent
+   * timeline frames. One sub-buffer per inviteId. v2/e adds the
+   * auditable transcript on disk; this one's role is just to back the
+   * friend's UI between polls.
+   */
+  private readonly aiShareTimelineStore = new AiShareTimelineStore();
   /** Phase 3.b/2d: handle for the periodic inbox poller (clearable). */
   private inboxPollHandle: ReturnType<typeof setInterval> | null = null;
   /** Phase 3.b/2d: tracks an in-flight inbox round so kicks dedupe. */
@@ -1097,6 +1123,11 @@ export class IdentityService {
         return;
       }
       this.aiShareInvites.applyOutboundAccept(input.parsed.envelope);
+      // Phase 4 v2/d: friend just accepted — start broadcasting redacted
+      // agent timeline events back to them. Idempotent (safe to call on
+      // re-delivery; attachOutboundBroadcaster tears down any prior
+      // handle before storing the new one).
+      this.startAiShareBroadcaster(input.parsed.envelope.inviteId);
       return;
     }
     if (input.parsed.kind === "decline") {
@@ -1146,6 +1177,25 @@ export class IdentityService {
         return;
       }
       this.applyInboundAiSharePrompt(input.parsed.envelope, input.peerRootPubKey);
+      return;
+    }
+    if (input.parsed.kind === "timeline") {
+      // Phase 4 v2/d: owner's redacted timeline frame arrived on the
+      // friend side. Verify signature against the owner's pubkey
+      // (peerRootPubKey here, since friend-sync delivered it), then
+      // stash in the per-share buffer for the friend's UI.
+      const verifyOutcome = verifyAiShareTimelineEnvelope({
+        envelope: input.parsed.envelope,
+        expectedSenderRootSignPublicKeyB64: input.peerRootPubKey,
+      });
+      if (!verifyOutcome.ok) {
+        this.logger.warn(
+          { reason: verifyOutcome.reason, peerPrefix },
+          "ai_share_timeline_sig_invalid",
+        );
+        return;
+      }
+      this.applyInboundAiShareTimeline(input.parsed.envelope, input.peerRootPubKey);
       return;
     }
   }
@@ -1222,6 +1272,10 @@ export class IdentityService {
       return;
     }
     const agentId = active.invite.agentId;
+    // Phase 4 v2/d: stash the wire promptId so the broadcaster's next
+    // `user_message` timeline forward (which AgentManager emits as
+    // soon as runAgent records it) carries the promptId back.
+    this.aiShareInvites.setLastInboundPromptId(envelope.inviteId, envelope.promptId);
     this.logger.info(
       { inviteId: envelope.inviteId, agentId, promptId: envelope.promptId, peerPrefix },
       "ai_share_prompt_routing_to_agent",
@@ -1263,6 +1317,163 @@ export class IdentityService {
    */
   listShareableAgents(): ShareableAgentSummary[] {
     return this.aiShareAgentBridge?.listShareableAgents() ?? [];
+  }
+
+  /**
+   * Phase 4 v2/d — friend side: list timeline records for a share.
+   * The friend's UI polls this to render the assistant's responses
+   * back to the owner's prompts.
+   */
+  listAiShareTimeline(inviteId: string): readonly AiShareTimelineRecord[] {
+    return this.aiShareTimelineStore.list(inviteId);
+  }
+
+  /**
+   * Phase 4 v2/d — broadcaster: subscribe to AgentManager events for
+   * a share's agent, run them through the redactor, build + sign +
+   * ship the resulting `ai-share-timeline` envelopes through friend-
+   * sync. Idempotent: replaces any prior subscription on the same
+   * outbound entry.
+   */
+  private startAiShareBroadcaster(inviteId: string): void {
+    if (this.state.kind !== "loaded") return;
+    const active = this.aiShareInvites.getActive(inviteId);
+    if (!active || active.side !== "outbound") return;
+    const bridge = this.aiShareAgentBridge;
+    if (!bridge) {
+      this.logger.warn({ inviteId }, "ai_share_broadcaster_no_bridge");
+      return;
+    }
+    const agentId = active.invite.agentId;
+    const peerRootPubKey = active.peerRootPubKeyB64;
+    const ownerSignPriv = this.state.bundle.signPrivateKey;
+    const ownerPubB64 = this.state.bundle.stored.signPublicKeyB64;
+
+    const unsubscribe = bridge.subscribeAgent({
+      agentId,
+      onEvent: (event) => {
+        // Bind the most recent inbound promptId only when forwarding
+        // a `user_message` (so it correlates with the friend's "you
+        // sent" row). Other event types should not carry promptId.
+        const isUserMessage =
+          event.type === "agent_stream" &&
+          event.event.type === "timeline" &&
+          event.event.item.type === "user_message";
+        const lastPromptIdForUserMessage = isUserMessage
+          ? this.aiShareInvites.consumeLastInboundPromptId(inviteId)
+          : undefined;
+        const entry = redactAgentEventForShare(event, {
+          agentId,
+          ...(lastPromptIdForUserMessage !== null && lastPromptIdForUserMessage !== undefined
+            ? { lastPromptIdForUserMessage }
+            : {}),
+        });
+        if (!entry) {
+          // If we consumed the promptId for a user_message that the
+          // redactor then rejected, restash it so the next
+          // user_message picks it up. (In practice user_message is
+          // always forwarded, so this branch is defensive.)
+          if (isUserMessage && lastPromptIdForUserMessage) {
+            this.aiShareInvites.setLastInboundPromptId(inviteId, lastPromptIdForUserMessage);
+          }
+          return;
+        }
+        const seq = this.aiShareInvites.takeNextTimelineSeq(inviteId);
+        const eventId = `aie_${inviteId.slice(-6)}_${seq.toString(36)}`;
+        const envelope = buildAiShareTimelineEnvelope({
+          inviteId,
+          eventId,
+          senderRootSignPrivateKey: ownerSignPriv,
+          senderRootPubKeyB64: ownerPubB64,
+          sentAt: new Date().toISOString(),
+          entry,
+        });
+        const session = this.friendSessions.get(peerRootPubKey);
+        if (!session) {
+          // Peer's friend-sync session dropped — no-op; v2/e adds the
+          // disk transcript so timeline events queued during a brief
+          // disconnect can be re-sent on reconnect.
+          this.logger.debug(
+            { inviteId, eventId, kind: entry.kind },
+            "ai_share_timeline_no_session_dropping",
+          );
+          return;
+        }
+        try {
+          const frame = encryptFriendSyncFrame({
+            sharedKey: session.sharedKey,
+            plaintext: JSON.stringify(envelope),
+          });
+          session.socket.send(JSON.stringify(frame));
+        } catch (err) {
+          this.logger.warn(
+            {
+              err: err instanceof Error ? err.message : String(err),
+              inviteId,
+              eventId,
+            },
+            "ai_share_timeline_send_failed",
+          );
+        }
+      },
+    });
+    this.aiShareInvites.attachOutboundBroadcaster(inviteId, unsubscribe);
+    this.logger.info({ inviteId, agentId }, "ai_share_broadcaster_started");
+  }
+
+  /**
+   * Phase 4 v2/d — friend-side dispatcher: ingest a verified timeline
+   * envelope into the per-share buffer. Cross-checks the active
+   * inbound entry and that the sender pubkey matches the recorded
+   * owner pubkey on the invite (defense in depth — verify already
+   * matched it against the friend-sync peer).
+   */
+  private applyInboundAiShareTimeline(
+    envelope: AiShareTimelineEnvelope,
+    peerRootPubKey: string,
+  ): void {
+    const peerPrefix = peerRootPubKey.slice(0, 8);
+    const active = this.aiShareInvites.getActive(envelope.inviteId);
+    if (!active) {
+      this.logger.warn(
+        { inviteId: envelope.inviteId, peerPrefix, eventId: envelope.eventId },
+        "ai_share_timeline_no_active_invite",
+      );
+      return;
+    }
+    if (active.side !== "inbound") {
+      this.logger.warn(
+        { inviteId: envelope.inviteId, peerPrefix, side: active.side },
+        "ai_share_timeline_wrong_side",
+      );
+      return;
+    }
+    if (active.peerRootPubKeyB64 !== peerRootPubKey) {
+      this.logger.warn(
+        {
+          inviteId: envelope.inviteId,
+          expectedPrefix: active.peerRootPubKeyB64.slice(0, 8),
+          gotPrefix: peerPrefix,
+        },
+        "ai_share_timeline_peer_mismatch",
+      );
+      return;
+    }
+    this.aiShareTimelineStore.append({
+      inviteId: envelope.inviteId,
+      eventId: envelope.eventId,
+      sentAt: envelope.sentAt,
+      entry: envelope.entry,
+    });
+    this.logger.debug(
+      {
+        inviteId: envelope.inviteId,
+        eventId: envelope.eventId,
+        kind: envelope.entry.kind,
+        peerPrefix,
+      },
+      "ai_share_timeline_applied",
+    );
   }
 
   /**

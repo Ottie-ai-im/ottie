@@ -2261,6 +2261,8 @@ export class Session {
         return this.handleChatP2pAiShareSendPromptRequest(msg);
       case "chat/p2p/ai-share/list-shareable-agents":
         return this.handleChatP2pAiShareListShareableAgentsRequest(msg);
+      case "chat/p2p/ai-share/list-timeline":
+        return this.handleChatP2pAiShareListTimelineRequest(msg);
       default:
         return undefined;
     }
@@ -2376,6 +2378,36 @@ export class Session {
           agentProvider: a.agentProvider,
           lifecycle: a.lifecycle,
           cwd: a.cwd,
+        })),
+        error: null,
+      },
+    });
+  }
+
+  private async handleChatP2pAiShareListTimelineRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/list-timeline" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/list-timeline/response",
+        payload: {
+          requestId: request.requestId,
+          entries: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const entries = this.identityService.listAiShareTimeline(request.inviteId);
+    this.emit({
+      type: "chat/p2p/ai-share/list-timeline/response",
+      payload: {
+        requestId: request.requestId,
+        entries: entries.map((e) => ({
+          eventId: e.eventId,
+          sentAt: e.sentAt,
+          receivedAtMs: e.receivedAtMs,
+          entry: e.entry,
         })),
         error: null,
       },

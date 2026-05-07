@@ -8,12 +8,14 @@ import {
   buildAiShareEndEnvelope,
   buildAiShareInviteEnvelope,
   buildAiSharePromptEnvelope,
+  buildAiShareTimelineEnvelope,
   tryParseAiShareEnvelope,
   verifyAiShareAcceptEnvelope,
   verifyAiShareDeclineEnvelope,
   verifyAiShareEndEnvelope,
   verifyAiShareInviteEnvelope,
   verifyAiSharePromptEnvelope,
+  verifyAiShareTimelineEnvelope,
 } from "./ai-share-crypto.js";
 import { AiShareEnvelopeSchema, AiShareInviteEnvelopeSchema } from "./ai-share-types.js";
 
@@ -258,8 +260,70 @@ describe("ai-share crypto — Phase 4 v1", () => {
     });
   });
 
+  describe("timeline", () => {
+    test("build → verify roundtrip with the matching owner pubkey", () => {
+      const owner = makeIdentity();
+      const envelope = buildAiShareTimelineEnvelope({
+        inviteId: "ais_test1",
+        eventId: "aie_x_0",
+        senderRootSignPrivateKey: owner.rootSignPrivateKey,
+        senderRootPubKeyB64: owner.rootSignPublicKeyB64,
+        sentAt: "2026-05-07T03:04:00.000Z",
+        entry: { kind: "assistant_message", text: "Quicksort partitions…" },
+      });
+      const ok = verifyAiShareTimelineEnvelope({
+        envelope,
+        expectedSenderRootSignPublicKeyB64: owner.rootSignPublicKeyB64,
+      });
+      expect(ok.ok).toBe(true);
+    });
+
+    test("fails when the expected owner pubkey doesn't match", () => {
+      const owner = makeIdentity();
+      const wrong = makeIdentity();
+      const envelope = buildAiShareTimelineEnvelope({
+        inviteId: "ais_test1",
+        eventId: "aie_x_1",
+        senderRootSignPrivateKey: owner.rootSignPrivateKey,
+        senderRootPubKeyB64: owner.rootSignPublicKeyB64,
+        sentAt: "2026-05-07T03:04:00.000Z",
+        entry: { kind: "assistant_message", text: "anything" },
+      });
+      const result = verifyAiShareTimelineEnvelope({
+        envelope,
+        expectedSenderRootSignPublicKeyB64: wrong.rootSignPublicKeyB64,
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.reason).toMatch(/sender pubkey/i);
+    });
+
+    test("fails when entry is tampered post-sign", () => {
+      const owner = makeIdentity();
+      const envelope = buildAiShareTimelineEnvelope({
+        inviteId: "ais_test1",
+        eventId: "aie_x_2",
+        senderRootSignPrivateKey: owner.rootSignPrivateKey,
+        senderRootPubKeyB64: owner.rootSignPublicKeyB64,
+        sentAt: "2026-05-07T03:04:00.000Z",
+        entry: { kind: "assistant_message", text: "honest reply" },
+      });
+      const swapped = {
+        ...envelope,
+        entry: { kind: "assistant_message" as const, text: "EVIL reply" },
+      };
+      const result = verifyAiShareTimelineEnvelope({
+        envelope: swapped,
+        expectedSenderRootSignPublicKeyB64: owner.rootSignPublicKeyB64,
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.reason).toMatch(/signature did not verify/i);
+    });
+  });
+
   describe("tryParseAiShareEnvelope", () => {
-    test("routes all five kinds correctly", () => {
+    test("routes all six kinds correctly", () => {
       const owner = makeIdentity();
       const responder = makeIdentity();
       const invite = buildAiShareInviteEnvelope({
@@ -304,6 +368,15 @@ describe("ai-share crypto — Phase 4 v1", () => {
       expect(tryParseAiShareEnvelope(decline)?.kind).toBe("decline");
       expect(tryParseAiShareEnvelope(end)?.kind).toBe("end");
       expect(tryParseAiShareEnvelope(prompt)?.kind).toBe("prompt");
+      const timeline = buildAiShareTimelineEnvelope({
+        inviteId: "ais_test1",
+        eventId: "aie_dispatch_0",
+        senderRootSignPrivateKey: owner.rootSignPrivateKey,
+        senderRootPubKeyB64: owner.rootSignPublicKeyB64,
+        sentAt: "2026-05-07T03:04:00.000Z",
+        entry: { kind: "turn_started" },
+      });
+      expect(tryParseAiShareEnvelope(timeline)?.kind).toBe("timeline");
     });
 
     test("returns null for non-ai-share payloads (chat envelopes)", () => {

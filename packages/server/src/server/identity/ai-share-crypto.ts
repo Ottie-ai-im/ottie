@@ -6,16 +6,20 @@ import {
   AiShareEndEnvelopeSchema,
   AiShareInviteEnvelopeSchema,
   AiSharePromptEnvelopeSchema,
+  AiShareTimelineEnvelopeSchema,
   aiShareAcceptPayload,
   aiShareDeclinePayload,
   aiShareEndPayload,
   aiShareInvitePayload,
   aiSharePromptPayload,
+  aiShareTimelinePayload,
   type AiShareAcceptEnvelope,
   type AiShareDeclineEnvelope,
   type AiShareEndEnvelope,
   type AiShareInviteEnvelope,
   type AiSharePromptEnvelope,
+  type AiShareTimelineEntry,
+  type AiShareTimelineEnvelope,
 } from "./ai-share-types.js";
 
 /**
@@ -341,6 +345,70 @@ export function verifyAiSharePromptEnvelope(
   );
 }
 
+// ----- timeline (Phase 4 v2/d — owner side: sign / friend side: verify) --
+
+export interface BuildAiShareTimelineInput {
+  inviteId: string;
+  eventId: string;
+  /** Owner's root sign privkey — signs each timeline frame. */
+  senderRootSignPrivateKey: KeyObject;
+  senderRootPubKeyB64: string;
+  sentAt: string;
+  entry: AiShareTimelineEntry;
+}
+
+export function buildAiShareTimelineEnvelope(
+  input: BuildAiShareTimelineInput,
+): AiShareTimelineEnvelope {
+  const payload = aiShareTimelinePayload({
+    inviteId: input.inviteId,
+    eventId: input.eventId,
+    senderRootPubKeyB64: input.senderRootPubKeyB64,
+    sentAt: input.sentAt,
+    entry: input.entry,
+  });
+  const signatureB64 = signEd25519(input.senderRootSignPrivateKey, payload);
+  return {
+    v: 1,
+    kind: "ai-share-timeline",
+    inviteId: input.inviteId,
+    eventId: input.eventId,
+    senderRootPubKeyB64: input.senderRootPubKeyB64,
+    sentAt: input.sentAt,
+    entry: input.entry,
+    signatureB64,
+  };
+}
+
+export interface VerifyAiShareTimelineInput {
+  envelope: AiShareTimelineEnvelope;
+  /** Friend side: the owner's root pubkey from their peer record. */
+  expectedSenderRootSignPublicKeyB64: string;
+}
+
+export function verifyAiShareTimelineEnvelope(
+  input: VerifyAiShareTimelineInput,
+): { ok: true } | { ok: false; reason: string } {
+  if (input.envelope.senderRootPubKeyB64 !== input.expectedSenderRootSignPublicKeyB64) {
+    return {
+      ok: false,
+      reason: `timeline sender pubkey ${input.envelope.senderRootPubKeyB64.slice(0, 8)}… does not match peer ${input.expectedSenderRootSignPublicKeyB64.slice(0, 8)}…`,
+    };
+  }
+  const payload = aiShareTimelinePayload({
+    inviteId: input.envelope.inviteId,
+    eventId: input.envelope.eventId,
+    senderRootPubKeyB64: input.envelope.senderRootPubKeyB64,
+    sentAt: input.envelope.sentAt,
+    entry: input.envelope.entry,
+  });
+  return verifyDetached(
+    input.expectedSenderRootSignPublicKeyB64,
+    payload,
+    input.envelope.signatureB64,
+  );
+}
+
 // ----- shared parse-and-route helper -------------------------------------
 
 /**
@@ -357,6 +425,7 @@ export function tryParseAiShareEnvelope(
   | { kind: "decline"; envelope: AiShareDeclineEnvelope }
   | { kind: "end"; envelope: AiShareEndEnvelope }
   | { kind: "prompt"; envelope: AiSharePromptEnvelope }
+  | { kind: "timeline"; envelope: AiShareTimelineEnvelope }
   | null {
   if (typeof parsed !== "object" || parsed === null) return null;
   const k = (parsed as { kind?: unknown }).kind;
@@ -379,6 +448,10 @@ export function tryParseAiShareEnvelope(
   if (k === "ai-share-prompt") {
     const r = AiSharePromptEnvelopeSchema.safeParse(parsed);
     return r.success ? { kind: "prompt", envelope: r.data } : null;
+  }
+  if (k === "ai-share-timeline") {
+    const r = AiShareTimelineEnvelopeSchema.safeParse(parsed);
+    return r.success ? { kind: "timeline", envelope: r.data } : null;
   }
   return null;
 }

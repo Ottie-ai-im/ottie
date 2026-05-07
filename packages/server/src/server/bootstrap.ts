@@ -584,6 +584,16 @@ export async function createOttieDaemon(
       );
       await agentManager.runAgent(input.agentId, input.body);
     },
+    subscribeAgent: (input) => {
+      // Phase 4 v2/d: per-share broadcaster opens one of these on
+      // accept, tears it down on end. `replayState: false` because the
+      // broadcaster only wants new events — the friend's UI doesn't
+      // get to see history that pre-dates the share.
+      return agentManager.subscribe(input.onEvent, {
+        agentId: input.agentId,
+        replayState: false,
+      });
+    },
   });
   logger.info({ elapsed: elapsed() }, "Agent storage initialized");
   await bootstrapWorkspaceRegistries({

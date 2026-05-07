@@ -151,12 +151,16 @@
     "endedBody": "此分享已不再有效。可能你或主人已结束,或主人的守护进程已重启。",
     "invalidRoute": "分享链接无效",
     "emptyTitle": "还未发送任何 prompt",
-    "emptyBody": "在下面输入 prompt,朋友的 agent 会执行。Agent 的回复目前会出现在主人屏幕上 — 等 v2/d 上线后会同步到这里。",
+    "emptyBody": "在下面输入 prompt,朋友的 agent 会执行。回复会在 agent 产生时立即显示在这里。",
     "composerPlaceholder": "向共享 agent 发送 prompt…",
     "statusSending": "发送中…",
     "statusSent": "已发送",
+    "statusDelivered": "已送达",
     "statusFailed": "发送失败: {{error}}",
-    "sendPromptFailed": "无法发送 prompt。"
+    "sendPromptFailed": "无法发送 prompt。",
+    "turnStarted": "agent 思考中…",
+    "turnCompleted": "agent 完成",
+    "agentError": "agent 错误: {{message}}"
   },
   "redeemFriend": {
     "title": "添加朋友为好友",

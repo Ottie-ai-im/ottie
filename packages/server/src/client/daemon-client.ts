@@ -1940,6 +1940,33 @@ export class DaemonClient {
     });
   }
 
+  async chatP2pAiShareListTimeline(args: {
+    inviteId: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{
+    entries:
+      | readonly import("../server/identity/identity-rpc-schemas.js").AiShareTimelineRecordOnWire[]
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "chat/p2p/ai-share/list-timeline",
+        requestId,
+        inviteId: args.inviteId,
+      },
+      timeout: args.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/list-timeline/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { entries: msg.payload.entries, error: msg.payload.error };
+      },
+    });
+  }
+
   async deviceLinkRedeem(args: {
     deepLink: string;
     deviceLabel: string;

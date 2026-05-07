@@ -52,6 +52,21 @@ interface OutboundEntry {
   /** Wall-clock ms when the invite was minted. Used for TTL prune. */
   generatedAtMs: number;
   expiresAtMs: number;
+  /**
+   * Phase 4 v2/d — handle returned by the AgentManager subscription
+   * the broadcaster opens when this share goes active. Cleared in the
+   * `applyOutboundEnd` transition so we tear down the subscription
+   * exactly once. Null when no broadcaster is wired (tests).
+   */
+  unsubscribeBroadcaster: (() => void) | null;
+  /** Monotonic per-share counter for outbound timeline `eventId`s. */
+  nextTimelineSeq: number;
+  /**
+   * Latest wire `promptId` the friend sent — stamped onto the next
+   * `user_message` timeline forward so the friend's UI can correlate
+   * the "you sent" row with "agent run started".
+   */
+  lastInboundPromptId: string | null;
 }
 
 interface InboundEntry {
@@ -95,6 +110,9 @@ export class AiShareInviteRegistry {
       state: { kind: "pending" },
       generatedAtMs: now,
       expiresAtMs: now + this.ttlMs,
+      unsubscribeBroadcaster: null,
+      nextTimelineSeq: 0,
+      lastInboundPromptId: null,
     });
     this.logger?.info(
       {
@@ -104,6 +122,53 @@ export class AiShareInviteRegistry {
       },
       "ai_share_invite_recorded_outbound",
     );
+  }
+
+  /**
+   * Phase 4 v2/d — store the broadcaster's unsubscribe handle on the
+   * outbound entry so `applyOutboundEnd` can tear it down. Replaces
+   * any prior handle (e.g., if a previous active state's broadcaster
+   * was torn down without going through the registry).
+   */
+  attachOutboundBroadcaster(inviteId: string, unsubscribe: () => void): void {
+    const entry = this.outbound.get(inviteId);
+    if (!entry) return;
+    if (entry.unsubscribeBroadcaster) {
+      try {
+        entry.unsubscribeBroadcaster();
+      } catch (err) {
+        this.logger?.warn({ err, inviteId }, "ai_share_broadcaster_unsubscribe_threw");
+      }
+    }
+    entry.unsubscribeBroadcaster = unsubscribe;
+  }
+
+  /** Read the next monotonic seq for an outbound timeline event. */
+  takeNextTimelineSeq(inviteId: string): number {
+    const entry = this.outbound.get(inviteId);
+    if (!entry) return 0;
+    const seq = entry.nextTimelineSeq;
+    entry.nextTimelineSeq = seq + 1;
+    return seq;
+  }
+
+  /**
+   * Stamp the most recent wire `promptId` from an inbound
+   * `ai-share-prompt` so the broadcaster can attach it to the next
+   * user_message timeline forward.
+   */
+  setLastInboundPromptId(inviteId: string, promptId: string): void {
+    const entry = this.outbound.get(inviteId);
+    if (!entry) return;
+    entry.lastInboundPromptId = promptId;
+  }
+
+  consumeLastInboundPromptId(inviteId: string): string | null {
+    const entry = this.outbound.get(inviteId);
+    if (!entry) return null;
+    const id = entry.lastInboundPromptId;
+    entry.lastInboundPromptId = null;
+    return id;
   }
 
   applyOutboundAccept(envelope: AiShareAcceptEnvelope): OutboundEntry | null {
@@ -175,6 +240,21 @@ export class AiShareInviteRegistry {
       ...(args.reason !== undefined ? { reason: args.reason } : {}),
       signatureB64: args.signatureB64,
     };
+    // Phase 4 v2/d: tear down the broadcaster subscription so further
+    // agent events for this share go nowhere. Idempotent: clearing the
+    // handle prevents a duplicate teardown from a paired
+    // applyInboundEnd call on the same invite.
+    if (entry.unsubscribeBroadcaster) {
+      try {
+        entry.unsubscribeBroadcaster();
+      } catch (err) {
+        this.logger?.warn(
+          { err, inviteId: args.inviteId },
+          "ai_share_broadcaster_unsubscribe_threw",
+        );
+      }
+      entry.unsubscribeBroadcaster = null;
+    }
     this.logger?.info(
       { inviteId: args.inviteId, endedBy: args.endedBy },
       "ai_share_invite_ended_outbound",

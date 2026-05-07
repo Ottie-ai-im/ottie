@@ -144,13 +144,80 @@ export const AiSharePromptEnvelopeSchema = z.object({
 });
 export type AiSharePromptEnvelope = z.infer<typeof AiSharePromptEnvelopeSchema>;
 
+// ----- timeline (owner → friend) -----------------------------------------
+
+/**
+ * Phase 4 v2/d — owner streams a redacted projection of the shared
+ * agent's timeline back to the friend. Only entries that survive the
+ * owner-side redactor land here; the doc's §7 promise ("Bob sees prompt
+ * + response only; Alice keeps tool-call details to herself") is
+ * enforced by *what we serialize* on the owner side, not by trust on
+ * the friend side.
+ *
+ * Wire payload kinds (subset of the local `AgentTimelineItem`):
+ *
+ *   - `assistant_message` — the agent's text reply
+ *   - `reasoning` — planning / scratchpad text (still safe; no tool I/O)
+ *   - `user_message` — echoes the friend's own prompt back so their
+ *     UI can correlate `promptId` → "delivered + run started"
+ *   - `error` — run failure surface
+ *   - `turn_started` / `turn_completed` — status pills (no usage
+ *     details forwarded; v3 may add a redacted token-count)
+ *
+ * `eventId` is monotonic per inviteId; the friend uses it to dedupe
+ * re-deliveries from a flaky friend-sync session.
+ */
+export const AiShareTimelineEntrySchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("assistant_message"),
+    text: z.string(),
+  }),
+  z.object({
+    kind: z.literal("reasoning"),
+    text: z.string(),
+  }),
+  z.object({
+    kind: z.literal("user_message"),
+    text: z.string(),
+    /**
+     * Echoes the friend's wire promptId so their UI can flip the
+     * "you sent" row from "sent" to "running".
+     */
+    promptId: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal("error"),
+    message: z.string(),
+  }),
+  z.object({
+    kind: z.literal("turn_started"),
+  }),
+  z.object({
+    kind: z.literal("turn_completed"),
+  }),
+]);
+export type AiShareTimelineEntry = z.infer<typeof AiShareTimelineEntrySchema>;
+
+export const AiShareTimelineEnvelopeSchema = z.object({
+  v: z.literal(1),
+  kind: z.literal("ai-share-timeline"),
+  inviteId: z.string().min(1),
+  /** Stable per-event id minted by the owner's daemon. */
+  eventId: z.string().min(1),
+  /** Owner — same field name pattern as `ai-share-end`. */
+  senderRootPubKeyB64: z.string().min(1),
+  sentAt: z.string(),
+  entry: AiShareTimelineEntrySchema,
+  signatureB64: z.string().min(1),
+});
+export type AiShareTimelineEnvelope = z.infer<typeof AiShareTimelineEnvelopeSchema>;
+
 // ----- discriminated union ------------------------------------------------
 
 /**
- * Discriminated union of every ai-share envelope kind v1 + v2/a + v2/b
- * ship. Used by the friend-sync inbound dispatcher to route each
- * frame's decrypted payload to the right handler. Future kinds (v2/d's
- * `ai-share-timeline`) extend this union.
+ * Discriminated union of every ai-share envelope kind v1 through
+ * v2/d ships. Used by the friend-sync inbound dispatcher to route
+ * each frame's decrypted payload to the right handler.
  */
 export const AiShareEnvelopeSchema = z.discriminatedUnion("kind", [
   AiShareInviteEnvelopeSchema,
@@ -158,6 +225,7 @@ export const AiShareEnvelopeSchema = z.discriminatedUnion("kind", [
   AiShareDeclineEnvelopeSchema,
   AiShareEndEnvelopeSchema,
   AiSharePromptEnvelopeSchema,
+  AiShareTimelineEnvelopeSchema,
 ]);
 export type AiShareEnvelope = z.infer<typeof AiShareEnvelopeSchema>;
 
@@ -285,5 +353,35 @@ export function aiSharePromptPayload(args: {
     args.senderRootPubKeyB64,
     args.sentAt,
     args.body,
+  ].join("\n");
+}
+
+/**
+ *   ottie-ai-share-timeline-v1
+ *   {inviteId}
+ *   {eventId}
+ *   {senderRootPubKeyB64}
+ *   {sentAt}
+ *   {entryJson}
+ *
+ * `entryJson` is the JSON-stringified `AiShareTimelineEntry`, last
+ * line, raw. Including the full payload in the signed bytes means a
+ * relay-side adversary can't tamper with the redacted body before the
+ * friend renders it.
+ */
+export function aiShareTimelinePayload(args: {
+  inviteId: string;
+  eventId: string;
+  senderRootPubKeyB64: string;
+  sentAt: string;
+  entry: AiShareTimelineEntry;
+}): string {
+  return [
+    "ottie-ai-share-timeline-v1",
+    args.inviteId,
+    args.eventId,
+    args.senderRootPubKeyB64,
+    args.sentAt,
+    JSON.stringify(args.entry),
   ].join("\n");
 }

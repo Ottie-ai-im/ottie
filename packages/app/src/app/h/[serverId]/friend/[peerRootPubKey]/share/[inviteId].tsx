@@ -9,24 +9,28 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
 import { useActiveAiShares } from "@/hooks/use-active-ai-shares";
+import { useAiShareTimeline } from "@/hooks/use-ai-share-timeline";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import type { AiShareTimelineRecordOnWire } from "@server/server/identity/identity-rpc-schemas";
 
 /**
- * Phase 4 v2/c — friend-side shared-agent surface. The friend reaches
- * this route from the active-share banner on the friend chat screen.
- * What we ship here:
+ * Phase 4 v2/c + v2/d — friend-side shared-agent surface. The friend
+ * reaches this route from the active-share banner on the friend chat
+ * screen. What ships here:
  *
  *   - Header that names the agent + peer + an End button
- *   - A locally-buffered "you sent" list (since the timeline-streaming-
- *     back direction is v2/d). Each row is just the prompt text + a
- *     status: "sending" | "sent" | "failed: …".
+ *   - Interleaved transcript merging two streams:
+ *       · Local "you sent" rows (until the daemon's redactor echoes
+ *         the user_message back, at which point the local row is
+ *         superseded — we dedupe by promptId)
+ *       · Inbound redacted timeline records from the owner (v2/d):
+ *         assistant_message, reasoning, error, turn_started/completed
  *   - Compose box that fires `chatP2pAiShareSendPrompt` and resets.
  *   - "Share ended" empty state when `useActiveAiShares` no longer
- *     contains this inviteId (peer ended it, or our daemon restarted
- *     and the v1/v2 in-memory registry is gone).
+ *     contains this inviteId (peer ended it, owner's daemon restarted).
  *
- * Owner sees the prompt land in their existing AgentManager pipeline
- * (not surfaced on this screen until v2/d).
+ * Bob does NOT see Alice's tool calls. The redactor on the owner's
+ * daemon enforces this before any envelope is signed + shipped.
  */
 
 interface LocalPromptEntry {
@@ -154,6 +158,56 @@ const styles = StyleSheet.create((theme) => ({
   promptMetaError: {
     color: theme.colors.destructive,
   },
+  assistantRow: {
+    alignSelf: "flex-start",
+    maxWidth: "85%",
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surface1,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+    gap: 2,
+  },
+  assistantBody: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    lineHeight: 22,
+  },
+  reasoningRow: {
+    alignSelf: "flex-start",
+    maxWidth: "85%",
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[3],
+  },
+  reasoningBody: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 20,
+    fontStyle: "italic",
+  },
+  statusPill: {
+    alignSelf: "center",
+    paddingVertical: 2,
+    paddingHorizontal: theme.spacing[2],
+  },
+  statusPillText: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  inboundError: {
+    alignSelf: "center",
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[3],
+  },
+  inboundErrorText: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.destructive,
+    fontSize: theme.fontSize.sm,
+  },
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -226,13 +280,24 @@ export default function FriendShareInvitePage() {
   const [localPrompts, setLocalPrompts] = useState<LocalPromptEntry[]>([]);
   const scrollRef = useRef<ScrollView>(null);
 
-  const promptCount = localPrompts.length;
+  // Phase 4 v2/d — inbound redacted timeline records from the owner.
+  const { records: timelineRecords } = useAiShareTimeline(serverId, inviteId);
+
+  // Merge local "you sent" prompts with inbound timeline records, then
+  // dedupe `user_message` echoes from the owner against the local
+  // bubbles by promptId. Result is rendered top→bottom.
+  const merged = useMemo(
+    () => mergeFriendShareTranscript(localPrompts, timelineRecords),
+    [localPrompts, timelineRecords],
+  );
+
+  const itemCount = merged.length;
   useEffect(() => {
-    if (promptCount === 0) return;
+    if (itemCount === 0) return;
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
     });
-  }, [promptCount]);
+  }, [itemCount]);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -409,7 +474,7 @@ export default function FriendShareInvitePage() {
             keyboardShouldPersistTaps="handled"
             testID="ai-share-prompts-scroll"
           >
-            {localPrompts.length === 0 ? (
+            {merged.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateTitle}>
                   {t("aiShare.emptyTitle", { defaultValue: "Nothing sent yet" })}
@@ -417,32 +482,12 @@ export default function FriendShareInvitePage() {
                 <Text style={styles.emptyStateBody}>
                   {t("aiShare.emptyBody", {
                     defaultValue:
-                      "Type a prompt below and your friend's agent will run it. The agent's replies show up on the owner's screen — your view here will fill in once v2/d ships.",
+                      "Type a prompt below and your friend's agent will run it. Replies show up here as soon as the agent emits them.",
                   })}
                 </Text>
               </View>
             ) : (
-              localPrompts.map((prompt) => (
-                <View key={prompt.localId} style={styles.promptRow}>
-                  <Text style={styles.promptBody}>{prompt.body}</Text>
-                  <Text
-                    style={
-                      prompt.status === "failed"
-                        ? [styles.promptMeta, styles.promptMetaError]
-                        : styles.promptMeta
-                    }
-                  >
-                    {prompt.status === "sending"
-                      ? t("aiShare.statusSending", { defaultValue: "sending…" })
-                      : prompt.status === "sent"
-                        ? t("aiShare.statusSent", { defaultValue: "sent" })
-                        : t("aiShare.statusFailed", {
-                            error: prompt.error ?? "",
-                            defaultValue: "failed: {{error}}",
-                          })}
-                  </Text>
-                </View>
-              ))
+              merged.map((row) => <FriendShareRow key={row.key} row={row} />)
             )}
           </ScrollView>
 
@@ -473,4 +518,142 @@ export default function FriendShareInvitePage() {
       )}
     </View>
   );
+}
+
+// ----- transcript merge ---------------------------------------------------
+
+type MergedRow =
+  | { key: string; kind: "local-prompt"; entry: LocalPromptEntry }
+  | { key: string; kind: "user-message"; text: string }
+  | { key: string; kind: "assistant"; text: string }
+  | { key: string; kind: "reasoning"; text: string }
+  | { key: string; kind: "status"; text: "turn_started" | "turn_completed" }
+  | { key: string; kind: "error"; message: string };
+
+/**
+ * v2/d merge rule: render local "you sent" rows up to (but not
+ * including) the first inbound `user_message` whose `promptId`
+ * matches a local row's `promptId`. From that point on, the inbound
+ * stream takes over — we trust the owner's redacted timeline, which
+ * also serves as confirmation that the agent saw the prompt.
+ *
+ * Specifically: if an inbound `user_message` carries a `promptId` and
+ * a local row matches that id, the local row is suppressed (the
+ * inbound version is the canonical one). Local rows with no matching
+ * inbound echo (still "sending" / failed / network glitch) stay
+ * visible so the friend isn't left wondering.
+ */
+function mergeFriendShareTranscript(
+  localPrompts: ReadonlyArray<LocalPromptEntry>,
+  timeline: ReadonlyArray<AiShareTimelineRecordOnWire>,
+): MergedRow[] {
+  const echoedPromptIds = new Set<string>();
+  for (const r of timeline) {
+    if (r.entry.kind === "user_message" && r.entry.promptId) {
+      echoedPromptIds.add(r.entry.promptId);
+    }
+  }
+  const out: MergedRow[] = [];
+  // Inbound timeline is monotonic per `eventId` (owner-side seq).
+  // Render it as-is, then append still-unechoed local rows at the end.
+  for (const r of timeline) {
+    const e = r.entry;
+    switch (e.kind) {
+      case "user_message":
+        out.push({ key: `tm-${r.eventId}`, kind: "user-message", text: e.text });
+        break;
+      case "assistant_message":
+        out.push({ key: `tm-${r.eventId}`, kind: "assistant", text: e.text });
+        break;
+      case "reasoning":
+        out.push({ key: `tm-${r.eventId}`, kind: "reasoning", text: e.text });
+        break;
+      case "error":
+        out.push({ key: `tm-${r.eventId}`, kind: "error", message: e.message });
+        break;
+      case "turn_started":
+        out.push({ key: `tm-${r.eventId}`, kind: "status", text: "turn_started" });
+        break;
+      case "turn_completed":
+        out.push({ key: `tm-${r.eventId}`, kind: "status", text: "turn_completed" });
+        break;
+    }
+  }
+  for (const local of localPrompts) {
+    if (local.promptId && echoedPromptIds.has(local.promptId)) continue;
+    out.push({ key: `lp-${local.localId}`, kind: "local-prompt", entry: local });
+  }
+  return out;
+}
+
+function FriendShareRow({ row }: { row: MergedRow }) {
+  const { t } = useTranslation();
+  switch (row.kind) {
+    case "local-prompt": {
+      const prompt = row.entry;
+      return (
+        <View style={styles.promptRow}>
+          <Text style={styles.promptBody}>{prompt.body}</Text>
+          <Text
+            style={
+              prompt.status === "failed"
+                ? [styles.promptMeta, styles.promptMetaError]
+                : styles.promptMeta
+            }
+          >
+            {prompt.status === "sending"
+              ? t("aiShare.statusSending", { defaultValue: "sending…" })
+              : prompt.status === "sent"
+                ? t("aiShare.statusSent", { defaultValue: "sent" })
+                : t("aiShare.statusFailed", {
+                    error: prompt.error ?? "",
+                    defaultValue: "failed: {{error}}",
+                  })}
+          </Text>
+        </View>
+      );
+    }
+    case "user-message":
+      return (
+        <View style={styles.promptRow}>
+          <Text style={styles.promptBody}>{row.text}</Text>
+          <Text style={styles.promptMeta}>
+            {t("aiShare.statusDelivered", { defaultValue: "delivered" })}
+          </Text>
+        </View>
+      );
+    case "assistant":
+      return (
+        <View style={styles.assistantRow}>
+          <Text style={styles.assistantBody}>{row.text}</Text>
+        </View>
+      );
+    case "reasoning":
+      return (
+        <View style={styles.reasoningRow}>
+          <Text style={styles.reasoningBody}>{row.text}</Text>
+        </View>
+      );
+    case "status":
+      return (
+        <View style={styles.statusPill}>
+          <Text style={styles.statusPillText}>
+            {row.text === "turn_started"
+              ? t("aiShare.turnStarted", { defaultValue: "agent thinking…" })
+              : t("aiShare.turnCompleted", { defaultValue: "agent done" })}
+          </Text>
+        </View>
+      );
+    case "error":
+      return (
+        <View style={styles.inboundError}>
+          <Text style={styles.inboundErrorText}>
+            {t("aiShare.agentError", {
+              message: row.message,
+              defaultValue: "agent error: {{message}}",
+            })}
+          </Text>
+        </View>
+      );
+  }
 }

@@ -380,15 +380,24 @@ send-prompt` ships it. No friend-side UI yet — verified via
   surface) that navigates here. Empty state explains what
   v2/d will fill in. "Share ended" detection via
   `useActiveAiShares` falling out of the active list.
-- **v2/d — owner→friend timeline streaming.** Add
-  `ai-share-timeline` envelope (owner → friend). Hook
-  `AgentManager.onEvent` (or equivalent emit point) — for
-  every shared agent, encode the event as a timeline envelope
-  and broadcast through the matching friend-sync session.
-  Friend's shared-agent view renders the events. Per-tool-
-  call redaction lives here: filter tool inputs / outputs
-  out before sending (per §7 Q10 + §7's "Bob does not see"
-  list).
+- **v2/d — owner→friend timeline streaming.** ✅ shipped.
+  Adds `ai-share-timeline` envelope (sixth kind) carrying a
+  redacted projection of `AgentTimelineItem`. The owner-side
+  redactor (`ai-share-timeline-redactor.ts`) enforces §7's
+  "Bob does not see" list: tool calls, tool inputs/outputs,
+  permission requests, todo items, and usage updates never
+  reach the wire. Forwarded entries: `assistant_message`,
+  `reasoning`, `user_message` (with friend's promptId echoed
+  back), `error`, `turn_started`, `turn_completed`. The
+  broadcaster opens an `AgentManager.subscribe` per active
+  outbound share on accept, tears it down on end (registry
+  holds the unsubscribe handle). Friend side dispatches into
+  an `AiShareTimelineStore` (per-inviteId ring buffer, capped
+  at 500), polled by `useAiShareTimeline` at 2s. The friend's
+  share screen now interleaves local "you sent" rows with
+  inbound assistant messages / reasoning / status pills,
+  deduping by `promptId` once the owner's daemon echoes the
+  user_message back.
 - **v2/e — auditable transcript + disconnect handling +
   e2e tests.** Persist invite + every prompt/timeline event
   to `$OTTIE_HOME/ai-shares/{inviteId}.json` on both sides as

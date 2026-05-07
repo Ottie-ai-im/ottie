@@ -758,6 +758,44 @@ export const ChatP2pAiShareListShareableAgentsResponseSchema = z.object({
   }),
 });
 
+// Phase 4 v2/d — friend-side: list redacted timeline entries for a share.
+
+const AiShareTimelineEntryOnWireSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("assistant_message"), text: z.string() }),
+  z.object({ kind: z.literal("reasoning"), text: z.string() }),
+  z.object({
+    kind: z.literal("user_message"),
+    text: z.string(),
+    promptId: z.string().optional(),
+  }),
+  z.object({ kind: z.literal("error"), message: z.string() }),
+  z.object({ kind: z.literal("turn_started") }),
+  z.object({ kind: z.literal("turn_completed") }),
+]);
+
+export const AiShareTimelineRecordOnWireSchema = z.object({
+  eventId: z.string().min(1),
+  sentAt: z.string(),
+  receivedAtMs: z.number(),
+  entry: AiShareTimelineEntryOnWireSchema,
+});
+export type AiShareTimelineRecordOnWire = z.infer<typeof AiShareTimelineRecordOnWireSchema>;
+
+export const ChatP2pAiShareListTimelineRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-timeline"),
+  requestId: z.string(),
+  inviteId: z.string().min(1),
+});
+
+export const ChatP2pAiShareListTimelineResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-timeline/response"),
+  payload: z.object({
+    requestId: z.string(),
+    entries: z.array(AiShareTimelineRecordOnWireSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 // ----- device/remove (Phase 2.g) -----------------------------------------
 // Remove a peer device from THIS user's device list. Refused for self
 // (a daemon can't sign its own revocation — use another device).
