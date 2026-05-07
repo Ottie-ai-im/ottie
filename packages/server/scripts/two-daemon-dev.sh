@@ -88,5 +88,9 @@ echo ""
 
 export OTTIE_HOME="$HOME_DIR"
 export OTTIE_CORS_ORIGINS="*"
+# Run the daemon dev script directly inside packages/server. The
+# workspace-root npm script `dev:server` just delegates here, but
+# calling it from the workspace root would also start Expo + Tmux,
+# which we don't want (we want JUST a bare daemon process).
 cd "$SERVER_DIR"
-exec pnpm run dev:server
+exec pnpm run dev
