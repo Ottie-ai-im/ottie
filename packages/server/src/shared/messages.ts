@@ -1709,6 +1709,27 @@ export const RegisterPushTokenMessageSchema = z.object({
   token: z.string(),
 });
 
+// Phase 4 v3/d — diagnostic: send a test push to all tokens this
+// daemon currently has registered. Lets the user verify the full push
+// pipeline (token registered → daemon → Expo → APNS → device) from
+// the settings screen. Returns the count of tokens we just dispatched
+// to so the UI can warn "no tokens registered".
+
+export const PushSendTestRequestSchema = z.object({
+  type: z.literal("push/send-test"),
+  requestId: z.string(),
+});
+
+export const PushSendTestResponseSchema = z.object({
+  type: z.literal("push/send-test/response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** How many push tokens the daemon dispatched to. Zero is a soft error. */
+    tokenCount: z.number().int(),
+    error: z.string().nullable(),
+  }),
+});
+
 // ============================================================================
 // Terminal Messages
 // ============================================================================
@@ -2076,6 +2097,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   PingMessageSchema,
   ListCommandsRequestSchema,
   RegisterPushTokenMessageSchema,
+  PushSendTestRequestSchema,
   ListTerminalsRequestSchema,
   SubscribeTerminalsRequestSchema,
   UnsubscribeTerminalsRequestSchema,
@@ -3774,6 +3796,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ChatP2pAiShareSendPromptResponseSchema,
   ChatP2pAiShareListShareableAgentsResponseSchema,
   ChatP2pAiShareListTimelineResponseSchema,
+  PushSendTestResponseSchema,
   ScheduleCreateResponseSchema,
   ScheduleListResponseSchema,
   ScheduleInspectResponseSchema,

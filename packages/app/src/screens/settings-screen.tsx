@@ -70,6 +70,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DesktopPermissionsSection } from "@/desktop/components/desktop-permissions-section";
+import { MobilePermissionsSection } from "@/components/mobile-permissions-section";
 import { IntegrationsSection } from "@/desktop/components/integrations-section";
 import { isElectronRuntime } from "@/desktop/host";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
@@ -1172,7 +1173,14 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
         case "integrations":
           return isDesktopApp ? <IntegrationsSection /> : null;
         case "permissions":
-          return isDesktopApp ? <DesktopPermissionsSection /> : null;
+          // Phase 4 v3/d — desktop (Tauri) and native (iOS/Android)
+          // each render their own permissions surface. Web has no
+          // OS-level notification API to manage, so it stays null.
+          return isDesktopApp ? (
+            <DesktopPermissionsSection />
+          ) : (
+            <MobilePermissionsSection serverId={anyOnlineServerId} />
+          );
         case "labs":
           return <LabsSection />;
         case "localDaemon":

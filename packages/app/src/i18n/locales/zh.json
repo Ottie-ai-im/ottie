@@ -453,6 +453,27 @@
     "microphone": "麦克风",
     "test": "测试"
   },
+  "mobilePermissions": {
+    "title": "通知",
+    "notifications": "推送通知",
+    "statusGranted": "已允许。下面的测试按钮可以验证投递是否正常。",
+    "statusDenied": "已拒绝。点击「请求」可以再次询问。",
+    "statusDeniedSystem": "已拒绝。请点击「打开设置」到系统设置里重新开启通知。",
+    "statusUndetermined": "尚未决定。点击「请求」给 Ottie 通知你的权限。",
+    "granted": "已授权",
+    "request": "请求",
+    "requesting": "请求中…",
+    "openSettings": "打开设置",
+    "refresh": "刷新",
+    "test": "测试",
+    "testSending": "发送中…",
+    "localTestTitle": "本地测试通知",
+    "localTestSubtitle": "立即在本机弹一条通知。",
+    "daemonTestTitle": "守护进程测试通知",
+    "daemonTestSubtitle": "让守护进程通过 Expo → APNS 给所有注册了 token 的设备推一条通知。",
+    "daemonTestResult": "已发到 {{tokens}} 个已注册 token,等几秒钟看横幅。",
+    "daemonOffline": "守护进程离线,无法从设置页面推送测试。"
+  },
   "selectableText": {
     "title": "选择文本",
     "hint": "长按某个单词进入选择，拖动手柄可扩展范围。",

@@ -453,6 +453,27 @@
     "microphone": "Microphone",
     "test": "Test"
   },
+  "mobilePermissions": {
+    "title": "Notifications",
+    "notifications": "Push notifications",
+    "statusGranted": "Granted. Tap a test button below to confirm delivery works.",
+    "statusDenied": "Denied. Tap Request to ask again.",
+    "statusDeniedSystem": "Denied. Tap Open settings to re-enable notifications in the OS.",
+    "statusUndetermined": "Not yet decided. Tap Request to grant Ottie permission to notify you.",
+    "granted": "Granted",
+    "request": "Request",
+    "requesting": "Requesting…",
+    "openSettings": "Open settings",
+    "refresh": "Refresh",
+    "test": "Test",
+    "testSending": "Sending…",
+    "localTestTitle": "Send local test",
+    "localTestSubtitle": "Schedules an immediate notification on this device.",
+    "daemonTestTitle": "Send daemon test",
+    "daemonTestSubtitle": "Asks this daemon to push a notification through Expo → APNS to every device that's registered a token.",
+    "daemonTestResult": "Dispatched to {{tokens}} registered token(s). Wait a few seconds for the banner.",
+    "daemonOffline": "Daemon is offline; can't dispatch a test push from settings."
+  },
   "selectableText": {
     "title": "Select text",
     "hint": "Long-press a word to start selection. Drag the handles to extend.",

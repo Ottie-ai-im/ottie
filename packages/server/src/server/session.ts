@@ -2196,6 +2196,66 @@ export class Session {
       case "register_push_token":
         this.handleRegisterPushToken(msg.token);
         return;
+      case "push/send-test":
+        await this.handlePushSendTestRequest(msg);
+        return;
+    }
+  }
+
+  private async handlePushSendTestRequest(
+    request: Extract<SessionInboundMessage, { type: "push/send-test" }>,
+  ): Promise<void> {
+    // Phase 4 v3/d — diagnostic endpoint: dispatch a "this is a test"
+    // push to all tokens this daemon knows about. Lets the user verify
+    // their own push pipeline from settings without waiting for a
+    // real agent attention event.
+    const pushService = this.pushService;
+    if (!pushService) {
+      this.emit({
+        type: "push/send-test/response",
+        payload: {
+          requestId: request.requestId,
+          tokenCount: 0,
+          error: "Push service is not configured on this daemon.",
+        },
+      });
+      return;
+    }
+    const tokens = this.pushTokenStore.getAllTokens();
+    if (tokens.length === 0) {
+      this.emit({
+        type: "push/send-test/response",
+        payload: {
+          requestId: request.requestId,
+          tokenCount: 0,
+          error: "No push tokens are registered with this daemon yet.",
+        },
+      });
+      return;
+    }
+    try {
+      await pushService.sendPush(tokens, {
+        title: "Ottie push test",
+        body: "If you can see this, the daemon-to-device push pipeline works.",
+        data: { kind: "ottie:test" },
+      });
+      this.emit({
+        type: "push/send-test/response",
+        payload: {
+          requestId: request.requestId,
+          tokenCount: tokens.length,
+          error: null,
+        },
+      });
+    } catch (err) {
+      this.emit({
+        type: "push/send-test/response",
+        payload: {
+          requestId: request.requestId,
+          tokenCount: tokens.length,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
     }
   }
 

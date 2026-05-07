@@ -189,14 +189,22 @@ function PushNotificationRouter() {
     }
 
     Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        // When the app is open, don't show OS banners.
-        shouldShowAlert: false,
-        shouldShowBanner: false,
-        shouldShowList: false,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-      }),
+      handleNotification: async (notification) => {
+        // Phase 4 v3/d — settings test notifications carry a `kind:
+        // "ottie:test"` tag so the user can verify the OS pipeline
+        // works while the app is foregrounded. Suppress everything
+        // else (matches prior behavior for daemon-pushed agent
+        // attention events: in-app surfaces own them).
+        const data = notification.request.content.data as Record<string, unknown> | undefined;
+        const isTest = data?.kind === "ottie:test";
+        return {
+          shouldShowAlert: isTest,
+          shouldShowBanner: isTest,
+          shouldShowList: isTest,
+          shouldPlaySound: isTest,
+          shouldSetBadge: false,
+        };
+      },
     });
 
     const openFromResponse = (response: Notifications.NotificationResponse) => {

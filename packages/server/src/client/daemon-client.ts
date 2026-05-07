@@ -1386,6 +1386,29 @@ export class DaemonClient {
     });
   }
 
+  /**
+   * Phase 4 v3/d — diagnostic: ask the daemon to send a test push to
+   * all currently-registered tokens. UI uses this from the settings
+   * "Send daemon test" button to verify the full
+   * daemon → Expo → APNS → device pipeline.
+   */
+  async pushSendTest(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    tokenCount: number;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "push/send-test", requestId },
+      timeout: params?.timeoutMs ?? 10000,
+      select: (msg) => {
+        if (msg.type !== "push/send-test/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { tokenCount: msg.payload.tokenCount, error: msg.payload.error };
+      },
+    });
+  }
+
   async ping(params?: { requestId?: string; timeoutMs?: number }): Promise<{
     requestId: string;
     clientSentAt: number;
