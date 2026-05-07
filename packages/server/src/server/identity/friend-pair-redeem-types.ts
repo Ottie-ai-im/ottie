@@ -83,6 +83,25 @@ export const FriendCandidateSchema = z.object({
    * the offer's `relayEndpoint`; same back-compat reason as `serverId`.
    */
   relayEndpoint: z.string().optional(),
+  /**
+   * Phase 3.b/2a: Bob's long-lived X25519 public key (raw 32-byte JWK 'x'
+   * base64url) for offline-inbox encryption. Alice stores this in her
+   * peer record so she can NaCl-box future messages under it when Bob
+   * is offline. NOT covered by the candidate signature — Alice doesn't
+   * verify a sig over this field — because Bob just signed an X25519
+   * ephemeral pubkey under his root key in the same payload (binding
+   * proves Bob's root key controls the session); pairing this with a
+   * separately-claimed long-term encryption key would let a swapped
+   * encryption key still pass verification. We treat the encryption
+   * pubkey as advisory routing metadata: worst case, a tampered key
+   * means inbox messages stop decrypting at Bob's end and he has to
+   * re-pair. The signing-key trust anchor is unaffected.
+   *
+   * Optional for back-compat: responders running pre-3.b/2a builds will
+   * omit this field, and Alice's daemon will store the peer without an
+   * encryption key (offline-inbox to that peer falls back to live-only).
+   */
+  encryptionPublicKeyB64: z.string().optional(),
 });
 
 export type FriendCandidate = z.infer<typeof FriendCandidateSchema>;

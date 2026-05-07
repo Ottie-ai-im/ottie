@@ -26,6 +26,15 @@ export interface RootIdentityBundle {
   signPublicKey: KeyObject;
   /** Ed25519 private key as a Node KeyObject for sign() operations. */
   signPrivateKey: KeyObject;
+  /**
+   * Phase 3.b/2a: X25519 public key (raw 32-byte JWK 'x' base64url) for
+   * offline-inbox encryption. Always non-empty after `loadRootIdentity` —
+   * if the on-disk file pre-dates 3.b/2a, the loader generates a fresh
+   * keypair and rewrites the file before returning.
+   */
+  encryptionPublicKeyB64: string;
+  /** Phase 3.b/2a: matching X25519 private key (JWK 'd' base64url). */
+  encryptionPrivateKeyB64: string;
 }
 
 /**
@@ -59,13 +68,41 @@ export function loadRootIdentity(
   }
 
   const raw = readFileSync(filePath, "utf8");
-  const stored = RootIdentitySchema.parse(JSON.parse(raw));
+  const parsedStored = RootIdentitySchema.parse(JSON.parse(raw));
 
-  const signPublicKey = importEd25519PublicKey(stored.signPublicKeyB64);
-  const signPrivateKey = importEd25519PrivateKey(stored.signPrivateKeyB64, stored.signPublicKeyB64);
+  const signPublicKey = importEd25519PublicKey(parsedStored.signPublicKeyB64);
+  const signPrivateKey = importEd25519PrivateKey(
+    parsedStored.signPrivateKeyB64,
+    parsedStored.signPublicKeyB64,
+  );
+
+  // Phase 3.b/2a back-compat migration: root.json files written before
+  // 3.b/2a don't carry the X25519 encryption keypair. Synthesize one and
+  // persist in place so the rest of the codebase can assume the bundle
+  // always has these keys. The migration is idempotent — subsequent loads
+  // see the populated fields and skip this branch.
+  let stored = parsedStored;
+  if (!stored.encryptionPublicKeyB64 || !stored.encryptionPrivateKeyB64) {
+    const { publicKeyB64, privateKeyB64 } = generateX25519KeyPairB64();
+    stored = {
+      ...stored,
+      encryptionPublicKeyB64: publicKeyB64,
+      encryptionPrivateKeyB64: privateKeyB64,
+    };
+    writeFileSync(filePath, `${JSON.stringify(stored, null, 2)}\n`, { mode: 0o600 });
+    log?.info({ filePath }, "Migrated root identity: added X25519 encryption keypair");
+  }
 
   log?.info({ filePath }, "Loaded root identity");
-  return { stored, signPublicKey, signPrivateKey };
+  return {
+    stored,
+    signPublicKey,
+    signPrivateKey,
+    // Schema marks the X25519 fields optional for back-compat, but the
+    // migration block above guarantees they're populated by this point.
+    encryptionPublicKeyB64: stored.encryptionPublicKeyB64 ?? "",
+    encryptionPrivateKeyB64: stored.encryptionPrivateKeyB64 ?? "",
+  };
 }
 
 /**
@@ -100,10 +137,17 @@ export function createRootIdentity(
   const signPublicKeyB64 = exportEd25519PublicKey(publicKey);
   const signPrivateKeyB64 = exportEd25519PrivateKey(privateKey);
 
+  // Phase 3.b/2a: mint a fresh X25519 keypair too. New identities always
+  // ship with one; old ones get migrated on next load (see loadRootIdentity).
+  const { publicKeyB64: encryptionPublicKeyB64, privateKeyB64: encryptionPrivateKeyB64 } =
+    generateX25519KeyPairB64();
+
   const stored: StoredRootIdentity = {
     v: 1,
     signPublicKeyB64,
     signPrivateKeyB64,
+    encryptionPublicKeyB64,
+    encryptionPrivateKeyB64,
     displayName: trimmedName,
     createdAt: new Date().toISOString(),
   };
@@ -112,7 +156,13 @@ export function createRootIdentity(
   writeFileSync(filePath, `${JSON.stringify(stored, null, 2)}\n`, { mode: 0o600 });
 
   log?.info({ filePath }, "Created root identity");
-  return { stored, signPublicKey: publicKey, signPrivateKey: privateKey };
+  return {
+    stored,
+    signPublicKey: publicKey,
+    signPrivateKey: privateKey,
+    encryptionPublicKeyB64,
+    encryptionPrivateKeyB64,
+  };
 }
 
 /**
@@ -156,11 +206,36 @@ export function writeImportedRootIdentity(
     format: "jwk",
   });
 
-  mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
-  writeFileSync(filePath, `${JSON.stringify(validated, null, 2)}\n`, { mode: 0o600 });
+  // Phase 3.b/2a: identity-bearing X25519 keys must travel with the root
+  // identity (otherwise the new device couldn't decrypt offline-inbox
+  // messages addressed to the shared identity). If the linker's daemon
+  // pre-dates 3.b/2a and didn't include them, the new device generates
+  // a fresh pair locally. That's a partial-truth: messages already in
+  // flight to the OLD device's pubkey won't be readable here, but new
+  // friends pairing under this identity from this device onward will see
+  // the new pubkey. Once the linker upgrades, both devices end up with
+  // matching keys via peer-sync (Phase 2.f) — handled separately.
+  let storedWithEncKeys = validated;
+  if (!storedWithEncKeys.encryptionPublicKeyB64 || !storedWithEncKeys.encryptionPrivateKeyB64) {
+    const { publicKeyB64, privateKeyB64 } = generateX25519KeyPairB64();
+    storedWithEncKeys = {
+      ...storedWithEncKeys,
+      encryptionPublicKeyB64: publicKeyB64,
+      encryptionPrivateKeyB64: privateKeyB64,
+    };
+  }
 
-  log?.info({ filePath, displayName: validated.displayName }, "Imported root identity");
-  return { stored: validated, signPublicKey, signPrivateKey };
+  mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  writeFileSync(filePath, `${JSON.stringify(storedWithEncKeys, null, 2)}\n`, { mode: 0o600 });
+
+  log?.info({ filePath, displayName: storedWithEncKeys.displayName }, "Imported root identity");
+  return {
+    stored: storedWithEncKeys,
+    signPublicKey,
+    signPrivateKey,
+    encryptionPublicKeyB64: storedWithEncKeys.encryptionPublicKeyB64 ?? "",
+    encryptionPrivateKeyB64: storedWithEncKeys.encryptionPrivateKeyB64 ?? "",
+  };
 }
 
 // ----- Ed25519 raw-byte (JWK base64url) serialization ---------------------
@@ -199,4 +274,26 @@ function importEd25519PrivateKey(privateB64url: string, publicB64url: string): K
     key: { kty: "OKP", crv: "Ed25519", x: publicB64url, d: privateB64url },
     format: "jwk",
   });
+}
+
+// ----- X25519 (Phase 3.b/2a) ---------------------------------------------
+//
+// X25519 keypair for offline-inbox encryption. We store the JWK 'x' / 'd'
+// base64url forms (raw 32 bytes each) so the on-disk format matches the
+// Ed25519 lines above. Senders run nacl.box (Curve25519) with these keys —
+// the wire encoding is interchangeable, see friend-sync-handshake.ts for
+// prior art using Node-generated X25519 keys with nacl.box from
+// @ottie/relay/e2ee.
+
+function generateX25519KeyPairB64(): { publicKeyB64: string; privateKeyB64: string } {
+  const { publicKey, privateKey } = generateKeyPairSync("x25519");
+  const pubJwk = publicKey.export({ format: "jwk" }) as { x?: string };
+  const privJwk = privateKey.export({ format: "jwk" }) as { d?: string };
+  if (!pubJwk.x) {
+    throw new Error("X25519 public key JWK is missing the 'x' field");
+  }
+  if (!privJwk.d) {
+    throw new Error("X25519 private key JWK is missing the 'd' field");
+  }
+  return { publicKeyB64: pubJwk.x, privateKeyB64: privJwk.d };
 }

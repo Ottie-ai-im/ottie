@@ -419,6 +419,11 @@ export class IdentityService {
       // / CLI paths that don't construct with a self-device context.
       ...(this.selfDeviceContext ? { selfServerId: this.selfDeviceContext.serverId } : {}),
       ...(this.relayEndpoint ? { selfRelayEndpoint: this.relayEndpoint } : {}),
+      // Phase 3.b/2a: ship Bob's X25519 pubkey so Alice can later
+      // NaCl-box offline-inbox messages back to Bob's identity.
+      ...(this.state.bundle.encryptionPublicKeyB64
+        ? { selfEncryptionPublicKeyB64: this.state.bundle.encryptionPublicKeyB64 }
+        : {}),
       logger: this.logger,
     });
     if (outcome.status !== "paired") return outcome;

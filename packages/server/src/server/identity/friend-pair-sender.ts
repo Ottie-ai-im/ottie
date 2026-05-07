@@ -121,6 +121,13 @@ export interface RedeemFriendPairOfferInput {
    * back-compat reason as `selfServerId`.
    */
   selfRelayEndpoint?: string;
+  /**
+   * Phase 3.b/2a: Bob's long-lived X25519 public key (raw 32-byte JWK 'x'
+   * base64url) — propagated into the candidate so Alice can store it for
+   * future offline-inbox sends. Optional in tests; production
+   * IdentityService passes it from the loaded root identity bundle.
+   */
+  selfEncryptionPublicKeyB64?: string;
   /** Override clock (tests). */
   nowMs?: number;
   /** Override timeout in ms. Defaults to 5 minutes. */
@@ -153,6 +160,9 @@ export async function redeemFriendPairOffer(
       selfDisplayName: input.selfDisplayName,
       ...(input.selfServerId ? { selfServerId: input.selfServerId } : {}),
       ...(input.selfRelayEndpoint ? { selfRelayEndpoint: input.selfRelayEndpoint } : {}),
+      ...(input.selfEncryptionPublicKeyB64
+        ? { selfEncryptionPublicKeyB64: input.selfEncryptionPublicKeyB64 }
+        : {}),
       ...(input.nowMs !== undefined ? { nowMs: input.nowMs } : {}),
     });
   } catch (err) {
@@ -431,6 +441,12 @@ function handleApprovalEnvelope(args: {
     // friend-sync dialer route to Alice's daemon for chat in 3.b/1c.
     peerServerId: built.offer.serverId,
     peerRelayEndpoint: built.offer.relayEndpoint,
+    // 3.b/2a: capture Alice's X25519 pubkey (when present in approval —
+    // pre-3.b/2a daemons omit it) so Bob's offline-inbox sender can
+    // address future messages to Alice's identity.
+    ...(approvalReply.status === "approved" && approvalReply.encryptionPublicKeyB64
+      ? { peerEncryptionPublicKeyB64: approvalReply.encryptionPublicKeyB64 }
+      : {}),
   };
   log?.info(
     {

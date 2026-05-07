@@ -68,6 +68,14 @@ export interface BuildFriendPairRedemptionInput {
    * back-compat reason as `selfServerId`.
    */
   selfRelayEndpoint?: string;
+  /**
+   * Phase 3.b/2a: Bob's long-lived X25519 public key (raw 32-byte JWK
+   * 'x' base64url) — used by Alice's offline-inbox sender to NaCl-box
+   * future messages addressed to Bob's identity. Optional so this helper
+   * still works in tests and on pre-3.b/2a code paths; production
+   * IdentityService always passes it from the root identity bundle.
+   */
+  selfEncryptionPublicKeyB64?: string;
   /** Override clock for tests. Defaults to Date.now(). */
   nowMs?: number;
 }
@@ -132,6 +140,9 @@ export function buildFriendPairRedemption(
     generatedAt: new Date(nowMs).toISOString(),
     ...(input.selfServerId ? { serverId: input.selfServerId } : {}),
     ...(input.selfRelayEndpoint ? { relayEndpoint: input.selfRelayEndpoint } : {}),
+    ...(input.selfEncryptionPublicKeyB64
+      ? { encryptionPublicKeyB64: input.selfEncryptionPublicKeyB64 }
+      : {}),
   };
 
   // Derive shared key from our ephemeral X25519 secret + offer's ephemeral

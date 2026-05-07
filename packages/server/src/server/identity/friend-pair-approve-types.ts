@@ -60,6 +60,17 @@ export const FriendPairApprovalReplySchema = z.discriminatedUnion("status", [
     authorizationSignatureB64: z.string().min(1),
     /** ISO timestamp of the approval. */
     approvedAt: z.string(),
+    /**
+     * Phase 3.b/2a: Alice's long-lived X25519 public key (raw 32-byte
+     * JWK 'x' base64url) for offline-inbox encryption. Mirror of the
+     * `encryptionPublicKeyB64` field on the responder's candidate — Bob's
+     * daemon stores this in his peer record so he can NaCl-box future
+     * messages under it when Alice is offline. Same trust caveat as on
+     * the candidate side (see friend-pair-redeem-types.ts): not covered
+     * by the authorization signature, treated as advisory routing metadata.
+     * Optional for back-compat with originators running pre-3.b/2a builds.
+     */
+    encryptionPublicKeyB64: z.string().optional(),
   }),
   z.object({
     v: z.literal(1),

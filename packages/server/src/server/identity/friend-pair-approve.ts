@@ -49,7 +49,12 @@ export interface ApproveFriendPairCandidateInput {
   ephPrivateKeyB64: string;
   /** Bob's X25519 public from the redemption envelope. */
   candidateEphPublicKeyB64: string;
-  /** Loaded root identity. Its private key signs the approval payload. */
+  /**
+   * Loaded root identity. Its private key signs the approval payload.
+   * Phase 3.b/2a: also supplies `encryptionPublicKeyB64` — the long-lived
+   * X25519 pubkey Alice ships to Bob so he can NaCl-box offline-inbox
+   * messages back to her identity.
+   */
   rootIdentity: RootIdentityBundle;
   /** Override clock (tests). */
   nowMs?: number;
@@ -86,7 +91,9 @@ export function approveFriendPairCandidate(
   });
   const authorizationSignatureB64 = signEd25519(input.rootIdentity.signPrivateKey, payload);
 
-  // 2. Build the plaintext approval payload Alice ships to Bob.
+  // 2. Build the plaintext approval payload Alice ships to Bob. The
+  // X25519 encryption pubkey rides along so Bob can address future
+  // offline-inbox messages to Alice's identity.
   const reply: FriendPairApprovalReply = {
     v: 1,
     kind: "friend-pair-approval",
@@ -95,6 +102,9 @@ export function approveFriendPairCandidate(
     originatorDisplayName: input.rootIdentity.stored.displayName,
     authorizationSignatureB64,
     approvedAt,
+    ...(input.rootIdentity.encryptionPublicKeyB64
+      ? { encryptionPublicKeyB64: input.rootIdentity.encryptionPublicKeyB64 }
+      : {}),
   };
 
   // 3. Encrypt with the same shared key Phase 3.a/2 used.
@@ -121,6 +131,11 @@ export function approveFriendPairCandidate(
     authorizationSignatureB64: input.candidate.signatureB64,
     ...(input.candidate.serverId ? { peerServerId: input.candidate.serverId } : {}),
     ...(input.candidate.relayEndpoint ? { peerRelayEndpoint: input.candidate.relayEndpoint } : {}),
+    // 3.b/2a: capture Bob's X25519 pubkey from the candidate so Alice's
+    // offline-inbox sender can NaCl-box messages to Bob's identity.
+    ...(input.candidate.encryptionPublicKeyB64
+      ? { peerEncryptionPublicKeyB64: input.candidate.encryptionPublicKeyB64 }
+      : {}),
   };
 
   return { envelope, reply, selfPeer };

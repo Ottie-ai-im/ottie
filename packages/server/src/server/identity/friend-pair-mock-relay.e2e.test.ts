@@ -145,11 +145,29 @@ describe("Phase 3.a/3 mock-relay e2e (real WebSockets, two separate identities)"
       // Phase 3.b/1a: routing info round-tripped through the candidate.
       expect(aliceFile.peers[0].peerServerId).toBe("srv_bob_fp_e2e");
       expect(aliceFile.peers[0].peerRelayEndpoint).toBe(relayEndpoint);
+      // Phase 3.b/2a: Bob's X25519 encryption pubkey traveled in the
+      // candidate and landed in Alice's peer record. Match against
+      // Bob's bundle so the test catches a swap or accidental drop.
+      expect(aliceFile.peers[0].peerEncryptionPublicKeyB64).toBe(
+        bob.requireBundle().encryptionPublicKeyB64,
+      );
+      expect(aliceFile.peers[0].peerEncryptionPublicKeyB64.length).toBeGreaterThan(0);
       const bobFile = JSON.parse(readFileSync(peerListFilePath(bobHome), "utf8"));
       expect(bobFile.peers[0].peerDisplayName).toBe("Alice");
       // Phase 3.b/1a: Alice's serverId came from the offer Bob scanned.
       expect(bobFile.peers[0].peerServerId).toBe("srv_alice_fp_e2e");
       expect(bobFile.peers[0].peerRelayEndpoint).toBe(relayEndpoint);
+      // Phase 3.b/2a: Alice's X25519 pubkey traveled in the approval
+      // and landed in Bob's peer record.
+      expect(bobFile.peers[0].peerEncryptionPublicKeyB64).toBe(
+        alice.requireBundle().encryptionPublicKeyB64,
+      );
+      expect(bobFile.peers[0].peerEncryptionPublicKeyB64.length).toBeGreaterThan(0);
+      // The two daemons hold DISTINCT encryption keypairs (basic
+      // sanity — they shouldn't accidentally share keys).
+      expect(aliceFile.peers[0].peerEncryptionPublicKeyB64).not.toBe(
+        bobFile.peers[0].peerEncryptionPublicKeyB64,
+      );
 
       // === Fresh IdentityService instances reload the friend list ===
       const aliceAfterReboot = new IdentityService({

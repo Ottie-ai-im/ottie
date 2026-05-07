@@ -70,6 +70,16 @@ export const PeerSchema = z.object({
    */
   peerRelayEndpoint: z.string().optional(),
   /**
+   * Phase 3.b/2a: peer's long-lived X25519 ECDH public key (raw 32-byte
+   * JWK 'x' base64url). Captured during friend-pair (candidate carries
+   * the responder's, approval carries the originator's), stored here so
+   * the offline-inbox sender can NaCl-box messages under it without
+   * needing a live session. Optional because peers paired before 3.b/2a
+   * don't have it — sends to such peers fall back to "live-only" semantics
+   * (current behavior) until both sides re-pair.
+   */
+  peerEncryptionPublicKeyB64: z.string().optional(),
+  /**
    * Phase 3.b+ will populate this with the peer's published device list
    * (so we know which of their daemons to route messages to). Empty
    * here in Phase 3.a — the friend list is identity-only at first.

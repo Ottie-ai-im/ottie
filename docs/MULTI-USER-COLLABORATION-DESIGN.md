@@ -411,6 +411,7 @@ There is no auto-route, no per-friend default, no "main daemon" rule —
 every share is an explicit, present-tense decision.
 
 **Step 1 — pick the daemon:**
+
 ```
 Bob wants to use one of your AIs.
 Where do you want to share from?
@@ -420,6 +421,7 @@ Where do you want to share from?
 ```
 
 **Step 2 — pick (and confirm) the AI:**
+
 ```
 [picked Home Server, which only has Codex]
 Will share Codex from Home Server. Confirm?
@@ -438,6 +440,7 @@ shares by accident. Mirrors the friction of "Q2: first-share extra
 confirmation" but applied to every share, not just the first.
 
 Why no shortcuts:
+
 - Sharing an AI agent is high-stakes (the friend can issue tool calls
   the owner pays for). The few seconds of friction is the right
   trade-off vs the risk of misroute.
@@ -468,6 +471,7 @@ a 1-device user gets 1.
 #### 7.5.2 Cancel UX (Q2: decided)
 
 If the owner taps Cancel on either modal:
+
 - Friend sees: **"Wendell declined the request"** (explicit, present
   tense)
 - NOT: "Wendell isn't available right now" (intentionally rejecting
@@ -484,6 +488,7 @@ decline.
 Once a share session is locked to a daemon (after step 2 confirm),
 **the owner cannot reroute it to a different daemon mid-session**.
 To change which daemon handles the share, the owner must:
+
 1. Tap "End session" on the active banner
 2. Wait for the friend to send a fresh share request
 3. Pick a different daemon in the new step-1 modal
@@ -885,6 +890,7 @@ see one Wendell. Your devices are interchangeable interfaces onto
 the same identity.
 
 For AI sharing:
+
 - A friend's request lands on **one specific daemon** (the one you
   pick in the §7.5 modal). The other daemons don't help carry the
   load — they just sync state.
@@ -920,6 +926,7 @@ Snapshot so a fresh planning session can pick up without re-reading
 git log. Update on every phase boundary.
 
 ### Phase 1 — identity foundation
+
 - ✅ COMPLETE
 - root identity (Ed25519) created on first run, persisted to
   `$OTTIE_HOME/identity/root.json`
@@ -930,6 +937,7 @@ git log. Update on every phase boundary.
   view, ProfileButton entry
 
 ### Phase 2.a–c — device-link offer generation + UI plumbing
+
 - ✅ COMPLETE
 - `device-link-pending-store.ts`: in-memory pending offers, X25519
   ephemeral keypairs, 8-offer cap, 10-min TTL
@@ -938,6 +946,7 @@ git log. Update on every phase boundary.
   the chats `+` menu
 
 ### Phase 2.d — device-link redemption (new device → old device)
+
 - ✅ COMPLETE (4 sub-commits)
 - 2.d/0: candidate schema + ECDH + NaCl box crypto core (pure fns)
 - 2.d/1: `connectionHandlers` extension point on relay-transport
@@ -946,6 +955,7 @@ git log. Update on every phase boundary.
   `device/link/redeem` + DaemonClient method
 
 ### Phase 2.e — approval + signing + persistence (old device → new)
+
 - ✅ COMPLETE (3 sub-commits)
 - 2.e/0: approve crypto core (signs candidate with root,
   encrypts reply via same ECDH key from Phase 2.d)
@@ -957,12 +967,14 @@ git log. Update on every phase boundary.
   state syncs to "loaded" without restart
 
 ### Phase 2.d/e UI
+
 - ✅ COMPLETE
 - `/onboarding/link-existing-device` paste-link form
 - `/settings/identity` "Pending device requests" section, polls
   every 3s, Approve/Reject buttons
 
 ### Phase 2.f — multi-daemon device-list sync
+
 - ✅ COMPLETE (6 sub-commits)
 - 2.f/0: event sign/verify/apply pure functions (DeviceListEvent
   schema with kind=added/removed, Ed25519 sig by source self-device,
@@ -981,6 +993,7 @@ git log. Update on every phase boundary.
   when a fresh session is established, replay the local events log
 
 ### Phase 2.g — remove device + revocation
+
 - ✅ COMPLETE
 - `IdentityService.removeDevice(deviceId)` refuses self, persists
   devices.json, emits + broadcasts `device-removed`, closes peer
@@ -991,7 +1004,9 @@ git log. Update on every phase boundary.
 - Bilingual i18n.
 
 ### Phase 2 — DONE end-to-end ✅
+
 Two laptops + a phone (one daemon each) under one identity now:
+
 1. Add a new device via QR/link with explicit owner approval
 2. Auto-sync the device list across all daemons within seconds via
    peer-sync sessions
@@ -1001,6 +1016,7 @@ Two laptops + a phone (one daemon each) under one identity now:
    the same broadcast pipeline
 
 ### Phase 3 — friend pairing + 1-to-1 chat
+
 - ⏳ IN PROGRESS — 3.a/0 done; 3.a/1 next
 - ~50% reuse of Phase 2 crypto + transport (same Cloudflare relay,
   same NaCl box, same Ed25519, same SIGMA-I-style handshake but
@@ -1014,8 +1030,8 @@ Two laptops + a phone (one daemon each) under one identity now:
     responder's root sign key, defeating relay-side substitution.
   - ✅ 3.a/1 — friend-pair offer generation
     (`friend-pair-pending-store.ts` + tests). WS RPCs `friend/pair/
-    generate` and `friend/pair/cancel`. `IdentityService.generate
-    FriendPairOffer` / `cancelFriendPairOffer`. DaemonClient methods.
+generate` and `friend/pair/cancel`. `IdentityService.generate
+FriendPairOffer` / `cancelFriendPairOffer`. DaemonClient methods.
     Cross-identity analog of Phase 2.c.
   - ✅ 3.a/2 — receiver-side handler + sender-side redeem.
     `friend-pair-pending-candidate-store.ts` (parked candidates,
@@ -1023,7 +1039,7 @@ Two laptops + a phone (one daemon each) under one identity now:
     for `friend-pair:<nonce>` prefix; SIGMA-I sig check + self-
     pairing rejection). `friend-pair-sender.ts` (WS to originator,
     sends signed redemption, awaits ack). WS RPC `friend/pair/
-    redeem` + DaemonClient method. Bootstrap registers the new
+redeem` + DaemonClient method. Bootstrap registers the new
     handler alongside device-link + peer-sync. Cross-identity
     analog of Phase 2.d/2 + 2.d/3.
   - ✅ 3.a/3a — Peer schema + peers.json store + approve crypto
@@ -1059,7 +1075,7 @@ Two laptops + a phone (one daemon each) under one identity now:
   - ✅ 3.b/0 — chat-room kind=p2p schema. `ChatRoomSchema` gains
     optional `kind` (`"agent-only" | "p2p" | "group"`),
     `ownerRootPubKey`, and `members` (array of `{rootPubKey, role,
-    addedAt}`). `ChatMessageSchema` gains optional
+addedAt}`). `ChatMessageSchema` gains optional
     `authorRootPubKey`, `authorDeviceId`, `kind` (incl. all
     `ai-share/*` variants for Phase 4 forward-compat), `payload`.
     All new fields are `.optional()` so the back-compat matrix
@@ -1070,75 +1086,131 @@ Two laptops + a phone (one daemon each) under one identity now:
     `isP2pRoom(room)` type-guard.
   - 🚧 3.b/1 — message send/receive over relay (live). Done in
     sub-commits:
-      - ✅ 3.b/1a — Peer routing fields. `StoredPeer` gains optional
-        `peerServerId` + `peerRelayEndpoint`; `FriendCandidate` gains
-        optional `serverId` + `relayEndpoint`; the friend-pair flow
-        round-trips them so both sides' `peers.json` capture the
-        chat-routing target at pair time.
-      - ✅ 3.b/1b — `friend-sync-types.ts` + `friend-sync-handshake.ts`
-        (cross-identity SIGMA-I, signed under the root key with prefix
-        `ottie-friend-sync-hello-v1`). Pure crypto, I/O-free.
-      - ✅ 3.b/1c — `friend-session-registry.ts` (per-friend session
-        store), `friend-sync-receiver.ts` (handler for the
-        `friend-sync:<nonce>` relay prefix), `friend-sync-dialer.ts`
-        (per-peer reconnect with exponential backoff). Bootstrap
-        registers the handler + starts the dialer alongside peer-sync.
-        IdentityService gains `start/stopFriendSync`,
-        `getFriendSessions`, `refreshFriendDialerTargets`. Inbound
-        payload handler is a debug-log no-op; 3.b/1d will plug in the
-        chat-message envelope schema + persistence path here.
-      - ✅ 3.b/1d — live messaging end-to-end. New files:
-        - `friend-chat-types.ts` — `FriendChatMessageEnvelopeSchema`
-          (the wire shape over the friend-sync session) +
-          `friendChatMessagePayload(...)` canonical signed bytes
-          (prefix `ottie-friend-chat-message-v1`).
-        - `friend-chat-crypto.ts` — `buildFriendChatMessageEnvelope`
-          (sign with author's root key) +
-          `verifyFriendChatMessageEnvelope` (sig + roomId + peer-
-          identity binding check; defends against relay-side message
-          substitution).
-        - `friend-chat-store.ts` — append-only per-peer JSONL at
-          `$OTTIE_HOME/chat/friends/{sha256(rootPubKey).slice(0,32)}.jsonl`,
-          mode 0o600. Filename digests so the pubkey doesn't appear
-          in shell history / logs.
-        - IdentityService gains `sendFriendChatMessage(...)`,
-          `listFriendChatMessages(peerRootPubKey)`,
-          `handleInboundFriendSyncPayload(...)` (replaces the no-op
-          debug-log handler from 3.b/1c).
-        - WS RPCs `chat/p2p/send` and `chat/p2p/list`. DaemonClient
-          gains `chatP2pSend` and `chatP2pList`.
-        - Mock-relay e2e (`friend-chat-mock-relay.e2e.test.ts`):
-          Alice + Bob pair, both dialers come up, Bob → Alice and
-          Alice → Bob each persist on both sides (via the receive
-          handler), history survives Alice's restart.
-        - Subtle bug-fix surfaced by the e2e: simultaneous-connect
-          tie-break in `friend-sync-dialer.ts` — the side with the
-          *larger* root pubkey skips dialing and waits for the
-          smaller side's incoming connection. Without this both
-          sides could end up with two sessions each, "most-recent-
-          wins" picks mismatched socket pairs, and writes go into
-          closed sockets.
-  - ⏳ 3.b/2 — Cloudflare KV inbox for offline delivery; recipient
-    pulls on connect with cursor. Deferred — requires relay-side
-    Worker changes; currently `sendFriendChatMessage` returns an
-    error when the friend is offline.
+    - ✅ 3.b/1a — Peer routing fields. `StoredPeer` gains optional
+      `peerServerId` + `peerRelayEndpoint`; `FriendCandidate` gains
+      optional `serverId` + `relayEndpoint`; the friend-pair flow
+      round-trips them so both sides' `peers.json` capture the
+      chat-routing target at pair time.
+    - ✅ 3.b/1b — `friend-sync-types.ts` + `friend-sync-handshake.ts`
+      (cross-identity SIGMA-I, signed under the root key with prefix
+      `ottie-friend-sync-hello-v1`). Pure crypto, I/O-free.
+    - ✅ 3.b/1c — `friend-session-registry.ts` (per-friend session
+      store), `friend-sync-receiver.ts` (handler for the
+      `friend-sync:<nonce>` relay prefix), `friend-sync-dialer.ts`
+      (per-peer reconnect with exponential backoff). Bootstrap
+      registers the handler + starts the dialer alongside peer-sync.
+      IdentityService gains `start/stopFriendSync`,
+      `getFriendSessions`, `refreshFriendDialerTargets`. Inbound
+      payload handler is a debug-log no-op; 3.b/1d will plug in the
+      chat-message envelope schema + persistence path here.
+    - ✅ 3.b/1d — live messaging end-to-end. New files:
+      - `friend-chat-types.ts` — `FriendChatMessageEnvelopeSchema`
+        (the wire shape over the friend-sync session) +
+        `friendChatMessagePayload(...)` canonical signed bytes
+        (prefix `ottie-friend-chat-message-v1`).
+      - `friend-chat-crypto.ts` — `buildFriendChatMessageEnvelope`
+        (sign with author's root key) +
+        `verifyFriendChatMessageEnvelope` (sig + roomId + peer-
+        identity binding check; defends against relay-side message
+        substitution).
+      - `friend-chat-store.ts` — append-only per-peer JSONL at
+        `$OTTIE_HOME/chat/friends/{sha256(rootPubKey).slice(0,32)}.jsonl`,
+        mode 0o600. Filename digests so the pubkey doesn't appear
+        in shell history / logs.
+      - IdentityService gains `sendFriendChatMessage(...)`,
+        `listFriendChatMessages(peerRootPubKey)`,
+        `handleInboundFriendSyncPayload(...)` (replaces the no-op
+        debug-log handler from 3.b/1c).
+      - WS RPCs `chat/p2p/send` and `chat/p2p/list`. DaemonClient
+        gains `chatP2pSend` and `chatP2pList`.
+      - Mock-relay e2e (`friend-chat-mock-relay.e2e.test.ts`):
+        Alice + Bob pair, both dialers come up, Bob → Alice and
+        Alice → Bob each persist on both sides (via the receive
+        handler), history survives Alice's restart.
+      - Subtle bug-fix surfaced by the e2e: simultaneous-connect
+        tie-break in `friend-sync-dialer.ts` — the side with the
+        _larger_ root pubkey skips dialing and waits for the
+        smaller side's incoming connection. Without this both
+        sides could end up with two sessions each, "most-recent-
+        wins" picks mismatched socket pairs, and writes go into
+        closed sockets.
+  - 🚧 3.b/2 — offline inbox. Sub-commits:
+    - ✅ 3.b/2a — per-identity X25519 encryption keypair + cross-
+      identity exchange at friend-pair time. Fixes the zero-
+      knowledge gap: friend-sync session keys are forward-secret
+      and gone by the time a recipient picks up an offline
+      message, so we can't store session-encrypted bytes in KV
+      (or the relay sees the friend-sync handshake's plaintext-
+      envelope sibling either way). Solution:
+      - Each root identity gets a long-lived X25519 keypair
+        stored alongside the Ed25519 signing keypair in
+        `root.json`. New identities mint one at create time;
+        old identities synthesize one on the next load and
+        persist (in-place migration).
+      - Friend-pair candidate (Bob → Alice) and approval
+        (Alice → Bob) each carry the sender's X25519 pubkey as
+        an optional field (back-compat with pre-3.b/2a peers
+        on the wire — the field is `.optional()` per the
+        backward-compat schema rule).
+      - Both sides store the peer's X25519 pubkey in
+        `peers.json` as `peerEncryptionPublicKeyB64`. Peers
+        paired before 3.b/2a have the field absent; sends to
+        those peers continue to fall back to the live-only
+        error path until the pair is re-done.
+      - The X25519 key is **not** covered by the Ed25519
+        authorization signature. Treat it as advisory routing
+        metadata: a tampered key means the recipient just
+        can't decrypt their own inbox and re-pairs. The
+        signing-key trust anchor (root pubkey, candidate
+        payload signature, peer authorization signature) is
+        unaffected. The trust model is documented inline in
+        `friend-pair-redeem-types.ts`.
+    - ⏳ 3.b/2b — Cloudflare relay-side: KV namespace, POST
+      `/inbox/{recipientRootPubKeyB64Url}` (anyone can drop;
+      envelope is encrypted to recipient's X25519), GET `/inbox`
+      with auth challenge (recipient signs `{nonce, timestamp}`
+      with their root sign privkey to prove ownership), and
+      DELETE `/inbox/{seq}` ack. KV key shape per §8.2.2;
+      per-recipient cap 10MB / 1000 messages, 7-day TTL.
+    - ⏳ 3.b/2c — daemon outbound: `sendFriendChatMessage`
+      offline branch builds + signs envelope as today, then NaCl-
+      boxes it under the peer's X25519 pubkey + a fresh sender
+      ephemeral, POSTs to relay. Returns `ok` with status
+      `"queued"` instead of the current error.
+    - ⏳ 3.b/2d — daemon inbound: on startup + on relay
+      reconnect, GET `/inbox` with cursor, decrypt each entry,
+      verify the envelope's root signature, persist via the
+      existing `friendChatStore`, then DELETE-ack. Cursor lives
+      in `$OTTIE_HOME/identity/inbox-cursor.json`.
+    - ⏳ 3.b/2e — UI delivery status: per-message indicator
+      `sending` → `queued (offline)` → `delivered`. Builds on
+      the same chat row component used for live messages.
+    - Multi-device fan-out caveat: the X25519 keypair is
+      **per-identity** (not per-device). Today only the device
+      that minted the identity has the matching private key, so
+      only that device can decrypt the inbox. Once peer-sync
+      (Phase 2.f) is extended to ferry the X25519 private key
+      across devices under the same identity (planned alongside
+      3.b/2c), all of the user's devices can decrypt offline
+      messages addressed to their identity.
   - 🚧 3.b/3 — read receipts + UI integration. Done in sub-commits:
-      - ✅ 3.b/3 UI v1 — standalone friend chat screen at
-        `/h/[serverId]/friend/[peerRootPubKey]` (message bubbles,
-        input + send, 2s polling for inbound), "Open chat" button
-        on each row in the `/settings/identity` Friends section,
-        bilingual i18n (en + zh).
-      - ⏳ 3.b/3 chats-list integration — surface p2p chats
-        alongside agent chats in the main chats list (currently
-        only reachable via Settings → Friends).
-      - ⏳ 3.b/3 read receipts — recipient sends read-cursor back
-        through the same friend-sync session; sender shows ✓✓ /
-        seen-at timestamp.
-      - ⏳ 3.b/3 push subscriptions — replace 2s polling with a
-        server-pushed event stream so messages appear with no
-        UI-side delay.
+    - ✅ 3.b/3 UI v1 — standalone friend chat screen at
+      `/h/[serverId]/friend/[peerRootPubKey]` (message bubbles,
+      input + send, 2s polling for inbound), "Open chat" button
+      on each row in the `/settings/identity` Friends section,
+      bilingual i18n (en + zh).
+    - ⏳ 3.b/3 chats-list integration — surface p2p chats
+      alongside agent chats in the main chats list (currently
+      only reachable via Settings → Friends).
+    - ⏳ 3.b/3 read receipts — recipient sends read-cursor back
+      through the same friend-sync session; sender shows ✓✓ /
+      seen-at timestamp.
+    - ⏳ 3.b/3 push subscriptions — replace 2s polling with a
+      server-pushed event stream so messages appear with no
+      UI-side delay.
 
 ### Phase 4 — AI sharing
+
 - ⏳ NOT STARTED
 - §7.5 modal flow decided. Per-share two-step gate (no auto, no
   per-friend defaults). All online owner-devices render the modal,
@@ -1146,11 +1218,13 @@ Two laptops + a phone (one daemon each) under one identity now:
   "declined" to friend. No mid-session daemon switching.
 
 ### Phase 5 — polish
+
 - ⏳ NOT STARTED
 - Block, display name update propagation, limits-exhaustion UI,
   session timeout enforcement.
 
 ### Test infrastructure status
+
 - 300 tests across 29 files in the identity + relay-transport
   suite, all green (192 from Phase 2 + 20 from 3.a/0 + 23 from
   3.a/1 + 27 from 3.a/2 + 21 from 3.a/3a + 17 from 3.a/3b
@@ -1165,6 +1239,7 @@ Two laptops + a phone (one daemon each) under one identity now:
   delivers `data` as Buffer regardless of frame kind.
 
 ### Tech-stack invariants (do not change without re-deciding)
+
 - Cloudflare Workers relay (free tier suffices for personal-scale)
   at `relay.claws.company:443`
 - NaCl box (Curve25519 + XSalsa20-Poly1305) for application-layer
