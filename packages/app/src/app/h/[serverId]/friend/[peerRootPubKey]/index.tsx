@@ -826,7 +826,12 @@ function ActiveShareBanners({
   return (
     <>
       {sessions.map((session) => (
-        <ActiveShareBanner key={session.inviteId} serverId={serverId} session={session} />
+        <ActiveShareBanner
+          key={session.inviteId}
+          serverId={serverId}
+          peerRootPubKey={peerRootPubKey}
+          session={session}
+        />
       ))}
     </>
   );
@@ -834,13 +839,16 @@ function ActiveShareBanners({
 
 function ActiveShareBanner({
   serverId,
+  peerRootPubKey,
   session,
 }: {
   serverId: string | null;
+  peerRootPubKey: string;
   session: import("@server/server/identity/identity-rpc-schemas").AiShareActiveOnWire;
 }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
+  const router = useRouter();
   const client = useHostRuntimeClient(serverId ?? "");
   const queryClient = useQueryClient();
   const [ending, setEnding] = useState(false);
@@ -855,6 +863,14 @@ function ActiveShareBanner({
     }
   }, [client, queryClient, serverId, session.inviteId]);
 
+  const handleOpen = useCallback(() => {
+    if (!serverId) return;
+    router.push({
+      pathname: "/h/[serverId]/friend/[peerRootPubKey]/share/[inviteId]",
+      params: { serverId, peerRootPubKey, inviteId: session.inviteId },
+    });
+  }, [peerRootPubKey, router, serverId, session.inviteId]);
+
   const endButtonStyle = useCallback(
     ({ hovered }: { hovered?: boolean }) => [
       styles.activeShareEndButton,
@@ -862,6 +878,19 @@ function ActiveShareBanner({
     ],
     [],
   );
+  const openButtonStyle = useCallback(
+    ({ hovered }: { hovered?: boolean }) => [
+      styles.activeShareEndButton,
+      hovered ? styles.activeShareEndButtonHovered : null,
+    ],
+    [],
+  );
+
+  // Phase 4 v2/c — only the friend side (inbound) gets the "Open"
+  // affordance, since the shared-agent compose surface is one-way:
+  // friend types prompts, owner's agent runs them. The owner's banner
+  // still has End so they can revoke the share at any time.
+  const showOpenButton = session.side === "inbound";
 
   return (
     <View
@@ -877,6 +906,18 @@ function ActiveShareBanner({
           defaultValue: "AI share active — {{label}}",
         })}
       </Text>
+      {showOpenButton ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={handleOpen}
+          style={openButtonStyle}
+          testID={`active-share-open-${session.inviteId.slice(0, 8)}`}
+        >
+          <Text style={styles.activeShareEndText}>
+            {t("p2pChat.activeShareOpen", { defaultValue: "Open" })}
+          </Text>
+        </Pressable>
+      ) : null}
       <Pressable
         accessibilityRole="button"
         onPress={() => void handleEnd()}

@@ -367,13 +367,19 @@ send-prompt` ships it. No friend-side UI yet — verified via
   daemon logs (`ai_share_prompt_routing_to_agent` then the
   agent's normal output flowing through the owner's existing
   timeline).
-- **v2/c — friend side: shared agent view + send prompt.**
-  New route at `/h/[serverId]/friend/[peerRootPubKey]/share/
-[inviteId]` showing a stripped chat surface. Compose box
-  fires `chatP2pAiSharePrompt` (new RPC). Owner sees the
-  prompt land and the agent reply (existing AgentManager
-  pipeline does the work). Friend's view stays empty until
-  v2/d.
+- **v2/c — friend side: shared agent view + send prompt.** ✅
+  shipped. New Expo Router route at `/h/[serverId]/friend/
+[peerRootPubKey]/share/[inviteId]` (the friend folder was
+  restructured to host nested routes). The screen is a
+  stripped chat surface: header with agent label + peer +
+  End button, locally-buffered list of prompts the friend
+  sent (with sending / sent / failed status), and a compose
+  box that fires `chatP2pAiShareSendPrompt`. The active-share
+  banner on the friend chat now has an Open button (only on
+  the inbound side — the owner doesn't get the friend-facing
+  surface) that navigates here. Empty state explains what
+  v2/d will fill in. "Share ended" detection via
+  `useActiveAiShares` falling out of the active list.
 - **v2/d — owner→friend timeline streaming.** Add
   `ai-share-timeline` envelope (owner → friend). Hook
   `AgentManager.onEvent` (or equivalent emit point) — for

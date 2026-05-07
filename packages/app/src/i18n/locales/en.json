@@ -137,11 +137,26 @@
     "activeShareBanner": "AI share active — {{label}}",
     "activeShareEnd": "End session",
     "activeShareEnding": "Ending…",
+    "activeShareOpen": "Open",
     "peerStatus": {
       "active": "Active",
       "blocked": "Blocked",
       "removed": "Removed"
     }
+  },
+  "aiShare": {
+    "headerTitle": "Sharing {{label}}",
+    "headerSubtitle": "with {{peer}}",
+    "endedTitle": "AI share ended",
+    "endedBody": "This share is no longer active. Either you or the owner ended it, or the owner's daemon restarted.",
+    "invalidRoute": "Invalid share link",
+    "emptyTitle": "Nothing sent yet",
+    "emptyBody": "Type a prompt below and your friend's agent will run it. The agent's replies show up on the owner's screen — your view here will fill in once v2/d ships.",
+    "composerPlaceholder": "Send a prompt to the shared agent…",
+    "statusSending": "sending…",
+    "statusSent": "sent",
+    "statusFailed": "failed: {{error}}",
+    "sendPromptFailed": "Couldn't send prompt."
   },
   "redeemFriend": {
     "title": "Pair with a friend",
