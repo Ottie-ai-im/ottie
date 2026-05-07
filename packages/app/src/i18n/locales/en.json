@@ -135,7 +135,10 @@
       "sending": "Sending…",
       "firstShareTitle": "First time sharing with {{name}}",
       "firstShareBody": "Sharing AI lets your friend run prompts against your agent — billed to you, with full access to whatever workspace it's open in. Type the friend's name below to confirm.",
-      "firstShareConfirm": "Confirm"
+      "firstShareConfirm": "Confirm",
+      "daemonIntro": "You have multiple daemons online. Pick one to share from.",
+      "daemonOnline": "online",
+      "daemonOffline": "offline"
     },
     "activeShareBanner": "AI share active — {{label}}",
     "activeShareBannerOffline": "AI share — {{label}} (peer offline)",

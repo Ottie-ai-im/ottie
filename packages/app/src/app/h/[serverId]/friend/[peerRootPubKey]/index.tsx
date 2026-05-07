@@ -8,7 +8,8 @@ import { ChevronLeft, Send, Sparkles, X } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
-import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { useHostRuntimeClient, useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
+import type { HostProfile } from "@/types/host-connection";
 import { useActiveAiShares } from "@/hooks/use-active-ai-shares";
 import { useShareableAgents } from "@/hooks/use-shareable-agents";
 import { useQueryClient } from "@tanstack/react-query";
@@ -619,8 +620,7 @@ function ChatBubble({
  * picker modal sourced from `chatP2pAiShareListShareableAgents`
  * (replaces v1's hardcoded placeholder). The user taps an agent row
  * to fire `chatP2pAiShareInvite` with that agent's real id / label /
- * provider. v3 swaps in §7.5's two-step picker for the multi-daemon
- * case.
+ * provider.
  *
  * Phase 4 v3/b — first-share friction gate (Q2). When the peer record
  * has no `firstAiShareSentAt` stamp yet, the modal opens on a
@@ -628,7 +628,18 @@ function ChatBubble({
  * picker. This stops mistaken shares to the wrong friend (Q2 in §7).
  * The daemon stamps `firstAiShareSentAt` after a successful invite,
  * so subsequent shares to the same friend skip straight to the picker.
+ *
+ * Phase 4 v3/c — §7.5 multi-daemon picker. When the user has multiple
+ * daemons online, the modal inserts a step between the friction gate
+ * (if any) and the agent picker: "pick which daemon to share from"
+ * (Laptop A, Home Server, …). Single-daemon users skip this step. The
+ * agent picker is then keyed against the chosen daemon's client, and
+ * the invite is sent through that daemon's `chatP2pAiShareInvite`.
+ * The cross-daemon broadcast (§7.5.1's "modal renders on every
+ * device simultaneously") is deferred — see handoff §6.2.
  */
+type SharePhase = "first-share" | "daemon-picker" | "agent-picker" | "sent";
+
 function ShareAiButton({
   serverId,
   peerRootPubKey,
@@ -640,14 +651,19 @@ function ShareAiButton({
 }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const client = useHostRuntimeClient(serverId ?? "");
+  const hosts = useHosts();
   const [open, setOpen] = useState(false);
+  // The host the user is currently chatting through; default for the
+  // step-1 daemon picker. Updated to whichever daemon the user picks.
+  const [chosenServerId, setChosenServerId] = useState<string | null>(serverId);
   const [submittingAgentId, setSubmittingAgentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sentLabel, setSentLabel] = useState<string | null>(null);
-  const [confirmPassed, setConfirmPassed] = useState(false);
   const [confirmInput, setConfirmInput] = useState("");
-  const { agents, isLoading, hasError, refetch } = useShareableAgents(serverId);
+  const [phase, setPhase] = useState<SharePhase>("first-share");
+
+  const chosenClient = useHostRuntimeClient(chosenServerId ?? "");
+  const { agents, isLoading, hasError, refetch } = useShareableAgents(chosenServerId);
 
   const needsFirstShareConfirm = peer != null && peer.firstAiShareSentAt === undefined;
   // Match against `peerDisplayName`, case-insensitive trimmed. Avoids
@@ -656,40 +672,58 @@ function ShareAiButton({
   const inputMatches =
     expectedName.length > 0 &&
     confirmInput.trim().toLowerCase() === expectedName.trim().toLowerCase();
-  // Skip the gate when the peer record is still loading (peer === undefined)
-  // or already-shared. confirmPassed flips on once the user types the
-  // name, so re-opening the modal in the same render scope keeps it skipped.
-  const showPicker = !needsFirstShareConfirm || confirmPassed;
+
+  // Phase 4 v3/c — pick the next phase after the friction gate clears
+  // (or is skipped). Users with multiple configured daemons get the
+  // step-1 picker; single-daemon users go straight to the agent picker.
+  // Online vs offline is rendered inside `DaemonPickerRow` and offline
+  // rows are disabled there.
+  const hasMultipleDaemons = hosts.length > 1;
+  const advanceToPicker = useCallback(() => {
+    if (hasMultipleDaemons) {
+      setPhase("daemon-picker");
+    } else {
+      setPhase("agent-picker");
+    }
+  }, [hasMultipleDaemons]);
 
   const handleOpen = useCallback(() => {
     setError(null);
     setSentLabel(null);
     setSubmittingAgentId(null);
     setConfirmInput("");
-    setConfirmPassed(false);
+    setChosenServerId(serverId);
+    if (needsFirstShareConfirm) {
+      setPhase("first-share");
+    } else {
+      setPhase(hasMultipleDaemons ? "daemon-picker" : "agent-picker");
+    }
     setOpen(true);
-    // Refetch on open so the picker reflects any agents created since
-    // the modal was last dismissed.
     refetch();
-  }, [refetch]);
+  }, [hasMultipleDaemons, needsFirstShareConfirm, refetch, serverId]);
   const handleClose = useCallback(() => {
     setOpen(false);
   }, []);
 
   const handleConfirmTyping = useCallback(() => {
-    if (inputMatches) setConfirmPassed(true);
-  }, [inputMatches]);
+    if (inputMatches) advanceToPicker();
+  }, [advanceToPicker, inputMatches]);
+
+  const handlePickHost = useCallback((host: HostProfile) => {
+    setChosenServerId(host.serverId);
+    setPhase("agent-picker");
+  }, []);
 
   const handlePickAgent = useCallback(
     async (agent: ShareableAgentOnWire) => {
-      if (!client) {
+      if (!chosenClient) {
         setError("Not connected to daemon");
         return;
       }
       setSubmittingAgentId(agent.agentId);
       setError(null);
       try {
-        const response = await client.chatP2pAiShareInvite({
+        const response = await chosenClient.chatP2pAiShareInvite({
           peerRootPubKey,
           agentId: agent.agentId,
           agentLabel: agent.agentLabel,
@@ -699,6 +733,7 @@ function ShareAiButton({
           setError(response.error);
         } else if (response.invite) {
           setSentLabel(agent.agentLabel);
+          setPhase("sent");
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -706,7 +741,7 @@ function ShareAiButton({
         setSubmittingAgentId(null);
       }
     },
-    [client, peerRootPubKey],
+    [chosenClient, peerRootPubKey],
   );
 
   const buttonStyle = useCallback(
@@ -739,14 +774,14 @@ function ShareAiButton({
         desktopMaxWidth={460}
       >
         <View style={styles.shareModalBody}>
-          {sentLabel ? (
+          {phase === "sent" && sentLabel ? (
             <Text style={styles.shareModalIntro}>
               {t("p2pChat.shareAi.sent", {
                 label: sentLabel,
                 defaultValue: "Invite for {{label}} sent. Friend will see it in their bell.",
               })}
             </Text>
-          ) : !showPicker ? (
+          ) : phase === "first-share" ? (
             <>
               <Text style={styles.shareModalIntro}>
                 {t("p2pChat.shareAi.firstShareTitle", {
@@ -771,6 +806,19 @@ function ShareAiButton({
                 autoCorrect={false}
                 testID="ai-share-first-share-confirm-input"
               />
+            </>
+          ) : phase === "daemon-picker" ? (
+            <>
+              <Text style={styles.shareModalIntro}>
+                {t("p2pChat.shareAi.daemonIntro", {
+                  defaultValue: "You have multiple daemons online. Pick one to share from.",
+                })}
+              </Text>
+              <View style={styles.sharePickerList}>
+                {hosts.map((host) => (
+                  <DaemonPickerRow key={host.serverId} host={host} onPick={handlePickHost} />
+                ))}
+              </View>
             </>
           ) : (
             <>
@@ -813,11 +861,11 @@ function ShareAiButton({
           {error ? <Text style={styles.shareModalError}>{error}</Text> : null}
           <View style={styles.shareModalActions}>
             <Button variant="secondary" onPress={handleClose}>
-              {sentLabel
+              {phase === "sent"
                 ? t("common.close", { defaultValue: "Close" })
                 : t("common.cancel", { defaultValue: "Cancel" })}
             </Button>
-            {!sentLabel && !showPicker ? (
+            {phase === "first-share" ? (
               <Button
                 variant="default"
                 onPress={handleConfirmTyping}
@@ -831,6 +879,49 @@ function ShareAiButton({
         </View>
       </AdaptiveModalSheet>
     </>
+  );
+}
+
+function DaemonPickerRow({
+  host,
+  onPick,
+}: {
+  host: HostProfile;
+  onPick: (host: HostProfile) => void;
+}) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(host.serverId);
+  const handlePress = useCallback(() => {
+    if (isConnected) onPick(host);
+  }, [host, isConnected, onPick]);
+  const rowStyle = useCallback(
+    ({ pressed, hovered }: { pressed?: boolean; hovered?: boolean }) => [
+      styles.sharePickerRow,
+      hovered && isConnected ? styles.sharePickerRowHovered : null,
+      pressed ? styles.sharePickerRowPressed : null,
+      !isConnected ? styles.sharePickerRowDisabled : null,
+    ],
+    [isConnected],
+  );
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={handlePress}
+      disabled={!isConnected}
+      style={rowStyle}
+      testID={`ai-share-daemon-pick-${host.serverId}`}
+    >
+      <View style={styles.sharePickerRowText}>
+        <Text style={styles.sharePickerLabel} numberOfLines={1}>
+          {host.label}
+        </Text>
+        <Text style={styles.sharePickerMeta} numberOfLines={1}>
+          {isConnected
+            ? t("p2pChat.shareAi.daemonOnline", { defaultValue: "online" })
+            : t("p2pChat.shareAi.daemonOffline", { defaultValue: "offline" })}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 

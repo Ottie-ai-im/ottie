@@ -418,15 +418,13 @@ send-prompt` ships it. No friend-side UI yet — verified via
   tool_call → friend's buffer fills with 4 entries (no tool
   call) → end → both transcripts on disk audit-clean.
 
-**v3 — multi-daemon picker (§7.5) (limits ✅, friction ✅ shipped):**
+**v3 — multi-daemon picker (§7.5) (✅ all four bullets shipped):**
 
-Three of the four bullets are now shipped (real agent list
-landed in v2/b; limits in v3/a; first-share friction in v3/b).
-The only remaining piece is:
-
-- §7.5's two-step picker when the owner has multiple online
-  daemons. Requires peer-sync to broadcast "which device picked
-  up" so the other devices' modals dismiss.
+All of v3 is now done — real agent picker (v2/b), limits (v3/a),
+first-share friction (v3/b), multi-daemon picker (v3/c). The
+cross-daemon broadcast piece from §7.5.1 ("modal renders on every
+owner-device simultaneously") is deferred — see v3/c entry below
+for what's left to build there.
 
 **Done:**
 
@@ -470,6 +468,31 @@ The only remaining piece is:
   stamp pre-share → stamp set after first send → preserved
   across a second send to the same peer). Bilingual i18n
   (`p2pChat.shareAi.firstShareTitle/Body/Confirm`).
+- **v3/c — §7.5 two-step multi-daemon picker.** ✅ shipped.
+  Client-side picker only — when `useHosts()` returns >1 host,
+  the ShareAi modal inserts a step between the friction gate
+  and the agent picker that lists every configured daemon
+  (each row showing online/offline via `useHostRuntimeIsConnected`;
+  offline rows are disabled). User picks a daemon → the
+  agent picker re-keys against that daemon's client (via
+  `useShareableAgents(chosenServerId)`) → invite goes through
+  `chosenClient.chatP2pAiShareInvite`, so the chosen daemon
+  ends up holding the share session. Single-daemon users skip
+  the new step entirely. Bilingual i18n
+  (`p2pChat.shareAi.daemonIntro/Online/Offline`).
+
+  **Deferred from §7.5.1 ("modal renders on every device
+  simultaneously"):** today the picker only fires on the
+  device the user is currently looking at. Implementing the
+  cross-daemon broadcast needs a new peer-sync envelope —
+  e.g., `share-intent` (broadcast across owner's daemons on
+  Share AI tap) + `share-resolution` (broadcast back from the
+  picked daemon so other devices dismiss their modal). The
+  daemon-side machinery already has the peer-sync transport
+  (Phase 2.f) and the existing `applyInboundEvent` dispatch
+  for DeviceListEvent — adding a new event variant + a
+  pending-share-intent registry is the implementation skeleton.
+  Re-prioritize when real multi-daemon-owner usage demands it.
 
 **Out-of-scope for the whole Phase 4 chain (defer to Phase 5+):**
 

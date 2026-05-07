@@ -135,7 +135,10 @@
       "sending": "发送中…",
       "firstShareTitle": "第一次与 {{name}} 分享 AI",
       "firstShareBody": "分享 AI 后,朋友可以向你的 agent 发送 prompt — 费用算你的,且对当前工作区有完整访问权限。请在下方输入朋友的名字以确认。",
-      "firstShareConfirm": "确认"
+      "firstShareConfirm": "确认",
+      "daemonIntro": "你有多个守护进程在线。选择一个用于分享。",
+      "daemonOnline": "在线",
+      "daemonOffline": "离线"
     },
     "activeShareBanner": "AI 分享进行中 — {{label}}",
     "activeShareBannerOffline": "AI 分享 — {{label}}(对方离线)",
