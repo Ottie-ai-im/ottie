@@ -34,7 +34,16 @@ interface RelayTransportOptions {
    *   - never throwing past their own try/catch — relay-transport only
    *     logs handler errors and moves on.
    */
-  connectionHandlers?: ReadonlyArray<RelayConnectionHandler>;
+  /**
+   * Either a static array (built once at startup) or a getter — the latter
+   * is re-evaluated on every inbound connection so handlers added after
+   * relay-transport startup (e.g. friend-sync handler that only exists
+   * once root identity is loaded via UI onboarding) are picked up without
+   * a daemon restart.
+   */
+  connectionHandlers?:
+    | ReadonlyArray<RelayConnectionHandler>
+    | (() => ReadonlyArray<RelayConnectionHandler>);
 }
 
 export interface RelayTransportController {
@@ -412,7 +421,9 @@ export function startRelayTransport({
       // connectionId, it owns the socket end-to-end. The default
       // attach-to-WebSocket-server flow is skipped — that flow assumes
       // agent-control traffic and would mis-handshake anything else.
-      const customHandler = connectionHandlers?.find((h) => h.matches(connectionId));
+      const resolvedHandlers =
+        typeof connectionHandlers === "function" ? connectionHandlers() : connectionHandlers;
+      const customHandler = resolvedHandlers?.find((h) => h.matches(connectionId));
       if (customHandler) {
         const handlerLogger = relayLogger.child({
           connectionId,

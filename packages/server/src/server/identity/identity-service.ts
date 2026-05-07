@@ -246,6 +246,14 @@ export class IdentityService {
     if (!this.peerList) {
       this.peerList = { v: 1, peers: [] };
     }
+    // Bootstrap calls startPeerSync/startFriendSync once at daemon start;
+    // when the daemon was started without an identity (first boot before
+    // onboarding) those calls were no-ops. Now that identity is loaded,
+    // kick the dialers ourselves — both methods are idempotent. Inbound
+    // handlers are wired through bootstrap's getter-form connectionHandlers
+    // so they auto-light up too.
+    this.startPeerSync();
+    this.startFriendSync();
     return bundle;
   }
 
@@ -1141,6 +1149,12 @@ export class IdentityService {
       },
       "Adopted identity from device-link approval",
     );
+
+    // Same reason as `initialize()`: bootstrap's startPeerSync/startFriendSync
+    // already ran (and did nothing — no identity yet). Kick them now that
+    // identity is loaded; both calls are idempotent.
+    this.startPeerSync();
+    this.startFriendSync();
   }
 
   /**

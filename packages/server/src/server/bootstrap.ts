@@ -978,7 +978,14 @@ export async function createOttieDaemon(
               // relay-transport's connectionHandlers extension point.
               // peer-sync + friend-sync handlers are null until self-device /
               // root identity are loaded (no signing key → no handshake).
-              connectionHandlers: ((): RelayConnectionHandler[] => {
+              // Re-evaluated on each inbound connection (relay-transport
+              // accepts a getter), so peer-sync + friend-sync handlers
+              // light up automatically when root identity is created via
+              // UI onboarding after this daemon already booted without
+              // an identity. Without the getter form, those handlers
+              // would stay null until a daemon restart and inbound
+              // peer/friend-sync connections would be silently dropped.
+              connectionHandlers: (): RelayConnectionHandler[] => {
                 const handlers: RelayConnectionHandler[] = [
                   identityService.createDeviceLinkConnectionHandler(),
                   identityService.createFriendPairConnectionHandler(),
@@ -988,7 +995,7 @@ export async function createOttieDaemon(
                 const friendSyncHandler = identityService.createFriendSyncConnectionHandler();
                 if (friendSyncHandler) handlers.push(friendSyncHandler);
                 return handlers;
-              })(),
+              },
             });
 
             // Phase 2.f/2c: with relay-transport up, kick off the
