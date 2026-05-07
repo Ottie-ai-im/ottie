@@ -706,26 +706,58 @@ function FriendListSection({
   return (
     <View>
       {peers.map((peer, idx) => (
-        <View
+        <FriendRow
           key={peer.peerRootSignPublicKeyB64}
-          style={idx === 0 ? styles.cardSpaced : styles.cardCompactSpaced}
-        >
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>{t("identitySettings.friendName")}</Text>
-            <Text style={styles.rowValue}>
-              {peer.peerDisplayName} ({peer.peerRootSignPublicKeyB64.slice(0, 8)})
-            </Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>{t("identitySettings.friendStatus")}</Text>
-            <Text style={styles.rowValue}>{peer.status}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>{t("identitySettings.friendPairedAt")}</Text>
-            <Text style={styles.rowValue}>{peer.pairedAt}</Text>
-          </View>
-        </View>
+          peer={peer}
+          index={idx}
+          serverId={serverId}
+          t={t}
+        />
       ))}
+    </View>
+  );
+}
+
+function FriendRow({
+  peer,
+  index,
+  serverId,
+  t,
+}: {
+  peer: StoredPeer;
+  index: number;
+  serverId: string;
+  t: (key: string) => string;
+}) {
+  const router = useRouter();
+  const handleOpenChat = useCallback(() => {
+    router.push({
+      pathname: "/h/[serverId]/friend/[peerRootPubKey]",
+      params: { serverId, peerRootPubKey: peer.peerRootSignPublicKeyB64 },
+    });
+  }, [router, serverId, peer.peerRootSignPublicKeyB64]);
+
+  return (
+    <View style={index === 0 ? styles.cardSpaced : styles.cardCompactSpaced}>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.friendName")}</Text>
+        <Text style={styles.rowValue}>
+          {peer.peerDisplayName} ({peer.peerRootSignPublicKeyB64.slice(0, 8)})
+        </Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.friendStatus")}</Text>
+        <Text style={styles.rowValue}>{peer.status}</Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.rowLabel}>{t("identitySettings.friendPairedAt")}</Text>
+        <Text style={styles.rowValue}>{peer.pairedAt}</Text>
+      </View>
+      <View style={styles.pendingButtonRow}>
+        <Button variant="default" onPress={handleOpenChat} disabled={peer.status !== "active"}>
+          {t("identitySettings.friendOpenChat")}
+        </Button>
+      </View>
     </View>
   );
 }

@@ -1119,9 +1119,24 @@ Two laptops + a phone (one daemon each) under one identity now:
           wins" picks mismatched socket pairs, and writes go into
           closed sockets.
   - ⏳ 3.b/2 — Cloudflare KV inbox for offline delivery; recipient
-    pulls on connect with cursor
-  - ⏳ 3.b/3 — read receipts + UI integration (chats list shows
-    friends + agents side-by-side)
+    pulls on connect with cursor. Deferred — requires relay-side
+    Worker changes; currently `sendFriendChatMessage` returns an
+    error when the friend is offline.
+  - 🚧 3.b/3 — read receipts + UI integration. Done in sub-commits:
+      - ✅ 3.b/3 UI v1 — standalone friend chat screen at
+        `/h/[serverId]/friend/[peerRootPubKey]` (message bubbles,
+        input + send, 2s polling for inbound), "Open chat" button
+        on each row in the `/settings/identity` Friends section,
+        bilingual i18n (en + zh).
+      - ⏳ 3.b/3 chats-list integration — surface p2p chats
+        alongside agent chats in the main chats list (currently
+        only reachable via Settings → Friends).
+      - ⏳ 3.b/3 read receipts — recipient sends read-cursor back
+        through the same friend-sync session; sender shows ✓✓ /
+        seen-at timestamp.
+      - ⏳ 3.b/3 push subscriptions — replace 2s polling with a
+        server-pushed event stream so messages appear with no
+        UI-side delay.
 
 ### Phase 4 — AI sharing
 - ⏳ NOT STARTED

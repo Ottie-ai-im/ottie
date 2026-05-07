@@ -71,6 +71,7 @@
     "friendName": "名称",
     "friendStatus": "状态",
     "friendPairedAt": "配对时间",
+    "friendOpenChat": "打开聊天",
     "pendingFriendsSection": "待处理好友请求",
     "pendingFriendsHelper": "有人想加你为好友。批准后建立好友关系,拒绝则取消。",
     "pendingFriendsRefreshFailed": "无法加载待处理好友请求。"
@@ -114,6 +115,20 @@
     "copied": "已复制",
     "regenerate": "重新生成",
     "genericError": "无法生成好友配对凭据,请重试。"
+  },
+  "p2pChat": {
+    "unknownPeer": "好友",
+    "loadFailed": "无法加载聊天记录。",
+    "empty": "还没有消息,打个招呼吧!",
+    "placeholder": "输入消息…",
+    "send": "发送",
+    "sending": "发送中…",
+    "sendFailedGeneric": "无法发送消息。",
+    "peerStatus": {
+      "active": "正常",
+      "blocked": "已屏蔽",
+      "removed": "已移除"
+    }
   },
   "redeemFriend": {
     "title": "添加朋友为好友",

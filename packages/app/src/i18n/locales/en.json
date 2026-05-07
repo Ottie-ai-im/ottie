@@ -71,6 +71,7 @@
     "friendName": "Name",
     "friendStatus": "Status",
     "friendPairedAt": "Paired",
+    "friendOpenChat": "Open chat",
     "pendingFriendsSection": "Pending friend requests",
     "pendingFriendsHelper": "Someone is asking to add you as a friend. Approve to add them, or reject to refuse.",
     "pendingFriendsRefreshFailed": "Couldn't load pending friend requests."
@@ -114,6 +115,20 @@
     "copied": "Copied",
     "regenerate": "Generate new",
     "genericError": "Could not generate a friend-pair offer. Please try again."
+  },
+  "p2pChat": {
+    "unknownPeer": "Friend",
+    "loadFailed": "Couldn't load chat history.",
+    "empty": "No messages yet. Say hi!",
+    "placeholder": "Type a message…",
+    "send": "Send",
+    "sending": "Sending…",
+    "sendFailedGeneric": "Couldn't send message.",
+    "peerStatus": {
+      "active": "Active",
+      "blocked": "Blocked",
+      "removed": "Removed"
+    }
   },
   "redeemFriend": {
     "title": "Pair with a friend",
