@@ -2253,9 +2253,70 @@ export class Session {
         return this.handleChatP2pAiShareDeclineRequest(msg);
       case "chat/p2p/ai-share/list-outbound":
         return this.handleChatP2pAiShareListOutboundRequest(msg);
+      case "chat/p2p/ai-share/end":
+        return this.handleChatP2pAiShareEndRequest(msg);
+      case "chat/p2p/ai-share/list-active":
+        return this.handleChatP2pAiShareListActiveRequest(msg);
       default:
         return undefined;
     }
+  }
+
+  private async handleChatP2pAiShareEndRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/end" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/end/response",
+        payload: {
+          requestId: request.requestId,
+          ended: false,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.endAiShareSession(request.inviteId, request.reason);
+    this.emit({
+      type: "chat/p2p/ai-share/end/response",
+      payload: {
+        requestId: request.requestId,
+        ended: result.ok,
+        error: result.ok ? null : result.error,
+      },
+    });
+  }
+
+  private async handleChatP2pAiShareListActiveRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/list-active" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/list-active/response",
+        payload: {
+          requestId: request.requestId,
+          sessions: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const sessions = this.identityService.listActiveAiShares();
+    this.emit({
+      type: "chat/p2p/ai-share/list-active/response",
+      payload: {
+        requestId: request.requestId,
+        sessions: sessions.map((s) => ({
+          inviteId: s.inviteId,
+          side: s.side,
+          peerRootPubKeyB64: s.peerRootPubKeyB64,
+          agentLabel: s.agentLabel,
+          agentProvider: s.agentProvider,
+          acceptedAt: s.acceptedAt,
+        })),
+        error: null,
+      },
+    });
   }
 
   private async handleChatP2pAiShareInviteRequest(

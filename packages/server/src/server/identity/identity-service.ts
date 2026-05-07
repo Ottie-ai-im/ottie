@@ -64,16 +64,19 @@ import { processInboxOnce } from "./friend-inbox-receiver.js";
 import {
   buildAiShareAcceptEnvelope,
   buildAiShareDeclineEnvelope,
+  buildAiShareEndEnvelope,
   buildAiShareInviteEnvelope,
   tryParseAiShareEnvelope,
   verifyAiShareAcceptEnvelope,
   verifyAiShareDeclineEnvelope,
+  verifyAiShareEndEnvelope,
   verifyAiShareInviteEnvelope,
 } from "./ai-share-crypto.js";
 import { AiShareInviteRegistry } from "./ai-share-registry.js";
 import type {
   AiShareAcceptEnvelope,
   AiShareDeclineEnvelope,
+  AiShareEndEnvelope,
   AiShareInviteEnvelope,
 } from "./ai-share-types.js";
 import { loadPeerList, savePeerList, upsertPeer } from "./peer-store.js";
@@ -1065,6 +1068,43 @@ export class IdentityService {
       this.aiShareInvites.applyOutboundDecline(input.parsed.envelope);
       return;
     }
+    if (input.parsed.kind === "end") {
+      // Phase 4 v2/a: either side can end an active share. Verify
+      // sender against the same peer pubkey we'd use for any other
+      // friend-sync envelope from this connection.
+      const verifyOutcome = verifyAiShareEndEnvelope({
+        envelope: input.parsed.envelope,
+        expectedSenderRootSignPublicKeyB64: input.peerRootPubKey,
+      });
+      if (!verifyOutcome.ok) {
+        this.logger.warn({ reason: verifyOutcome.reason, peerPrefix }, "ai_share_end_sig_invalid");
+        return;
+      }
+      this.applyInboundAiShareEnd(input.parsed.envelope, input.peerRootPubKey);
+      return;
+    }
+  }
+
+  /**
+   * Phase 4 v2/a — apply an inbound `ai-share-end` envelope to either
+   * side's registry record. Inbound entries (we accepted; peer ended)
+   * and outbound entries (we sent; peer declined-after-accept by
+   * ending) both transition to `state = ended, endedBy = "peer"`.
+   */
+  private applyInboundAiShareEnd(envelope: AiShareEndEnvelope, peerRootPubKey: string): void {
+    const args = {
+      inviteId: envelope.inviteId,
+      endedBy: "peer" as const,
+      endedAt: envelope.endedAt,
+      signatureB64: envelope.signatureB64,
+      ...(envelope.reason !== undefined ? { reason: envelope.reason } : {}),
+    };
+    this.aiShareInvites.applyOutboundEnd(args);
+    this.aiShareInvites.applyInboundEnd(args);
+    this.logger.info(
+      { inviteId: envelope.inviteId, peerPrefix: peerRootPubKey.slice(0, 8) },
+      "ai_share_invite_ended_by_peer",
+    );
   }
 
   /**
@@ -1477,7 +1517,7 @@ export class IdentityService {
     inviteId: string;
     peerRootPubKeyB64: string;
     agentLabel: string;
-    state: "pending" | "accepted" | "declined" | "expired";
+    state: "pending" | "active" | "declined" | "ended" | "expired";
   }> {
     return this.aiShareInvites.listOutbound().map((entry) => ({
       inviteId: entry.invite.inviteId,
@@ -1485,6 +1525,73 @@ export class IdentityService {
       agentLabel: entry.invite.agentLabel,
       state: entry.state.kind,
     }));
+  }
+
+  /**
+   * Phase 4 v2/a — list active ai-share sessions on this daemon
+   * (either side). Drives the active-share banner UI: each entry
+   * gets a banner row + an End button.
+   */
+  listActiveAiShares(): ReadonlyArray<{
+    inviteId: string;
+    side: "outbound" | "inbound";
+    peerRootPubKeyB64: string;
+    agentLabel: string;
+    agentProvider: string;
+    acceptedAt: string;
+  }> {
+    return this.aiShareInvites.listActive();
+  }
+
+  /**
+   * Phase 4 v2/a — terminate an active ai-share session. Either side
+   * can call this. Builds + sends an `ai-share-end` envelope through
+   * the friend-sync session, then transitions the local registry
+   * entry. Best-effort send; if the peer's session is already gone
+   * we still mark the local side ended (UI dismisses the banner).
+   */
+  endAiShareSession(
+    inviteId: string,
+    reason?: string,
+  ): { ok: true; envelope: AiShareEndEnvelope } | { ok: false; error: string } {
+    if (this.state.kind !== "loaded") {
+      return { ok: false, error: "Cannot end share — root identity not loaded" };
+    }
+    const active = this.aiShareInvites.getActive(inviteId);
+    if (!active) {
+      return { ok: false, error: "No active share with this id" };
+    }
+    const envelope = buildAiShareEndEnvelope({
+      inviteId,
+      senderRootSignPrivateKey: this.state.bundle.signPrivateKey,
+      senderRootPubKeyB64: this.state.bundle.stored.signPublicKeyB64,
+      endedAt: new Date().toISOString(),
+      ...(reason !== undefined ? { reason } : {}),
+    });
+    // Best-effort emit to the peer; mark locally regardless.
+    const session = this.friendSessions.get(active.peerRootPubKeyB64);
+    if (session) {
+      try {
+        const frame = encryptFriendSyncFrame({
+          sharedKey: session.sharedKey,
+          plaintext: JSON.stringify(envelope),
+        });
+        session.socket.send(JSON.stringify(frame));
+      } catch (err) {
+        this.logger.warn({ err, inviteId }, "ai_share_end_send_failed_marking_locally");
+      }
+    }
+    const args = {
+      inviteId,
+      endedBy: "self" as const,
+      endedAt: envelope.endedAt,
+      signatureB64: envelope.signatureB64,
+      ...(reason !== undefined ? { reason } : {}),
+    };
+    this.aiShareInvites.applyOutboundEnd(args);
+    this.aiShareInvites.applyInboundEnd(args);
+    this.logger.info({ inviteId, reason }, "ai_share_session_ended");
+    return { ok: true, envelope };
   }
 
   /**

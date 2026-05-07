@@ -4,11 +4,13 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, Send, Sparkles } from "lucide-react-native";
+import { ChevronLeft, Send, Sparkles, X } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { useActiveAiShares } from "@/hooks/use-active-ai-shares";
+import { useQueryClient } from "@tanstack/react-query";
 import type { StoredFriendChatMessageOnWire } from "@server/server/identity/identity-rpc-schemas";
 import type { StoredPeer } from "@server/server/identity/peer-types";
 
@@ -114,6 +116,49 @@ const styles = StyleSheet.create((theme) => ({
     fontFamily: theme.fontFamily.system,
     color: theme.colors.destructive,
     fontSize: theme.fontSize.sm,
+  },
+  activeShareBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
+    backgroundColor: theme.colors.surface2,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderGlass,
+  },
+  activeShareIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  activeShareText: {
+    flex: 1,
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
+  activeShareEndButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+  },
+  activeShareEndButtonHovered: {
+    backgroundColor: theme.colors.surfaceGlassHover,
+  },
+  activeShareEndText: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
   },
   scroll: {
     flex: 1,
@@ -381,6 +426,10 @@ export default function FriendChatRoute() {
         ) : null}
       </View>
 
+      {peerRootPubKey ? (
+        <ActiveShareBanners serverId={serverId} peerRootPubKey={peerRootPubKey} />
+      ) : null}
+
       {messagesQuery.isError ? (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>
@@ -642,5 +691,93 @@ function ShareAiButton({
         </View>
       </AdaptiveModalSheet>
     </>
+  );
+}
+
+/**
+ * Phase 4 v2/a — render an active-share banner per running session
+ * with this peer. Either side (owner OR friend) sees the banner; the
+ * "End session" button calls `chatP2pAiShareEnd` and invalidates the
+ * active-list query so the banner disappears as soon as the daemon
+ * confirms.
+ */
+function ActiveShareBanners({
+  serverId,
+  peerRootPubKey,
+}: {
+  serverId: string | null;
+  peerRootPubKey: string;
+}) {
+  const { sessions } = useActiveAiShares(serverId, peerRootPubKey);
+  if (sessions.length === 0) return null;
+  return (
+    <>
+      {sessions.map((session) => (
+        <ActiveShareBanner key={session.inviteId} serverId={serverId} session={session} />
+      ))}
+    </>
+  );
+}
+
+function ActiveShareBanner({
+  serverId,
+  session,
+}: {
+  serverId: string | null;
+  session: import("@server/server/identity/identity-rpc-schemas").AiShareActiveOnWire;
+}) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const client = useHostRuntimeClient(serverId ?? "");
+  const queryClient = useQueryClient();
+  const [ending, setEnding] = useState(false);
+  const handleEnd = useCallback(async () => {
+    if (!client) return;
+    setEnding(true);
+    try {
+      await client.chatP2pAiShareEnd({ inviteId: session.inviteId });
+      await queryClient.invalidateQueries({ queryKey: ["ai-share-active", serverId] });
+    } finally {
+      setEnding(false);
+    }
+  }, [client, queryClient, serverId, session.inviteId]);
+
+  const endButtonStyle = useCallback(
+    ({ hovered }: { hovered?: boolean }) => [
+      styles.activeShareEndButton,
+      hovered ? styles.activeShareEndButtonHovered : null,
+    ],
+    [],
+  );
+
+  return (
+    <View
+      style={styles.activeShareBanner}
+      testID={`active-share-banner-${session.inviteId.slice(0, 8)}`}
+    >
+      <View style={styles.activeShareIcon}>
+        <Sparkles size={16} color={theme.colors.palette.white} />
+      </View>
+      <Text style={styles.activeShareText} numberOfLines={1}>
+        {t("p2pChat.activeShareBanner", {
+          label: session.agentLabel,
+          defaultValue: "AI share active — {{label}}",
+        })}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => void handleEnd()}
+        style={endButtonStyle}
+        disabled={ending}
+        testID={`active-share-end-${session.inviteId.slice(0, 8)}`}
+      >
+        <X size={14} color={theme.colors.foreground} />
+        <Text style={styles.activeShareEndText}>
+          {ending
+            ? t("p2pChat.activeShareEnding", { defaultValue: "Ending…" })
+            : t("p2pChat.activeShareEnd", { defaultValue: "End session" })}
+        </Text>
+      </Pressable>
+    </View>
   );
 }

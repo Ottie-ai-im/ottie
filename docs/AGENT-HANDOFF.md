@@ -341,37 +341,50 @@ Design spec lives at `docs/MULTI-USER-COLLABORATION-DESIGN.md`
 §11.5 — explains the v1 / v2 / v3 split + every wire-shape
 decision.
 
-**v2 — live channel (next session of meaningful Phase 4 work):**
+**v2 — live channel (broken into 5 sub-commits a–e):**
 
-The active-share state currently has nothing in it (banner
-text reads "live timeline + prompt-injection ship in v2"). v2
-must:
+The active-share state currently has nothing in it (banner text
+reads "live timeline + prompt-injection ship in v2"). v2 ships
+in five sub-commits, each independently mergeable + testable:
 
-- Add `ai-share-prompt` envelope (friend → owner): a chat-style
-  message that the owner's daemon injects into the running
-  shared agent's message channel. Schema mirrors
-  `friend-chat-types.ts` but routes into AgentManager
-  instead of the chat store.
-- Add `ai-share-timeline` envelope (owner → friend): each
-  agent timeline event the owner produces (assistant text
-  chunk, tool call, tool result) gets a redacted-for-friend
-  version sent through the friend-sync session. Owner sees
-  full detail; friend sees prompt + response only (per §7
-  Q10).
-- Per-tool-call permission UI on owner side that ALSO mirrors
-  to friend's view — `agent_permission_request` already has
-  the owner-side surface; needs to fan out (or block) to the
-  friend's banner.
-- Active-share banner replaces the stub text. Both sides see
-  "AI share active with {peer} — {agentLabel}". Owner has an
-  "End session" button that emits an `ai-share-end` envelope
-  - transitions both daemons to idle.
-- Auditable transcript persistence per §7 last bullet — write
+- **v2/a — active state + end-session.** Smallest unit; gives
+  v1 a real lifecycle. Adds `ai-share-end` envelope (either
+  side can emit), tracks an "active" state on each registry
+  entry post-accept, replaces the v1 stub banner with a real
+  one ("AI share active with {peer} — End session"), wires
+  the End button. No actual agent streaming yet, but the user
+  can invite → accept → end and the UI reflects each step.
+  Tests for the end-envelope round-trip.
+- **v2/b — owner side: agent picker + prompt receive.**
+  Replace v1's placeholder agent in the invite modal with the
+  daemon's real agent list. Add `ai-share-prompt` envelope
+  (friend → owner). On receive, owner's daemon injects the
+  prompt into the chosen `AgentManager` agent's input
+  channel. No friend-side UI yet — verified via daemon logs
+  - the agent's normal output emerging on the owner side.
+- **v2/c — friend side: shared agent view + send prompt.**
+  New route at `/h/[serverId]/friend/[peerRootPubKey]/share/
+[inviteId]` showing a stripped chat surface. Compose box
+  fires `chatP2pAiSharePrompt` (new RPC). Owner sees the
+  prompt land and the agent reply (existing AgentManager
+  pipeline does the work). Friend's view stays empty until
+  v2/d.
+- **v2/d — owner→friend timeline streaming.** Add
+  `ai-share-timeline` envelope (owner → friend). Hook
+  `AgentManager.onEvent` (or equivalent emit point) — for
+  every shared agent, encode the event as a timeline envelope
+  and broadcast through the matching friend-sync session.
+  Friend's shared-agent view renders the events. Per-tool-
+  call redaction lives here: filter tool inputs / outputs
+  out before sending (per §7 Q10 + §7's "Bob does not see"
+  list).
+- **v2/e — auditable transcript + disconnect handling +
+  e2e tests.** Persist invite + every prompt/timeline event
   to `$OTTIE_HOME/ai-shares/{inviteId}.json` on both sides as
-  events flow.
-- Handle disconnects: if the owner's daemon drops mid-session,
-  friend's banner flips to "owner offline" and any in-flight
-  prompt fails-fast.
+  the session flows. Disconnect detection: if the owner's
+  daemon drops mid-session, friend's banner flips to "owner
+  offline" + in-flight prompts fail-fast. Mock-relay e2e
+  test covering the full Wendell ↔ Bob lifecycle.
 
 **v3 — multi-daemon picker (§7.5):**
 

@@ -134,6 +134,9 @@
       "send": "发送邀请",
       "sending": "发送中…"
     },
+    "activeShareBanner": "AI 分享进行中 — {{label}}",
+    "activeShareEnd": "结束会话",
+    "activeShareEnding": "结束中…",
     "peerStatus": {
       "active": "正常",
       "blocked": "已屏蔽",

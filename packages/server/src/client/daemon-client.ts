@@ -1849,6 +1849,51 @@ export class DaemonClient {
     });
   }
 
+  // Phase 4 v2/a — end an active session + list active sessions.
+
+  async chatP2pAiShareEnd(args: {
+    inviteId: string;
+    reason?: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{ ended: boolean; error: string | null }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "chat/p2p/ai-share/end",
+        requestId,
+        inviteId: args.inviteId,
+        ...(args.reason !== undefined ? { reason: args.reason } : {}),
+      },
+      timeout: args.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/end/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { ended: msg.payload.ended, error: msg.payload.error };
+      },
+    });
+  }
+
+  async chatP2pAiShareListActive(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    sessions:
+      | readonly import("../server/identity/identity-rpc-schemas.js").AiShareActiveOnWire[]
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "chat/p2p/ai-share/list-active", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/list-active/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { sessions: msg.payload.sessions, error: msg.payload.error };
+      },
+    });
+  }
+
   async deviceLinkRedeem(args: {
     deepLink: string;
     deviceLabel: string;

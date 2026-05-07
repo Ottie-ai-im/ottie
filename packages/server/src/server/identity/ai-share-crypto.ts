@@ -3,12 +3,15 @@ import { createPublicKey, sign, verify, type KeyObject } from "node:crypto";
 import {
   AiShareAcceptEnvelopeSchema,
   AiShareDeclineEnvelopeSchema,
+  AiShareEndEnvelopeSchema,
   AiShareInviteEnvelopeSchema,
   aiShareAcceptPayload,
   aiShareDeclinePayload,
+  aiShareEndPayload,
   aiShareInvitePayload,
   type AiShareAcceptEnvelope,
   type AiShareDeclineEnvelope,
+  type AiShareEndEnvelope,
   type AiShareInviteEnvelope,
 } from "./ai-share-types.js";
 
@@ -210,6 +213,69 @@ export function verifyAiShareDeclineEnvelope(
   );
 }
 
+// ----- end (Phase 4 v2/a — either side: sign + verify) ------------------
+
+export interface BuildAiShareEndInput {
+  inviteId: string;
+  /** Sender's root sign privkey — could be owner OR friend, both can end. */
+  senderRootSignPrivateKey: KeyObject;
+  senderRootPubKeyB64: string;
+  endedAt: string;
+  reason?: string;
+}
+
+export function buildAiShareEndEnvelope(input: BuildAiShareEndInput): AiShareEndEnvelope {
+  const payload = aiShareEndPayload({
+    inviteId: input.inviteId,
+    senderRootPubKeyB64: input.senderRootPubKeyB64,
+    endedAt: input.endedAt,
+    ...(input.reason !== undefined ? { reason: input.reason } : {}),
+  });
+  const signatureB64 = signEd25519(input.senderRootSignPrivateKey, payload);
+  return {
+    v: 1,
+    kind: "ai-share-end",
+    inviteId: input.inviteId,
+    senderRootPubKeyB64: input.senderRootPubKeyB64,
+    endedAt: input.endedAt,
+    ...(input.reason !== undefined ? { reason: input.reason } : {}),
+    signatureB64,
+  };
+}
+
+export interface VerifyAiShareEndInput {
+  envelope: AiShareEndEnvelope;
+  /**
+   * Either side can end the share, so the caller passes whichever
+   * peer pubkey is on the other end of the friend-sync session that
+   * delivered this envelope. We cross-check that the envelope's
+   * `senderRootPubKeyB64` matches.
+   */
+  expectedSenderRootSignPublicKeyB64: string;
+}
+
+export function verifyAiShareEndEnvelope(
+  input: VerifyAiShareEndInput,
+): { ok: true } | { ok: false; reason: string } {
+  if (input.envelope.senderRootPubKeyB64 !== input.expectedSenderRootSignPublicKeyB64) {
+    return {
+      ok: false,
+      reason: `end sender pubkey ${input.envelope.senderRootPubKeyB64.slice(0, 8)}… does not match peer ${input.expectedSenderRootSignPublicKeyB64.slice(0, 8)}…`,
+    };
+  }
+  const payload = aiShareEndPayload({
+    inviteId: input.envelope.inviteId,
+    senderRootPubKeyB64: input.envelope.senderRootPubKeyB64,
+    endedAt: input.envelope.endedAt,
+    ...(input.envelope.reason !== undefined ? { reason: input.envelope.reason } : {}),
+  });
+  return verifyDetached(
+    input.expectedSenderRootSignPublicKeyB64,
+    payload,
+    input.envelope.signatureB64,
+  );
+}
+
 // ----- shared parse-and-route helper -------------------------------------
 
 /**
@@ -224,6 +290,7 @@ export function tryParseAiShareEnvelope(
   | { kind: "invite"; envelope: AiShareInviteEnvelope }
   | { kind: "accept"; envelope: AiShareAcceptEnvelope }
   | { kind: "decline"; envelope: AiShareDeclineEnvelope }
+  | { kind: "end"; envelope: AiShareEndEnvelope }
   | null {
   if (typeof parsed !== "object" || parsed === null) return null;
   const k = (parsed as { kind?: unknown }).kind;
@@ -238,6 +305,10 @@ export function tryParseAiShareEnvelope(
   if (k === "ai-share-decline") {
     const r = AiShareDeclineEnvelopeSchema.safeParse(parsed);
     return r.success ? { kind: "decline", envelope: r.data } : null;
+  }
+  if (k === "ai-share-end") {
+    const r = AiShareEndEnvelopeSchema.safeParse(parsed);
+    return r.success ? { kind: "end", envelope: r.data } : null;
   }
   return null;
 }

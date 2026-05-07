@@ -590,7 +590,7 @@ export const AiShareInviteOnWireSchema = z.object({
   generatedAt: z.string(),
   expiresAt: z.string(),
   /** Daemon-side state: only populated on owner-side list responses. */
-  state: z.enum(["pending", "accepted", "declined", "expired"]).optional(),
+  state: z.enum(["pending", "accepted", "active", "declined", "ended", "expired"]).optional(),
   /** Peer pubkey the invite was sent to (owner-side list responses). */
   peerRootPubKeyB64: z.string().optional(),
 });
@@ -669,6 +669,48 @@ export const ChatP2pAiShareListOutboundResponseSchema = z.object({
   payload: z.object({
     requestId: z.string(),
     invites: z.array(AiShareInviteOnWireSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// Phase 4 v2/a — end an active session + list active sessions.
+
+export const ChatP2pAiShareEndRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/end"),
+  requestId: z.string(),
+  inviteId: z.string().min(1),
+  reason: z.string().max(200).optional(),
+});
+
+export const ChatP2pAiShareEndResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/end/response"),
+  payload: z.object({
+    requestId: z.string(),
+    ended: z.boolean(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AiShareActiveOnWireSchema = z.object({
+  inviteId: z.string().min(1),
+  side: z.enum(["outbound", "inbound"]),
+  peerRootPubKeyB64: z.string().min(1),
+  agentLabel: z.string().min(1),
+  agentProvider: z.string().min(1),
+  acceptedAt: z.string(),
+});
+export type AiShareActiveOnWire = z.infer<typeof AiShareActiveOnWireSchema>;
+
+export const ChatP2pAiShareListActiveRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-active"),
+  requestId: z.string(),
+});
+
+export const ChatP2pAiShareListActiveResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-active/response"),
+  payload: z.object({
+    requestId: z.string(),
+    sessions: z.array(AiShareActiveOnWireSchema).nullable(),
     error: z.string().nullable(),
   }),
 });

@@ -134,6 +134,9 @@
       "send": "Send invite",
       "sending": "Sending…"
     },
+    "activeShareBanner": "AI share active — {{label}}",
+    "activeShareEnd": "End session",
+    "activeShareEnding": "Ending…",
     "peerStatus": {
       "active": "Active",
       "blocked": "Blocked",

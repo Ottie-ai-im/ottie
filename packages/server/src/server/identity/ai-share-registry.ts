@@ -28,8 +28,20 @@ const DEFAULT_TTL_MS = 5 * 60 * 1000;
 
 export type AiShareInviteState =
   | { kind: "pending" }
-  | { kind: "accepted"; acceptedAt: string; signatureB64: string }
+  | {
+      kind: "active";
+      acceptedAt: string;
+      acceptSignatureB64: string;
+    }
   | { kind: "declined"; declinedAt: string; reason?: string; signatureB64: string }
+  | {
+      kind: "ended";
+      endedAt: string;
+      /** Who emitted the end? "self" if this daemon, "peer" if other side. */
+      endedBy: "self" | "peer";
+      reason?: string;
+      signatureB64: string;
+    }
   | { kind: "expired" };
 
 interface OutboundEntry {
@@ -98,11 +110,11 @@ export class AiShareInviteRegistry {
     const entry = this.outbound.get(envelope.inviteId);
     if (!entry) return null;
     entry.state = {
-      kind: "accepted",
+      kind: "active",
       acceptedAt: envelope.acceptedAt,
-      signatureB64: envelope.signatureB64,
+      acceptSignatureB64: envelope.signatureB64,
     };
-    this.logger?.info({ inviteId: envelope.inviteId }, "ai_share_invite_accepted_outbound");
+    this.logger?.info({ inviteId: envelope.inviteId }, "ai_share_invite_active_outbound");
     return entry;
   }
 
@@ -123,6 +135,122 @@ export class AiShareInviteRegistry {
   listOutbound(): readonly OutboundEntry[] {
     this.evictExpired();
     return [...this.outbound.values()];
+  }
+
+  /**
+   * Phase 4 v2/a — find an active outbound or inbound entry by id.
+   * Returns null if not found or not currently active. Used by the
+   * end-share flow to resolve the peer pubkey + bail if nothing's
+   * running.
+   */
+  getActive(inviteId: string): {
+    side: "outbound" | "inbound";
+    peerRootPubKeyB64: string;
+    invite: AiShareInviteEnvelope;
+  } | null {
+    const o = this.outbound.get(inviteId);
+    if (o && o.state.kind === "active") {
+      return { side: "outbound", peerRootPubKeyB64: o.peerRootPubKeyB64, invite: o.invite };
+    }
+    const i = this.inbound.get(inviteId);
+    if (i && i.state.kind === "active") {
+      return { side: "inbound", peerRootPubKeyB64: i.ownerRootPubKeyB64, invite: i.invite };
+    }
+    return null;
+  }
+
+  applyOutboundEnd(args: {
+    inviteId: string;
+    endedBy: "self" | "peer";
+    endedAt: string;
+    signatureB64: string;
+    reason?: string;
+  }): OutboundEntry | null {
+    const entry = this.outbound.get(args.inviteId);
+    if (!entry) return null;
+    entry.state = {
+      kind: "ended",
+      endedBy: args.endedBy,
+      endedAt: args.endedAt,
+      ...(args.reason !== undefined ? { reason: args.reason } : {}),
+      signatureB64: args.signatureB64,
+    };
+    this.logger?.info(
+      { inviteId: args.inviteId, endedBy: args.endedBy },
+      "ai_share_invite_ended_outbound",
+    );
+    return entry;
+  }
+
+  applyInboundEnd(args: {
+    inviteId: string;
+    endedBy: "self" | "peer";
+    endedAt: string;
+    signatureB64: string;
+    reason?: string;
+  }): void {
+    const entry = this.inbound.get(args.inviteId);
+    if (!entry) return;
+    entry.state = {
+      kind: "ended",
+      endedBy: args.endedBy,
+      endedAt: args.endedAt,
+      ...(args.reason !== undefined ? { reason: args.reason } : {}),
+      signatureB64: args.signatureB64,
+    };
+    this.logger?.info(
+      { inviteId: args.inviteId, endedBy: args.endedBy },
+      "ai_share_invite_ended_inbound",
+    );
+  }
+
+  /**
+   * All ai-share invites currently in `active` state — both outbound
+   * (we sent + friend accepted) and inbound (friend invited + we
+   * accepted). Drives the active-share banner UI.
+   */
+  listActive(): ReadonlyArray<{
+    inviteId: string;
+    side: "outbound" | "inbound";
+    peerRootPubKeyB64: string;
+    agentLabel: string;
+    agentProvider: string;
+    acceptedAt: string;
+  }> {
+    this.evictExpired();
+    const out: Array<{
+      inviteId: string;
+      side: "outbound" | "inbound";
+      peerRootPubKeyB64: string;
+      agentLabel: string;
+      agentProvider: string;
+      acceptedAt: string;
+    }> = [];
+    for (const entry of this.outbound.values()) {
+      if (entry.state.kind === "active") {
+        out.push({
+          inviteId: entry.invite.inviteId,
+          side: "outbound",
+          peerRootPubKeyB64: entry.peerRootPubKeyB64,
+          agentLabel: entry.invite.agentLabel,
+          agentProvider: entry.invite.agentProvider,
+          acceptedAt: entry.state.acceptedAt,
+        });
+      }
+    }
+    for (const entry of this.inbound.values()) {
+      if (entry.state.kind === "active") {
+        out.push({
+          inviteId: entry.invite.inviteId,
+          side: "inbound",
+          peerRootPubKeyB64: entry.ownerRootPubKeyB64,
+          agentLabel: entry.invite.agentLabel,
+          agentProvider: entry.invite.agentProvider,
+          acceptedAt: entry.state.acceptedAt,
+        });
+      }
+    }
+    return out;
   }
 
   // ----- inbound (friend side) -------------------------------------------
@@ -160,7 +288,11 @@ export class AiShareInviteRegistry {
   applyInboundAccept(inviteId: string, sig: { acceptedAt: string; signatureB64: string }): void {
     const entry = this.inbound.get(inviteId);
     if (!entry) return;
-    entry.state = { kind: "accepted", acceptedAt: sig.acceptedAt, signatureB64: sig.signatureB64 };
+    entry.state = {
+      kind: "active",
+      acceptedAt: sig.acceptedAt,
+      acceptSignatureB64: sig.signatureB64,
+    };
   }
 
   applyInboundDecline(

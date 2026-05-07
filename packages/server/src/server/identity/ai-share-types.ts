@@ -87,18 +87,42 @@ export const AiShareDeclineEnvelopeSchema = z.object({
 });
 export type AiShareDeclineEnvelope = z.infer<typeof AiShareDeclineEnvelopeSchema>;
 
+// ----- end (either side → other) -----------------------------------------
+
+/**
+ * Phase 4 v2/a — terminate an active ai-share session. Emitted by
+ * either side: the owner clicks "End session" on the banner, OR the
+ * friend clicks "End" on their shared-agent view. The other side
+ * transitions the registry entry to "ended" and renders the banner
+ * dismissed. Carrying `senderRootPubKeyB64` lets the receiver verify
+ * authorship the same way invite/accept/decline do, against the
+ * friend-sync session's known peer pubkey.
+ */
+export const AiShareEndEnvelopeSchema = z.object({
+  v: z.literal(1),
+  kind: z.literal("ai-share-end"),
+  inviteId: z.string().min(1),
+  senderRootPubKeyB64: z.string().min(1),
+  endedAt: z.string(),
+  /** Optional human-readable reason; UI shows verbatim if present. */
+  reason: z.string().max(200).optional(),
+  signatureB64: z.string().min(1),
+});
+export type AiShareEndEnvelope = z.infer<typeof AiShareEndEnvelopeSchema>;
+
 // ----- discriminated union ------------------------------------------------
 
 /**
- * Discriminated union of every ai-share envelope kind v1 ships. Used
- * by the friend-sync inbound dispatcher to route each frame's
- * decrypted payload to the right handler. Future kinds (Phase 4 v2's
- * `ai-share-prompt` / `ai-share-timeline`) extend this union.
+ * Discriminated union of every ai-share envelope kind v1 + v2/a ships.
+ * Used by the friend-sync inbound dispatcher to route each frame's
+ * decrypted payload to the right handler. Future kinds (v2/b's
+ * `ai-share-prompt`, v2/d's `ai-share-timeline`) extend this union.
  */
 export const AiShareEnvelopeSchema = z.discriminatedUnion("kind", [
   AiShareInviteEnvelopeSchema,
   AiShareAcceptEnvelopeSchema,
   AiShareDeclineEnvelopeSchema,
+  AiShareEndEnvelopeSchema,
 ]);
 export type AiShareEnvelope = z.infer<typeof AiShareEnvelopeSchema>;
 
@@ -174,6 +198,28 @@ export function aiShareDeclinePayload(args: {
     args.inviteId,
     args.responderRootPubKeyB64,
     args.declinedAt,
+    args.reason ?? "",
+  ].join("\n");
+}
+
+/**
+ *   ottie-ai-share-end-v1
+ *   {inviteId}
+ *   {senderRootPubKeyB64}
+ *   {endedAt}
+ *   {reason | ""}
+ */
+export function aiShareEndPayload(args: {
+  inviteId: string;
+  senderRootPubKeyB64: string;
+  endedAt: string;
+  reason?: string;
+}): string {
+  return [
+    "ottie-ai-share-end-v1",
+    args.inviteId,
+    args.senderRootPubKeyB64,
+    args.endedAt,
     args.reason ?? "",
   ].join("\n");
 }
