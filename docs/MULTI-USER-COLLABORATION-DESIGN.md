@@ -1068,7 +1068,28 @@ Two laptops + a phone (one daemon each) under one identity now:
     `body` fallback). New helpers: `p2pRoomId({a, b})` derives
     a deterministic order-insensitive `p2p:<a>|<b>` id;
     `isP2pRoom(room)` type-guard.
-  - ⏳ 3.b/1 — message send/receive over relay (live)
+  - 🚧 3.b/1 — message send/receive over relay (live). Done in
+    sub-commits:
+      - ✅ 3.b/1a — Peer routing fields. `StoredPeer` gains optional
+        `peerServerId` + `peerRelayEndpoint`; `FriendCandidate` gains
+        optional `serverId` + `relayEndpoint`; the friend-pair flow
+        round-trips them so both sides' `peers.json` capture the
+        chat-routing target at pair time.
+      - ✅ 3.b/1b — `friend-sync-types.ts` + `friend-sync-handshake.ts`
+        (cross-identity SIGMA-I, signed under the root key with prefix
+        `ottie-friend-sync-hello-v1`). Pure crypto, I/O-free.
+      - ✅ 3.b/1c — `friend-session-registry.ts` (per-friend session
+        store), `friend-sync-receiver.ts` (handler for the
+        `friend-sync:<nonce>` relay prefix), `friend-sync-dialer.ts`
+        (per-peer reconnect with exponential backoff). Bootstrap
+        registers the handler + starts the dialer alongside peer-sync.
+        IdentityService gains `start/stopFriendSync`,
+        `getFriendSessions`, `refreshFriendDialerTargets`. Inbound
+        payload handler is a debug-log no-op; 3.b/1d will plug in the
+        chat-message envelope schema + persistence path here.
+      - ⏳ 3.b/1d — chat-message envelope (signed + schema-validated),
+        persistence into the existing durable chat store, WS RPC
+        `chat/p2p/send`, real-relay end-to-end test.
   - ⏳ 3.b/2 — Cloudflare KV inbox for offline delivery; recipient
     pulls on connect with cursor
   - ⏳ 3.b/3 — read receipts + UI integration (chats list shows
