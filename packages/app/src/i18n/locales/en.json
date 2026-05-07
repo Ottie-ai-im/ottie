@@ -438,6 +438,12 @@
     "usage": "Usage",
     "settings": "Settings"
   },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "You're all caught up.",
+    "friendPairTitle": "Friend request from {{name}}",
+    "friendPairSubtitle": "{{pubkey}}… · tap to approve"
+  },
   "assistants": {
     "title": "Assistants",
     "subtitle": "Connect to self-hosted AI assistants like Open WebUI, OpenClaw, and Hermes Agent. Tap to open in your browser.",

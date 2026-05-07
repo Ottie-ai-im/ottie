@@ -46,12 +46,11 @@ from here.
      turns), how (snapshot vs realtime), permission model, channel
      reuse vs new prefix. Spec first, then v1 implementation.
      Multi-session.
-  3. **Bell button → notification center** — UX. Pending friend
-     requests, future offline inbox indicators, and Phase 4 share
-     invitations all want a single inbox UI. Currently
-     `desktop-nav-rail.tsx:239` is `onPress={NOOP}`. Build a small
-     notification panel + back it with a query that aggregates
-     friend-pair-candidates + (future) inbox state. Mid-size.
+  3. ~~Bell button → notification center~~ — ✅ v1 done. Bell
+     polls friend-pair candidates from the active host and opens
+     a panel on tap; rows deep-link to `/settings/identity`. See
+     §6.3 below for v2 ideas (multi-host roll-up, Phase 4 share
+     invitations, mobile parity).
   4. **137 lint-error cleanup** — independent chunk. lefthook fires
      full-repo `oxlint` pre-commit and turns up 137 errors (mostly
      `no-explicit-any` in `daemon-client.ts` and a few unused
@@ -345,29 +344,44 @@ Recommended sequence: spec doc as new section §11.5 → walk
 Wendell through it → small v1 (one daemon hosts; live view only;
 explicit end button) → iterate.
 
-### 6.3. Bell button → notification center (1-2 sessions)
+### 6.3. Bell button → notification center (✅ v1 done)
 
-The bell icon in `desktop-nav-rail.tsx:239` is currently
-`onPress={NOOP}`. Building this UNBLOCKS Phase 4's invitation UX
-("Bob wants to share Wendell's Claude Code with you — Accept?")
-and improves friend-pair UX (pending requests are buried in
-Settings → Identity).
+The bell in `desktop-nav-rail.tsx` no longer no-ops:
 
-**Pieces to build:**
+- New `useNotifications(serverId)` hook
+  (`packages/app/src/hooks/use-notifications.ts`) polls the
+  active host's `friendPairCandidates` RPC every 5s and shapes
+  each into a discriminated `NotificationItem` (one kind today:
+  `"friend-pair-candidate"`).
+- New `NotificationCenterPanel` component
+  (`packages/app/src/components/notification-center-panel.tsx`)
+  renders the items inside an `AdaptiveModalSheet`, with an
+  empty-state, per-row icon (`UserPlus`), and tap-to-deep-link
+  behavior. Friend-request rows route to `/settings/identity`
+  where the existing Approve/Reject UI lives — the panel
+  intentionally doesn't duplicate the action buttons.
+- Bell now shows a red dot when `count > 0` (driven by the
+  hook's `count`); tap opens the panel.
+- Bilingual i18n under `notifications.*` (en + zh).
 
-- A small bottom-sheet / dropdown panel with a list of
-  notification rows.
-- Aggregator: pulls friend-pair candidates (existing
-  `friendPairCandidates` RPC) + future inbox-arrival events +
-  Phase 4 share invitations. Live-poll for now; push later.
-- Unread indicator (red dot on the bell when `count > 0`).
-- Tap a row → deep-link to the relevant page (Settings →
-  Identity for friend requests; chat screen for new messages;
-  Phase 4 modal for share invitations).
-- Bilingual i18n keys under `notifications.*`.
+**v2 ideas, deferred:**
 
-Doable in 1-2 sessions if we don't over-design. Do it BEFORE
-Phase 4 v1 so the AI-share invite path has somewhere to surface.
+- **Multi-host roll-up** — today shows only the active host's
+  notifications. The hook is already keyed by `serverId`, so
+  upgrading is "for each host in `useHosts()`, run a query,
+  flatten + sort". Add a per-row badge for the originating
+  host so the user knows which identity is involved.
+- **Phase 4 AI-share invitations** — slot in by adding a
+  `"ai-share-invite"` kind to `NotificationItem`. The panel
+  already has an exhaustiveness check (`_exhaustive: never`)
+  so missing renderers fail typecheck.
+- **Inbox-arrival hints** — when an offline-inbox round
+  persists a message and the chat screen isn't focused, post
+  a transient notification. Needs a daemon → client push
+  channel; defer to Phase 3.b/3 push subscriptions work.
+- **Mobile parity** — the bell is desktop-only today
+  (`mobile-tab-bar.tsx` doesn't render one). Add a notifications
+  surface there once the mobile UX is decided.
 
 ### 6.4. 137 lint-error cleanup (independent chunk)
 

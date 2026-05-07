@@ -438,6 +438,12 @@
     "usage": "用量",
     "settings": "设置"
   },
+  "notifications": {
+    "title": "通知",
+    "empty": "暂时没有新通知。",
+    "friendPairTitle": "{{name}} 想加你为好友",
+    "friendPairSubtitle": "{{pubkey}}… · 点这里去批准"
+  },
   "assistants": {
     "title": "助理",
     "subtitle": "接入本地的 AI 助理，比如 Open WebUI、OpenClaw、Hermes Agent。点击在浏览器中打开。",

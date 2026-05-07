@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ComponentType } from "react";
+import { useCallback, useMemo, useState, type ComponentType } from "react";
 import { Pressable, View, type PressableStateCallbackType } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, usePathname } from "expo-router";
@@ -17,6 +17,8 @@ import {
 } from "lucide-react-native";
 
 import { useHosts } from "@/runtime/host-runtime";
+import { useNotifications } from "@/hooks/use-notifications";
+import { NotificationCenterPanel } from "./notification-center-panel";
 import { useWindowControlsPadding } from "@/utils/desktop-window";
 import {
   buildHostAssistantsRoute,
@@ -147,10 +149,14 @@ export function DesktopNavRail() {
     [activeServerId, activeTab],
   );
 
-  // Notification + profile aren't wired to live data yet. The bell is rendered
-  // with `hasUnread = false` for now; once friend-request / system alerts
-  // surface a count, swap this to read from the store.
-  const notificationCount = 0;
+  // Phase 3.b/3 (notification center): wire the bell to friend-pair
+  // candidates from the active host. Future kinds (offline-inbox hints,
+  // Phase 4 share invites) fold into `useNotifications` without
+  // touching this caller.
+  const { count } = useNotifications(activeServerId);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const handleOpenNotifications = useCallback(() => setNotificationsOpen(true), []);
+  const handleCloseNotifications = useCallback(() => setNotificationsOpen(false), []);
 
   return (
     <View style={containerStyle} accessibilityRole="tablist" data-vibrancy-pass-through="true">
@@ -166,9 +172,14 @@ export function DesktopNavRail() {
       </View>
       <View style={styles.spacer} />
       <View style={styles.group}>
-        <NotificationButton count={notificationCount} />
+        <NotificationButton count={count} onPress={handleOpenNotifications} />
         <ProfileButton />
       </View>
+      <NotificationCenterPanel
+        visible={notificationsOpen}
+        onClose={handleCloseNotifications}
+        serverId={activeServerId}
+      />
     </View>
   );
 }
@@ -210,13 +221,7 @@ function RailButton({
   );
 }
 
-// Notification panel isn't wired yet — pressing is a no-op for now so the
-// icon doesn't navigate users into a 404. Replace with the real panel
-// handler once friend-request / system-alert UX lands. Hoisted out of the
-// component so JSX `onPress={NOOP}` doesn't allocate a new closure per render.
-const NOOP = () => {};
-
-function NotificationButton({ count }: { count: number }) {
+function NotificationButton({ count, onPress }: { count: number; onPress: () => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const buttonStyle = useCallback(
@@ -236,7 +241,7 @@ function NotificationButton({ count }: { count: number }) {
       : t("nav.notifications.empty", { defaultValue: "Notifications" });
   return (
     <Pressable
-      onPress={NOOP}
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       testID="desktop-nav-notifications"
