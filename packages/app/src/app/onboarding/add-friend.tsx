@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -122,6 +122,29 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     letterSpacing: -0.1,
   },
+  linkPressable: {
+    backgroundColor: theme.colors.surface2,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing[3],
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+  },
+  linkPressableHovered: {
+    backgroundColor: theme.colors.surfaceGlassHover,
+  },
+  linkPressableCopied: {
+    borderColor: theme.colors.accent,
+  },
+  copyHint: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+    marginTop: theme.spacing[1],
+  },
+  copyHintActive: {
+    color: theme.colors.accent,
+  },
   copyRow: {
     flexDirection: "row",
     gap: theme.spacing[3],
@@ -206,17 +229,6 @@ export default function AddFriendRoute() {
     }
   }, [router]);
 
-  // Best-effort cancellation of the pending offer when the user navigates
-  // away. The daemon TTLs offers anyway, but proactively cancelling
-  // shrinks the redemption window and frees the concurrent-offer slot.
-  useEffect(() => {
-    const nonce = offerQuery.data?.offer.nonceB64;
-    return () => {
-      if (!client || !nonce) return;
-      void client.friendPairCancel(nonce).catch(() => undefined);
-    };
-  }, [client, offerQuery.data?.offer.nonceB64]);
-
   const rootStyle = useMemo(() => [styles.root, { paddingTop: insets.top }], [insets.top]);
 
   const qrImageSource = useMemo(
@@ -231,6 +243,19 @@ export default function AddFriendRoute() {
   const regenerateIcon = useMemo(
     () => <RotateCw size={16} color={theme.colors.foregroundMuted} />,
     [theme.colors.foregroundMuted],
+  );
+
+  const linkPressableStyle = useCallback(
+    ({ hovered }: { hovered?: boolean }) => [
+      styles.linkPressable,
+      hovered ? styles.linkPressableHovered : null,
+      copied ? styles.linkPressableCopied : null,
+    ],
+    [copied],
+  );
+  const copyHintStyle = useMemo(
+    () => [styles.copyHint, copied ? styles.copyHintActive : null],
+    [copied],
   );
 
   return (
@@ -286,9 +311,19 @@ export default function AddFriendRoute() {
         {offerQuery.data ? (
           <View style={styles.linkCard}>
             <Text style={styles.linkLabel}>{t("addFriend.linkLabel")}</Text>
-            <Text style={styles.linkText} numberOfLines={3}>
-              {offerQuery.data.deepLink}
-            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("addFriend.copyLink")}
+              onPress={handleCopyPress}
+              style={linkPressableStyle}
+            >
+              <Text style={styles.linkText} numberOfLines={3} selectable>
+                {offerQuery.data.deepLink}
+              </Text>
+              <Text style={copyHintStyle}>
+                {copied ? t("addFriend.copied") : t("addFriend.copyLink")}
+              </Text>
+            </Pressable>
             <View style={styles.copyRow}>
               <Button
                 style={styles.flexOne}
