@@ -12,40 +12,54 @@ from here.
   `packages/app`, `packages/relay`, etc. GitHub: `Ottie-ai-im/ottie`.
 - **Side-quest in flight**: extend ottie into multi-user collab.
   Design doc: [`docs/MULTI-USER-COLLABORATION-DESIGN.md`](./MULTI-USER-COLLABORATION-DESIGN.md).
-- **Current state**: **Phases 1 + 2 + 3.a + 3.b functional MVP all
-  shipped end-to-end**. The product loop works today: pair a friend
-  via QR/link, both sides approve, both daemons auto-establish a
-  long-lived encrypted chat session, "Open chat" from
-  /settings/identity → real-time text messaging persists on both
-  sides and survives restart. 431 tests across 45 files green
-  (5 consecutive stability runs); whole-workspace typecheck clean;
-  oxlint clean on the 13 critical Phase 3 files. Two real-WebSocket
-  two-daemon e2e tests prove pairing AND chat delivery end-to-end.
+- **Current state**: **Phases 1 + 2 + 3.a + 3.b including 3.b/2
+  (offline inbox) all shipped + production-validated end-to-end**.
+  The product loop works today: pair a friend via QR/link, both
+  approve, both daemons auto-establish a long-lived encrypted chat
+  session, "Open chat" → real-time text. **AND** when the recipient
+  is offline the sender's daemon NaCl-boxes the envelope to the
+  recipient's identity X25519 pubkey and POSTs it to the relay's KV
+  inbox; the recipient's daemon drains + decrypts on next connect.
+  Outgoing bubbles tag `delivered` vs `queued (offline)`.
+  380 identity tests / 40 files + 42 relay tests / 5 files green;
+  whole-workspace typecheck clean. Two real-WebSocket e2e tests
+  cover live pairing + chat. Phase 3.b/2 was validated in a real
+  Wendell ↔ Bob ↔ relay.claws.company round-trip on 2026-05-07.
 - **What you can run RIGHT NOW** (no code changes needed):
-  Two daemons + their UIs → tap `+` → Add friend → Pair with friend
-  → both Approve → tap "Open chat" → type → see each other's
-  messages within ~2s.
-- **Next work** (all are Phase 3 enhancements, the loop already
-  closes without them — pick by user-value):
-  1. Real-machine validation by Wendell. Worth doing FIRST before
-     more code. Confirm UX, find papercuts.
-  2. Push subscriptions to replace 2s polling on the chat screen
-     (zero-delay receive). New WS RPC + chat subscription manager
-     hookup. Mid-size.
-  3. Chats-list integration so friends appear next to agents in
-     the main chats list, not buried under Settings → Friends.
-     Mid-size; touches the existing chat-room-index-store.
-  4. Read receipts (✓ / ✓✓ / seen-at). Send a "read up to seq N"
-     envelope through the same friend-sync session on viewer side.
-     Small.
-  5. Phase 3.b/2 — Cloudflare KV offline inbox. Currently
-     `sendFriendChatMessage` returns "offline" error when the
-     friend's daemon is down. KV inbox lets the sender enqueue,
-     the recipient drains on next online. Requires changes to
-     `packages/relay/` Worker + a per-pair encryption scheme
-     (since session keys are ephemeral). Larger scope.
-  6. Phase 4 — AI sharing. Build on top of friend-sync session.
-     See design doc §11 Phase 4 + §7.5.
+  Two daemons + their UIs → tap `+` → Add friend → both Approve
+  → tap "Open chat" → type → see each other's messages within ~2s.
+  Then `kill <bob daemon>` → Wendell sends → bubble shows
+  "queued (offline)". Restart bob → his daemon's `startInboxReceiver`
+  drains the inbox on boot → message lands in his chat history
+  within seconds.
+- **Next work** (no longer in Phase 3 scope — those four items pick
+  the next direction; user picks by value):
+  1. **Multi-device X25519 sync** — Phase 3.b/2 follow-up.
+     Currently the X25519 priv key only lives on the device that
+     minted/first-loaded the identity. To let Wendell decrypt his
+     inbox from his Mac AND his iPhone, peer-sync (Phase 2.f) needs
+     to ferry the X25519 priv key across same-identity devices.
+     ~1 session. Schema-additive change to peer-sync events.
+  2. **Phase 4 — AI sharing** — design + v1. The actual product
+     value of this whole side-quest. Cross-identity AI agent
+     sharing (Wendell shares his Claude Code session with Bob; Bob
+     prompts; Wendell sees the full transcript + revokes any time).
+     Design hasn't been done yet — share what (whole agent vs
+     turns), how (snapshot vs realtime), permission model, channel
+     reuse vs new prefix. Spec first, then v1 implementation.
+     Multi-session.
+  3. **Bell button → notification center** — UX. Pending friend
+     requests, future offline inbox indicators, and Phase 4 share
+     invitations all want a single inbox UI. Currently
+     `desktop-nav-rail.tsx:239` is `onPress={NOOP}`. Build a small
+     notification panel + back it with a query that aggregates
+     friend-pair-candidates + (future) inbox state. Mid-size.
+  4. **137 lint-error cleanup** — independent chunk. lefthook fires
+     full-repo `oxlint` pre-commit and turns up 137 errors (mostly
+     `no-explicit-any` in `daemon-client.ts` and a few unused
+     catch-vars). They're orthogonal to feature work; user
+     authorized `--no-verify` for the multi-user-collab branch
+     specifically. Cleanup unblocks normal commits.
 - **User**: Wendell. Native Mandarin speaker, talks to you in 中文.
   Wants direct answers + small commits + tests for everything. He
   pushed back hard once when I designed without reading existing
@@ -195,10 +209,18 @@ packages/server/src/server/identity/
   friend-chat-types.ts                    — Phase 3.b/1d chat envelope schema + canonical signed payload
   friend-chat-crypto.ts                   — sign/verify chat-message envelopes
   friend-chat-store.ts                    — append-only $OTTIE_HOME/chat/friends/<digest>.jsonl
+                                            (Phase 3.b/2c: deliveryStatus optional field added)
+  friend-inbox-types.ts                   — Phase 3.b/2c InboxBlob v1 schema (NaCl-box wrapper)
+  friend-inbox-crypto.ts                  — encrypt/decrypt InboxBlob (asymmetric NaCl box)
+  friend-inbox-client.ts                  — Phase 3.b/2c+2d HTTP client for relay inbox
+                                            (postInbox / getInbox / deleteInbox + auth payload mirrors)
+  friend-inbox-cursor-store.ts            — Phase 3.b/2d $OTTIE_HOME/identity/inbox-cursor.json
+  friend-inbox-receiver.ts                — Phase 3.b/2d processInboxOnce orchestrator
   identity-service.ts                     — top-level wrapper used by bootstrap + WS RPCs
                                             (includes generateFriendPairOffer, redeemFriendPairOffer,
                                              approveFriendPair, rejectFriendPair, sendFriendChatMessage,
-                                             listFriendChatMessages, startFriendSync, …)
+                                             listFriendChatMessages, startFriendSync,
+                                             startInboxReceiver, kickInboxOnce, …)
   identity-rpc-schemas.ts                 — wire shapes for /identity, /device, /device/link,
                                             /device/remove, /friend/pair/{generate,cancel,redeem,
                                             candidates,approve,reject}, /friend/list, /chat/p2p/{send,list}
@@ -209,9 +231,21 @@ packages/server/src/server/identity/
 
 packages/server/src/server/
   relay-transport.ts                      — daemon ↔ relay glue + connectionHandlers extension
+                                            (3.b/2 follow-up: connectionHandlers now accepts a getter
+                                             so newly-loaded identity adds inbound peer/friend-sync
+                                             handlers without daemon restart)
   bootstrap.ts                            — wires it all together at daemon startup
+                                            (3.b/2d: calls startInboxReceiver alongside startFriendSync)
   session.ts                              — WS RPC handlers; identity dispatch is dispatchIdentityMessage()
-                                            (look for handleDevice* methods)
+                                            (look for handleDevice* methods. chat/p2p/send is now async)
+
+packages/relay/src/
+  cloudflare-adapter.ts                   — Worker entry; routes /inbox/* to handleInboxRequest before /ws
+  inbox-types.ts                          — Phase 3.b/2b shared constants + canonical payloads
+                                            (inboxFetchAuthPayload / inboxDeleteAuthPayload pinned)
+  inbox-handler.ts                        — Phase 3.b/2b HTTP handler (POST/GET/DELETE)
+                                            + Ed25519 verify via Web Crypto crypto.subtle
+  wrangler.toml                           — KV namespace binding OTTIE_INBOX (see §11 for IDs)
 
 packages/server/src/client/daemon-client.ts
                                           — DaemonClient class with all WS RPC client methods
@@ -248,35 +282,134 @@ packages/app/src/i18n/locales/{en,zh}.json — all UI strings (bilingual, MUST u
 
 ## 6. What to do next
 
-Phase 3 (friend pairing + chat) is **functionally complete** —
-end-to-end. The user can pair a friend, both Approve, then chat
-in real time. Don't try to "implement Phase 3" again — read what's
-there.
+Phase 3 (friend pairing + chat + offline inbox) is **functionally
+complete and production-validated**. Don't try to "implement Phase
+3" again — read what's there.
 
-**Before writing more code, ASK Wendell what to do next.** Likely
-candidates:
+**Before writing more code, ASK Wendell what to do next.** The four
+remaining tracks (in his preferred order, last-confirmed
+2026-05-07):
 
-1. **Real-machine validation** — he hasn't yet run the full flow on
-   two physical machines. Several things might surface only there
-   (relay endpoint config, mobile QR scanning, daemon lifecycle).
-2. **Push subscriptions** to replace the chat screen's 2s polling
-   with a server-pushed event stream. Look at
-   `chat-subscription-manager.ts` for the existing pattern; add a
-   parallel `friend-chat-subscription-manager` that fires when
-   `IdentityService.handleInboundFriendSyncPayload` persists.
-3. **Chats-list integration** so friends appear next to agents in
-   the main chats tab. Currently friends are only reachable via
-   `/settings/identity` → Friends → Open chat. Touches the existing
-   chat-room-index-store and the chats list page.
-4. **Read receipts** (✓ / ✓✓ / seen-at). Recipient sends a
-   `read-cursor` envelope through the same friend-sync session
-   when the user views a message. Sender persists the cursor in a
-   sidecar file and renders the badge.
-5. **Phase 3.b/2 — Cloudflare KV offline inbox**. Larger scope,
-   needs `packages/relay/` Worker changes + a per-pair encryption
-   scheme (the friend-sync session shared key is ephemeral and
-   doesn't survive offline). Defer until requested.
-6. **Phase 4 — AI sharing**. See design doc §11 + §7.5.
+### 6.1. Multi-device X25519 sync (Phase 3.b/2 follow-up, ~1 session)
+
+Today the X25519 priv key (`encryptionPrivateKeyB64` in
+`root.json`) is generated on whichever device first loads the
+identity. When the user device-links a second machine, the new
+device gets the Ed25519 keypair via the device-link approval
+(`writeImportedRootIdentity`) but synthesizes its OWN X25519
+keypair locally (see comment in `root-identity-store.ts` around
+"Phase 3.b/2a: identity-bearing X25519 keys must travel with the
+root identity"). Result: friends paired with one device can't
+deliver inbox messages decryptable on a second device.
+
+**The fix**: peer-sync (Phase 2.f) already syncs device-list
+events between same-identity devices. Extend it to also ferry
+the X25519 priv key. A few options:
+
+- **Embed in device-link approval** — easiest. Add an optional
+  `encryptionPrivateKeyB64` field to `DeviceLinkApprovalReply`'s
+  approved variant; old device sends → new device's
+  `writeImportedRootIdentity` writes it (instead of synthesizing).
+  Schema-additive, no peer-sync change. **Recommended.**
+- **Sync via peer-sync event** — broadcast a one-shot event when
+  a device discovers it's missing the field. More complex, but
+  handles "device linked before 3.b/2a" recovery.
+
+**Plan a minimal commit:** add field to schema, send from
+`approveDeviceLinkCandidate`, consume in `writeImportedRootIdentity`,
+update the device-link e2e test. ~30 min coding + tests.
+
+### 6.2. Phase 4 — AI sharing (multi-session, the core feature)
+
+This is the actual product-value piece of the whole side-quest.
+Currently NOT designed. Skim:
+
+- design doc §11 (Phase 4 statement of intent)
+- design doc §7.5 (modal flow already locked: per-share two-step
+  gate, no auto, no per-friend defaults)
+
+**Open questions to nail in the design doc before coding:**
+
+1. **What gets shared**: whole agent (state + history) vs single
+   turn vs live view + suggestion only. Strawman: live view +
+   prompt-injection ("Bob sees Wendell's transcript, can hit
+   send to inject Bob's prompt into Wendell's running agent").
+2. **Routing**: same friend-sync session, or new connection
+   prefix `ai-share:<sessionId>`? New prefix is cleaner but adds
+   a relay-handler.
+3. **Permissions**: read-only / can-comment / can-control-agent.
+   §7.5 says owner sees everything, friend sees what owner sends.
+4. **Lifecycle**: who ends the session? §7.5 says owner has hard
+   "end" button; what happens if owner's daemon disconnects?
+5. **Multi-device**: which owner-device hosts the share? §7.5
+   says "first owner-device the friend's request hits". Needs a
+   modal on every online owner-device — first-tap-wins.
+
+Recommended sequence: spec doc as new section §11.5 → walk
+Wendell through it → small v1 (one daemon hosts; live view only;
+explicit end button) → iterate.
+
+### 6.3. Bell button → notification center (1-2 sessions)
+
+The bell icon in `desktop-nav-rail.tsx:239` is currently
+`onPress={NOOP}`. Building this UNBLOCKS Phase 4's invitation UX
+("Bob wants to share Wendell's Claude Code with you — Accept?")
+and improves friend-pair UX (pending requests are buried in
+Settings → Identity).
+
+**Pieces to build:**
+
+- A small bottom-sheet / dropdown panel with a list of
+  notification rows.
+- Aggregator: pulls friend-pair candidates (existing
+  `friendPairCandidates` RPC) + future inbox-arrival events +
+  Phase 4 share invitations. Live-poll for now; push later.
+- Unread indicator (red dot on the bell when `count > 0`).
+- Tap a row → deep-link to the relevant page (Settings →
+  Identity for friend requests; chat screen for new messages;
+  Phase 4 modal for share invitations).
+- Bilingual i18n keys under `notifications.*`.
+
+Doable in 1-2 sessions if we don't over-design. Do it BEFORE
+Phase 4 v1 so the AI-share invite path has somewhere to surface.
+
+### 6.4. 137 lint-error cleanup (independent chunk)
+
+`oxlint` over the whole workspace finds 137 errors, all
+pre-existing on `main` since before this side-quest started. They
+block the lefthook pre-commit hook, which is why every Phase 3
+commit on this branch was made with `--no-verify` (user-authorized
+for THIS branch specifically — re-confirm before extending the
+authorization to new work).
+
+**Categories** (rough count from a recent run):
+
+- ~70 `typescript-eslint(no-explicit-any)` in
+  `packages/server/src/client/daemon-client.ts` — the WS RPC
+  client uses `<any>` generics where the response type comes back
+  validated by a Zod schema. Easy to fix: replace with the
+  schema's inferred type.
+- ~30 `eslint(no-unused-vars)` in catch blocks. Replace
+  `catch (error)` with `catch` when error isn't used, or
+  `catch (_error)` when keeping the var name documents intent.
+- Various `react-perf` rules (jsx-no-new-array-as-prop, etc.)
+  in app components. Each is a memo/useMemo extraction.
+
+Independent chunk: don't bundle with feature work. One
+fix-and-commit-per-category sweep is fine.
+
+---
+
+**Read first when you do start coding** any of these:
+
+1. Design doc §17 — current implementation status. Update on every
+   sub-commit.
+2. The Phase 3.b/2 inbox code (`friend-inbox-*` files in
+   `packages/server/src/server/identity/`,
+   `packages/relay/src/inbox-*.ts`) — there's a LOT here, mirror
+   the patterns, don't reinvent.
+3. The mock-relay e2e tests — they're the canonical reference
+   for how the full flow behaves end-to-end.
 
 **Read first when you do start coding:**
 
@@ -307,20 +440,33 @@ candidates:
 
 ## 6.5. Open known limitations to call out before claiming "done"
 
-- **Offline send** returns an error. Phase 3.b/2's KV inbox is the
-  fix. Until then, both daemons must be online for a message to be
-  delivered.
-- **Polling delay**. The chat screen polls every 2s; inbound messages
+- **Multi-device X25519 fan-out missing**. Today the X25519 priv
+  key for inbox decryption is per-DEVICE (whichever device first
+  loaded the identity). If Wendell device-links a phone to his
+  laptop's identity, the phone CAN'T decrypt offline-inbox messages
+  addressed to that identity — only the laptop can. Fix is §6.1
+  (Phase 3.b/2 follow-up).
+- **Polling delay (live)**. The chat screen polls every 2s for
+  live messages from the friend-sync session; inbound messages
   show up with up to 2s of UI lag even though the daemon receives
-  them immediately. Fix: push subscriptions.
-- **No multi-device fan-out for friend chat**. If Wendell's laptop
-  receives a message while his phone is also online and looking at
-  the chat screen, the phone polls but won't see the new message
-  until its NEXT poll AFTER the laptop has fanned the message out
-  via Phase 2.f peer-sync. Phase 2.f currently only syncs device-list
-  events, not chat history. Phase 3.b/3-multidevice is the fix.
+  them immediately. Fix: push subscriptions, deferred.
+- **Inbox poll cadence**. The inbox receiver polls every 5
+  minutes by default. So if Bob comes online and Wendell sent a
+  message 30 seconds before, Bob waits up to ~5 min for his
+  daemon to drain it. Could trigger faster on relay-control
+  reconnect — deferred follow-up. (Daemon ALWAYS does one poll
+  immediately on startup, so a fresh boot always drains right
+  away.)
+- **No multi-device fan-out for friend chat history**. Same
+  pattern as the X25519 fan-out: if Wendell's laptop persists a
+  message and his phone is also online, the phone won't see the
+  message until Phase 2.f peer-sync is extended to ferry chat
+  history (currently only syncs device-list events). Phase
+  3.b/3-multidevice is the fix.
 - **Friend chat history isn't in the agent chats list**. Reachable
-  only via Settings → Friends → Open chat. Wendell is aware.
+  only via Settings → Friends → Open chat. Wendell is aware. §6.3
+  (notification center) partially overlaps — both touch surfacing
+  cross-identity content into the main UI.
 
 ## 7. Phase 4 + 5 quick reminders (so you don't drift)
 
@@ -427,21 +573,34 @@ git diff HEAD~5
 cat docs/MULTI-USER-COLLABORATION-DESIGN.md | head -100
 ls packages/server/src/server/identity/
 cd packages/server && npx vitest run src/server/identity/ src/server/relay-transport.test.ts src/server/chat/ 2>&1 | tail -8
+cd packages/relay && npx vitest run 2>&1 | tail -8
 ```
 
 The combination of recent commits + design doc + identity dir + test
 output tells you everything. Don't ask the user questions you can
 answer from these.
 
-Expected test count as of the last commit on `org/main`: **431
-across 45 files**. If yours differs, check git log to see whether
-work landed since this handoff was written.
+Expected test counts as of the last commit on `org/main`:
+
+- `packages/server` identity dir: **380 tests across 40 files**
+- `packages/relay`: **42 tests across 5 files** (+ 4 skipped that
+  hit the live Cloudflare relay; opt-in only)
+
+If yours differ, check git log to see whether work landed since
+this handoff was written.
 
 ## 10. Phase 3 commit chain (chronological reference)
 
-If you need to dig into how Phase 3 was built:
+If you need to dig into how Phase 3 was built (newest at top):
 
 ```
+321f0002  3.b/2e        — UI delivery-status badge (queued / delivered)
+8ff44d8d  3.b/2d        — daemon inbound drains the offline inbox
+76cc871c  3.b/2c        — daemon outbound queues to relay inbox
+decc2d02  3.b/2b        — Cloudflare KV inbox HTTP endpoints
+4c1a3413  3.b/2a        — per-identity X25519 encryption keypair
+28f6e803  fix(app)      — add-friend UX (kill auto-cancel + tap to copy)
+f39333f7  fix(identity) — start peer-sync + friend-sync after UI onboarding
 9bfbf24a  3.b/3 UI v1   — chat screen + Open chat
 a2a89e1d  3.b/1d        — live messaging (envelope + persist + WS RPC + e2e)
 eb2d30c9  docs           — Phase 3.b status update
@@ -459,3 +618,66 @@ f6928020  3.a/1         — friend-pair offer generation + WS RPCs
 
 Each commit body explains its scope + the bug fixes it surfaced.
 Read those before duplicating work.
+
+## 11. Production deployment context (Phase 3.b/2)
+
+Wendell's relay (`relay.claws.company`) was live-deployed with
+the 3.b/2b inbox routes on **2026-05-07** (worker version
+`198a2819-e0da-46ea-9f15-de4af04e0062`). The deploy is
+pure-additive — only adds `/inbox/*` HTTP routes; `/ws` traffic
+unchanged.
+
+**KV namespace bindings** (in `packages/relay/wrangler.toml`):
+
+```
+[[kv_namespaces]]
+binding = "OTTIE_INBOX"
+id = "3b4463e4aa3046269131078ab9868955"             # production
+preview_id = "43ea9c0612f6440b866e37446aed25f8"     # wrangler dev
+```
+
+If you need to redeploy:
+
+```bash
+cd packages/relay
+# Wrangler binary lives in pnpm's hoisted node_modules:
+../../node_modules/.pnpm/node_modules/.bin/wrangler deploy
+```
+
+User has wrangler auth set up (cache at
+`packages/relay/node_modules/.cache/wrangler/wrangler-account.json`).
+
+**Quick smoke check the inbox is alive:**
+
+```bash
+# /health stays the same:
+curl -s -o /dev/null -w "%{http_code}\n" https://relay.claws.company/health
+# expect 200
+
+# /inbox/<short> rejects:
+curl -s https://relay.claws.company/inbox/short
+# expect {"error":"invalid_recipient"}
+
+# POST a tiny opaque blob:
+curl -s -X POST https://relay.claws.company/inbox/AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555FFF \
+  -H "Content-Type: application/octet-stream" --data "test"
+# expect {"seq":"...","deliveredAt":"..."}
+```
+
+**End-to-end production validation log** (2026-05-07, kept for
+provenance — these exact commits passed a real Wendell ↔ Bob ↔
+relay.claws.company round-trip):
+
+```
+00:14:10  alice  friend_chat_inbox_post_succeeded
+                 inboxSeq:  0001778138050251-ea2e640c01a1c823
+00:14:10  alice  friend_chat_message_sent  deliveryStatus: queued
+00:14:59  bob    inbox_entry_persisted
+                 seq:       0001778138050251-ea2e640c01a1c823 ← matches
+                 messageId: fcm_66af8a4f-a7fa-4c31-ad8c-ed70755df06a
+00:14:59  bob    inbox_round_complete  persisted=1, dropped=0
+```
+
+If a future change breaks production wire compat, this trace
+shape (matching seq + matching messageId) is the canonical
+"is the round-trip working" check.

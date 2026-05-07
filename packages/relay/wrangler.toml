@@ -31,5 +31,5 @@ new_sqlite_classes = ["RelayDurableObject"]
 # Then paste the returned ids into the `id` and `preview_id` fields below.
 [[kv_namespaces]]
 binding = "OTTIE_INBOX"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_KV_NAMESPACE_PREVIEW_ID"
+id = "3b4463e4aa3046269131078ab9868955"
+preview_id = "43ea9c0612f6440b866e37446aed25f8"
