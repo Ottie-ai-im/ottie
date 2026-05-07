@@ -969,14 +969,15 @@ export async function createOttieDaemon(
               relayEndpoint,
               serverId,
               daemonKeyPair: daemonKeyPair.keyPair,
-              // Connection handlers (Phase 2.d + 2.f/2 + 3.a/2):
+              // Connection handlers (Phase 2.d + 2.f/2 + 3.a/2 + 3.b/1c):
               //   - "device-link:<nonce>" → device-link redemption (Phase 2.d)
               //   - "peer-sync:<nonce>"   → peer-daemon SIGMA-I session (Phase 2.f)
               //   - "friend-pair:<nonce>" → friend-pair redemption (Phase 3.a/2)
-              // All three ride the same Cloudflare Workers relay and route via
+              //   - "friend-sync:<nonce>" → cross-identity chat session (Phase 3.b/1c)
+              // All four ride the same Cloudflare Workers relay and route via
               // relay-transport's connectionHandlers extension point.
-              // peer-sync handler is null until self-device is loaded
-              // (uninitialized identity has no signing key to handshake with).
+              // peer-sync + friend-sync handlers are null until self-device /
+              // root identity are loaded (no signing key → no handshake).
               connectionHandlers: ((): RelayConnectionHandler[] => {
                 const handlers: RelayConnectionHandler[] = [
                   identityService.createDeviceLinkConnectionHandler(),
@@ -984,6 +985,8 @@ export async function createOttieDaemon(
                 ];
                 const peerSyncHandler = identityService.createPeerSyncConnectionHandler();
                 if (peerSyncHandler) handlers.push(peerSyncHandler);
+                const friendSyncHandler = identityService.createFriendSyncConnectionHandler();
+                if (friendSyncHandler) handlers.push(friendSyncHandler);
                 return handlers;
               })(),
             });
@@ -992,6 +995,10 @@ export async function createOttieDaemon(
             // outbound dialer so this daemon proactively connects to
             // every other daemon under the same identity.
             identityService.startPeerSync();
+            // Phase 3.b/1c: same idea, but for friends — open
+            // long-lived chat sessions with each paired peer whose
+            // routing info we captured in 3.b/1a.
+            identityService.startFriendSync();
           }
         };
 

@@ -39,6 +39,9 @@ import {
   type RedeemFriendPairOfferInput,
   type RedeemFriendPairOfferOutcome,
 } from "./friend-pair-sender.js";
+import { FriendSessionRegistry } from "./friend-session-registry.js";
+import { FriendSyncDialer } from "./friend-sync-dialer.js";
+import { createFriendSyncConnectionHandler } from "./friend-sync-receiver.js";
 import { loadPeerList, savePeerList, upsertPeer } from "./peer-store.js";
 import type { StoredPeer, StoredPeerList } from "./peer-types.js";
 import { type StoredDevice, type StoredDeviceList } from "./device-types.js";
@@ -120,6 +123,8 @@ export class IdentityService {
   private readonly events: DeviceListEventStore;
   private readonly peerSessions: PeerSessionRegistry;
   private peerDialer: PeerSyncDialer | null = null;
+  private readonly friendSessions: FriendSessionRegistry;
+  private friendDialer: FriendSyncDialer | null = null;
   private state: IdentityState;
   private selfDevice: SelfDeviceBundle | null = null;
   private deviceList: StoredDeviceList | null = null;
@@ -136,6 +141,7 @@ export class IdentityService {
     this.pendingFriendPairCandidates = new FriendPairPendingCandidateStore(options.logger);
     this.events = DeviceListEventStore.loadOrCreate(options.ottieHome, options.logger);
     this.peerSessions = new PeerSessionRegistry(options.logger);
+    this.friendSessions = new FriendSessionRegistry(options.logger);
     this.state = this.loadInitialState();
     if (this.state.kind === "loaded" && this.selfDeviceContext) {
       // Existing daemons that pre-date Phase 2.a have a root identity but no
@@ -427,6 +433,10 @@ export class IdentityService {
     const updated = upsertPeer(this.peerList, peer);
     savePeerList(this.ottieHome, updated, this.logger);
     this.peerList = updated;
+    // Phase 3.b/1c: nudge the dialer so it immediately tries to open a
+    // friend-sync session with the freshly-paired friend (if peerServerId
+    // was captured during 3.a pairing).
+    this.refreshFriendDialerTargets();
     this.logger.info(
       {
         peerDisplayName: peer.peerDisplayName,
@@ -532,6 +542,11 @@ export class IdentityService {
       };
     }
     this.peerList = updated;
+
+    // Phase 3.b/1c: nudge the dialer so Alice's daemon also opens a
+    // chat session with the freshly-approved friend (using the routing
+    // info captured in 3.b/1a).
+    this.refreshFriendDialerTargets();
 
     // Send the encrypted approval reply, then close the socket cleanly.
     const sent = this.sendThenClose(record.replySocket, JSON.stringify(result.envelope));
@@ -689,6 +704,90 @@ export class IdentityService {
       this.peerDialer = null;
     }
     this.peerSessions.closeAll("daemon_shutdown");
+  }
+
+  /**
+   * Phase 3.b/1c: relay-side handler for cross-identity friend-sync
+   * sessions. Bootstrap registers this alongside device-link, friend-
+   * pair, and peer-sync handlers. Returns null if root identity
+   * isn't loaded — without it we have nothing to sign helloes with.
+   */
+  createFriendSyncConnectionHandler(): RelayConnectionHandler | null {
+    if (this.state.kind !== "loaded") return null;
+    if (!this.selfDeviceContext) return null;
+    return createFriendSyncConnectionHandler({
+      selfRootPubKey: this.state.bundle.stored.signPublicKeyB64,
+      selfRootSignPrivateKey: this.state.bundle.signPrivateKey,
+      selfDeviceId: this.selfDeviceContext.serverId,
+      getLocalPeerList: () => this.peerList?.peers ?? [],
+      sessions: this.friendSessions,
+      // Phase 3.b/1c plumbs payloads opaquely; 3.b/1d will swap this
+      // for a chat-message-envelope schema check + persistence path.
+      applyInboundPayload: (input) => {
+        this.logger.debug(
+          {
+            peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
+            payloadKind: typeof input.payload,
+          },
+          "friend_sync_payload_received_no_handler",
+        );
+      },
+    });
+  }
+
+  /**
+   * Phase 3.b/1c: kick off the outbound friend-sync dialer. Bootstrap
+   * calls this once after relay-transport is up. Idempotent —
+   * subsequent calls reuse the existing dialer.
+   */
+  startFriendSync(): void {
+    if (this.friendDialer) return;
+    if (this.state.kind !== "loaded") return;
+    if (!this.selfDeviceContext) return;
+    if (!this.relayEndpoint) return;
+
+    this.friendDialer = new FriendSyncDialer({
+      selfRootPubKey: this.state.bundle.stored.signPublicKeyB64,
+      selfRootSignPrivateKey: this.state.bundle.signPrivateKey,
+      selfDeviceId: this.selfDeviceContext.serverId,
+      getLocalPeerList: () => this.peerList?.peers ?? [],
+      sessions: this.friendSessions,
+      applyInboundPayload: (input) => {
+        this.logger.debug(
+          {
+            peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
+            payloadKind: typeof input.payload,
+          },
+          "friend_sync_payload_received_no_handler",
+        );
+      },
+      logger: this.logger,
+    });
+    this.friendDialer.start();
+    this.logger.info({ peerCount: this.peerList?.peers.length ?? 0 }, "Friend-sync dialer started");
+  }
+
+  async stopFriendSync(): Promise<void> {
+    if (this.friendDialer) {
+      await this.friendDialer.stop();
+      this.friendDialer = null;
+    }
+    this.friendSessions.closeAll("daemon_shutdown");
+  }
+
+  /** Diagnostic snapshot of active friend-sync sessions. */
+  getFriendSessions(): readonly import("./friend-session-registry.js").FriendSession[] {
+    return this.friendSessions.list();
+  }
+
+  /**
+   * Phase 3.b/1c: refresh the friend-sync dialer's view of peers.json.
+   * Called after a peer is added (Phase 3.a/3 approve) so the dialer
+   * picks them up without waiting for a daemon restart.
+   */
+  refreshFriendDialerTargets(): void {
+    if (!this.friendDialer) return;
+    this.friendDialer.refreshTargets();
   }
 
   /**
