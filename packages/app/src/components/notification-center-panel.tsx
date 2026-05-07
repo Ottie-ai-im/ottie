@@ -162,6 +162,17 @@ function NotificationRow({
               defaultValue: "{{provider}} · accept or decline below",
             })}
           </Text>
+          {invite.limits ? (
+            <Text style={styles.rowLimits} numberOfLines={1}>
+              {t("notifications.aiShareLimits", {
+                maxPrompts: invite.limits.maxPrompts,
+                maxTokens: Math.round(invite.limits.maxTokens / 1000),
+                timeoutMin: Math.round(invite.limits.sessionTimeoutMs / 60000),
+                defaultValue:
+                  "max {{maxPrompts}} prompts · {{maxTokens}}k tokens · {{timeoutMin}} min",
+              })}
+            </Text>
+          ) : null}
           <View style={styles.aiShareActions}>
             <Pressable
               accessibilityRole="button"
@@ -251,6 +262,12 @@ const styles = StyleSheet.create((theme) => ({
     fontFamily: theme.fontFamily.system,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+    marginTop: 2,
+  },
+  rowLimits: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
     marginTop: 2,
   },
   aiShareActions: {

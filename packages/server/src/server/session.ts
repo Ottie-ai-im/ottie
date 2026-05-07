@@ -2495,6 +2495,7 @@ export class Session {
           generatedAt: i.receivedAt,
           expiresAt: i.expiresAt,
           state: "pending" as const,
+          ...(i.limits ? { limits: i.limits } : {}),
         })),
         error: null,
       },

@@ -17,6 +17,7 @@ import {
   type AiShareDeclineEnvelope,
   type AiShareEndEnvelope,
   type AiShareInviteEnvelope,
+  type AiShareLimits,
   type AiSharePromptEnvelope,
   type AiShareTimelineEntry,
   type AiShareTimelineEnvelope,
@@ -47,6 +48,8 @@ export interface BuildAiShareInviteInput {
   agentProvider: string;
   generatedAt: string;
   expiresAt: string;
+  /** Phase 4 v3/a — per-share caps the owner's daemon will enforce. */
+  limits?: AiShareLimits;
 }
 
 export function buildAiShareInviteEnvelope(input: BuildAiShareInviteInput): AiShareInviteEnvelope {
@@ -57,6 +60,7 @@ export function buildAiShareInviteEnvelope(input: BuildAiShareInviteInput): AiSh
     agentProvider: input.agentProvider,
     agentLabel: input.agentLabel,
     expiresAt: input.expiresAt,
+    ...(input.limits ? { limits: input.limits } : {}),
   });
   const signatureB64 = signEd25519(input.ownerRootSignPrivateKey, payload);
   return {
@@ -70,6 +74,7 @@ export function buildAiShareInviteEnvelope(input: BuildAiShareInviteInput): AiSh
     agentProvider: input.agentProvider,
     generatedAt: input.generatedAt,
     expiresAt: input.expiresAt,
+    ...(input.limits ? { limits: input.limits } : {}),
     signatureB64,
   };
 }
@@ -98,6 +103,7 @@ export function verifyAiShareInviteEnvelope(
     agentProvider: input.envelope.agentProvider,
     agentLabel: input.envelope.agentLabel,
     expiresAt: input.envelope.expiresAt,
+    ...(input.envelope.limits ? { limits: input.envelope.limits } : {}),
   });
   return verifyDetached(
     input.expectedOwnerRootSignPublicKeyB64,

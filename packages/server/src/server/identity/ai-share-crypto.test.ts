@@ -101,6 +101,63 @@ describe("ai-share crypto — Phase 4 v1", () => {
       if (result.ok) return;
       expect(result.reason).toMatch(/signature did not verify/i);
     });
+
+    test("v3/a: limits ride along the canonical payload — tamper detected", () => {
+      const owner = makeIdentity();
+      const envelope = buildAiShareInviteEnvelope({
+        inviteId: "ais_test_limits",
+        ownerRootSignPrivateKey: owner.rootSignPrivateKey,
+        ownerRootPubKeyB64: owner.rootSignPublicKeyB64,
+        ownerDeviceId: "srv_owner",
+        agentId: "agent_42",
+        agentLabel: "Claude Code",
+        agentProvider: "claude",
+        generatedAt: "2026-05-07T03:00:00.000Z",
+        expiresAt: "2026-05-07T03:05:00.000Z",
+        limits: { maxPrompts: 50, maxTokens: 100_000, sessionTimeoutMs: 60 * 60 * 1000 },
+      });
+      // Roundtrip succeeds with matching limits.
+      expect(
+        verifyAiShareInviteEnvelope({
+          envelope,
+          expectedOwnerRootSignPublicKeyB64: owner.rootSignPublicKeyB64,
+        }).ok,
+      ).toBe(true);
+      // Swap maxPrompts post-sign — verify must reject.
+      const tampered = {
+        ...envelope,
+        limits: { ...envelope.limits!, maxPrompts: 999_999 },
+      };
+      const result = verifyAiShareInviteEnvelope({
+        envelope: tampered,
+        expectedOwnerRootSignPublicKeyB64: owner.rootSignPublicKeyB64,
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.reason).toMatch(/signature did not verify/i);
+    });
+
+    test("v3/a: invites without limits (v1/v2 back-compat) still verify", () => {
+      const owner = makeIdentity();
+      const envelope = buildAiShareInviteEnvelope({
+        inviteId: "ais_test_no_limits",
+        ownerRootSignPrivateKey: owner.rootSignPrivateKey,
+        ownerRootPubKeyB64: owner.rootSignPublicKeyB64,
+        ownerDeviceId: "srv_owner",
+        agentId: "agent_42",
+        agentLabel: "Claude Code",
+        agentProvider: "claude",
+        generatedAt: "2026-05-07T03:00:00.000Z",
+        expiresAt: "2026-05-07T03:05:00.000Z",
+      });
+      expect(envelope.limits).toBeUndefined();
+      expect(
+        verifyAiShareInviteEnvelope({
+          envelope,
+          expectedOwnerRootSignPublicKeyB64: owner.rootSignPublicKeyB64,
+        }).ok,
+      ).toBe(true);
+    });
   });
 
   describe("accept", () => {

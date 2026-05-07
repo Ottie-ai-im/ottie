@@ -478,6 +478,7 @@
     "friendPairSubtitle": "{{pubkey}}… · 点这里去批准",
     "aiShareTitle": "想跟你分享 {{label}}",
     "aiShareSubtitle": "{{provider}} · 在下方接受或拒绝",
+    "aiShareLimits": "最多 {{maxPrompts}} 条 prompt · {{maxTokens}}k tokens · {{timeoutMin}} 分钟",
     "aiShareAccept": "接受",
     "aiShareDecline": "拒绝"
   },

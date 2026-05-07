@@ -593,6 +593,19 @@ export const AiShareInviteOnWireSchema = z.object({
   state: z.enum(["pending", "accepted", "active", "declined", "ended", "expired"]).optional(),
   /** Peer pubkey the invite was sent to (owner-side list responses). */
   peerRootPubKeyB64: z.string().optional(),
+  /**
+   * Phase 4 v3/a — caps the owner's daemon will enforce. Friend's UI
+   * surfaces these on the accept row + share screen so the friend
+   * knows the limits before tapping Accept. Optional for back-compat
+   * with v1/v2 invites that didn't carry limits.
+   */
+  limits: z
+    .object({
+      maxPrompts: z.number().int(),
+      maxTokens: z.number().int(),
+      sessionTimeoutMs: z.number().int(),
+    })
+    .optional(),
 });
 export type AiShareInviteOnWire = z.infer<typeof AiShareInviteOnWireSchema>;
 

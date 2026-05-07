@@ -15,6 +15,47 @@ import { z } from "zod";
  * rationale.
  */
 
+// ----- limits (Phase 4 v3/a — owner-set caps, daemon-enforced) -----------
+
+/**
+ * Phase 4 v3/a — per-share resource caps the owner's daemon enforces.
+ * Default values come from §7's UI mitigations list ("max prompts 50,
+ * max tokens 100k, session timeout 1 h"). Caps are advisory to the
+ * friend (so their UI can display "Wendell allows up to N prompts")
+ * and authoritative on the owner side — exhausting any cap triggers
+ * an automatic `ai-share-end` with the reason set to one of
+ * "prompt-limit", "token-limit", or "session-timeout".
+ *
+ * Wire-shape note: the field is `.optional()` on the invite envelope
+ * so v1/v2 daemons that don't know about limits can still parse new
+ * invites. Owner daemons that don't include limits are treated as
+ * "no caps" by the friend's UI and as the hardcoded defaults by the
+ * owner's enforcer (so a v3 owner-daemon always enforces, even when
+ * sharing with a v1 friend).
+ */
+export const AiShareLimitsSchema = z.object({
+  /** Max prompts the friend can send across this session. */
+  maxPrompts: z.number().int().min(1).max(10_000),
+  /**
+   * Max total tokens the agent can consume across this session
+   * (sum of input + output tokens reported by the provider).
+   */
+  maxTokens: z.number().int().min(1_000).max(10_000_000),
+  /** Session-timeout window measured from acceptedAt, in milliseconds. */
+  sessionTimeoutMs: z
+    .number()
+    .int()
+    .min(60_000)
+    .max(24 * 60 * 60 * 1000),
+});
+export type AiShareLimits = z.infer<typeof AiShareLimitsSchema>;
+
+export const DEFAULT_AI_SHARE_LIMITS: AiShareLimits = {
+  maxPrompts: 50,
+  maxTokens: 100_000,
+  sessionTimeoutMs: 60 * 60 * 1000,
+};
+
 // ----- invite (owner → friend) -------------------------------------------
 
 export const AiShareInviteEnvelopeSchema = z.object({
@@ -43,6 +84,14 @@ export const AiShareInviteEnvelopeSchema = z.object({
   generatedAt: z.string(),
   /** ISO timestamp after which the friend's daemon auto-declines. */
   expiresAt: z.string(),
+  /**
+   * Phase 4 v3/a — per-share caps the owner's daemon will enforce.
+   * Optional on the wire so v1/v2 invites still parse; v3+ invites
+   * always include them (defaulted in `sendAiShareInvite`). Friend's
+   * accept screen surfaces them so the friend knows the cap before
+   * tapping Accept.
+   */
+  limits: AiShareLimitsSchema.optional(),
   /**
    * Ed25519 signature, base64url, by the owner's root sign privkey
    * over `aiShareInvitePayload(...)`. Verifier resolves the owner's
@@ -244,6 +293,16 @@ export type AiShareEnvelope = z.infer<typeof AiShareEnvelopeSchema>;
  *   {agentProvider}
  *   {agentLabel}
  *   {expiresAt}
+ *   {limitsLine}                ← Phase 4 v3/a: present when limits set,
+ *                                 absent line when not. Old invites
+ *                                 (v1/v2) had no trailing line at all,
+ *                                 so the back-compat rule is: if limits
+ *                                 is undefined, the trailing line is
+ *                                 omitted (matches v1/v2 verification).
+ *
+ * `limitsLine` shape: `limits=<maxPrompts>,<maxTokens>,<sessionTimeoutMs>`.
+ * Serializing as numbers in fixed positions (rather than JSON) keeps the
+ * canonical format human-readable + bit-stable across runtimes.
  */
 export function aiShareInvitePayload(args: {
   inviteId: string;
@@ -252,8 +311,9 @@ export function aiShareInvitePayload(args: {
   agentProvider: string;
   agentLabel: string;
   expiresAt: string;
+  limits?: AiShareLimits;
 }): string {
-  return [
+  const lines = [
     "ottie-ai-share-invite-v1",
     args.inviteId,
     args.ownerRootPubKeyB64,
@@ -261,7 +321,13 @@ export function aiShareInvitePayload(args: {
     args.agentProvider,
     args.agentLabel,
     args.expiresAt,
-  ].join("\n");
+  ];
+  if (args.limits) {
+    lines.push(
+      `limits=${args.limits.maxPrompts},${args.limits.maxTokens},${args.limits.sessionTimeoutMs}`,
+    );
+  }
+  return lines.join("\n");
 }
 
 /**

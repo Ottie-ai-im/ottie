@@ -81,11 +81,13 @@ import { AiShareInviteRegistry } from "./ai-share-registry.js";
 import { redactAgentEventForShare } from "./ai-share-timeline-redactor.js";
 import { AiShareTimelineStore, type AiShareTimelineRecord } from "./ai-share-timeline-buffer.js";
 import { AiShareTranscriptStore } from "./ai-share-transcript-store.js";
+import { DEFAULT_AI_SHARE_LIMITS } from "./ai-share-types.js";
 import type {
   AiShareAcceptEnvelope,
   AiShareDeclineEnvelope,
   AiShareEndEnvelope,
   AiShareInviteEnvelope,
+  AiShareLimits,
   AiSharePromptEnvelope,
   AiShareTimelineEnvelope,
 } from "./ai-share-types.js";
@@ -1331,6 +1333,22 @@ export class IdentityService {
       return;
     }
     const agentId = active.invite.agentId;
+    // Phase 4 v3/a — atomically increment the prompt counter and
+    // bail before runAgent if the cap is exhausted.
+    const limits = active.invite.limits ?? DEFAULT_AI_SHARE_LIMITS;
+    const newPromptCount = this.aiShareInvites.incrementPromptCount(envelope.inviteId);
+    if (newPromptCount > limits.maxPrompts) {
+      this.logger.info(
+        {
+          inviteId: envelope.inviteId,
+          newPromptCount,
+          maxPrompts: limits.maxPrompts,
+        },
+        "ai_share_prompt_limit_exhausted",
+      );
+      this.endAiShareSession(envelope.inviteId, "prompt-limit");
+      return;
+    }
     // Phase 4 v2/d: stash the wire promptId so the broadcaster's next
     // `user_message` timeline forward (which AgentManager emits as
     // soon as runAgent records it) carries the promptId back.
@@ -1421,9 +1439,45 @@ export class IdentityService {
     const ownerSignPriv = this.state.bundle.signPrivateKey;
     const ownerPubB64 = this.state.bundle.stored.signPublicKeyB64;
 
+    // Phase 4 v3/a — schedule the session-timeout end-of-share. We
+    // use the invite's `limits` if present, falling back to defaults
+    // for back-compat invites with no limits field.
+    const limits = active.invite.limits ?? DEFAULT_AI_SHARE_LIMITS;
+    const timeoutHandle = setTimeout(() => {
+      this.logger.info(
+        { inviteId, timeoutMs: limits.sessionTimeoutMs },
+        "ai_share_session_timeout_firing",
+      );
+      this.endAiShareSession(inviteId, "session-timeout");
+    }, limits.sessionTimeoutMs);
+    this.aiShareInvites.attachSessionTimeoutHandle(inviteId, timeoutHandle);
+
     const unsubscribe = bridge.subscribeAgent({
       agentId,
       onEvent: (event) => {
+        // Phase 4 v3/a — accumulate token usage for the cap. usage_updated
+        // events carry inputTokens + outputTokens reported by the
+        // provider. Tokens are kept owner-side (the redactor drops
+        // usage_updated for §7's "Bob does not see"), but we still need
+        // them for the limit check.
+        if (event.type === "agent_stream" && event.event.type === "usage_updated") {
+          const usage = event.event.usage as
+            | { inputTokens?: number; outputTokens?: number }
+            | undefined;
+          const inputTokens = typeof usage?.inputTokens === "number" ? usage.inputTokens : 0;
+          const outputTokens = typeof usage?.outputTokens === "number" ? usage.outputTokens : 0;
+          const total = inputTokens + outputTokens;
+          if (total > 0) {
+            const newTotal = this.aiShareInvites.addTokens(inviteId, total);
+            if (newTotal >= limits.maxTokens) {
+              this.logger.info(
+                { inviteId, newTotal, maxTokens: limits.maxTokens },
+                "ai_share_token_limit_exhausted",
+              );
+              this.endAiShareSession(inviteId, "token-limit");
+            }
+          }
+        }
         // Bind the most recent inbound promptId only when forwarding
         // a `user_message` (so it correlates with the friend's "you
         // sent" row). Other event types should not carry promptId.
@@ -1798,6 +1852,12 @@ export class IdentityService {
     agentProvider: string;
     /** Override TTL ms (tests). Default 5 minutes. */
     ttlMs?: number;
+    /**
+     * Phase 4 v3/a — caps the owner-side daemon will enforce. Defaults
+     * to `DEFAULT_AI_SHARE_LIMITS` when omitted (50 prompts, 100k
+     * tokens, 1 h timeout — see §7's "UI mitigations" list).
+     */
+    limits?: AiShareLimits;
   }): { ok: true; invite: AiShareInviteEnvelope } | { ok: false; error: string } {
     if (this.state.kind !== "loaded") {
       return { ok: false, error: "Cannot send ai-share invite — root identity not loaded" };
@@ -1824,6 +1884,7 @@ export class IdentityService {
 
     const now = new Date();
     const ttlMs = input.ttlMs ?? 5 * 60 * 1000;
+    const limits = input.limits ?? DEFAULT_AI_SHARE_LIMITS;
     const invite = buildAiShareInviteEnvelope({
       inviteId: `ais_${randomUuid()}`,
       ownerRootSignPrivateKey: this.state.bundle.signPrivateKey,
@@ -1834,6 +1895,7 @@ export class IdentityService {
       agentProvider: input.agentProvider,
       generatedAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
+      limits,
     });
 
     let frame;
@@ -2004,6 +2066,7 @@ export class IdentityService {
     agentProvider: string;
     receivedAt: string;
     expiresAt: string;
+    limits?: AiShareLimits;
   }> {
     return this.aiShareInvites.listInboundPending().map((entry) => ({
       inviteId: entry.invite.inviteId,
@@ -2012,6 +2075,7 @@ export class IdentityService {
       agentProvider: entry.invite.agentProvider,
       receivedAt: new Date(entry.receivedAtMs).toISOString(),
       expiresAt: entry.invite.expiresAt,
+      ...(entry.invite.limits ? { limits: entry.invite.limits } : {}),
     }));
   }
 

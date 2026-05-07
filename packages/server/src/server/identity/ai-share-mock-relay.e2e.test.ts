@@ -387,4 +387,122 @@ describe("Phase 4 v2/e mock-relay e2e — full ai-share lifecycle", () => {
     },
     E2E_TIMEOUT_MS,
   );
+
+  test(
+    "v3/a — owner ends the session when the prompt cap is hit",
+    async () => {
+      const relayEndpoint = mockRelay.endpoint();
+      const aliceBridge = new InProcessAgentBridge([
+        {
+          agentId: "agent-alice-1",
+          agentLabel: "Alice's Claude",
+          agentProvider: "claude",
+          lifecycle: "idle",
+          cwd: "/home/alice/repo",
+        },
+      ]);
+
+      const { svc: alice } = startService({
+        ottieHome: aliceHome,
+        serverId: "srv_alice_v3a",
+        deviceLabel: "Alice's Mac",
+        relayEndpoint,
+        displayName: "Alice",
+        agentBridge: aliceBridge,
+      });
+      const { svc: bob } = startService({
+        ottieHome: bobHome,
+        serverId: "srv_bob_v3a",
+        deviceLabel: "Bob's Laptop",
+        relayEndpoint,
+        displayName: "Bob",
+      });
+
+      const offer = alice.generateFriendPairOffer();
+      if (!offer) throw new Error("offer expected");
+      const redeemPromise = bob.redeemFriendPairOffer({
+        deepLinkOrOffer: offer.deepLink,
+        timeoutMs: 10_000,
+      });
+      const candidate = await waitFor(() => alice.listPendingFriendPairCandidates()[0], {
+        label: "Alice friend-pair candidate",
+      });
+      alice.approveFriendPair(candidate.nonceB64);
+      await redeemPromise;
+      await waitFor(() => alice.getFriendSessions().length === 1, {
+        label: "Alice friend-sync up",
+      });
+      await waitFor(() => bob.getFriendSessions().length === 1, {
+        label: "Bob friend-sync up",
+      });
+
+      // Tight cap so the test can exhaust it deterministically.
+      const inviteResult = alice.sendAiShareInvite({
+        peerRootPubKey: bob.requireBundle().stored.signPublicKeyB64,
+        agentId: "agent-alice-1",
+        agentLabel: "Alice's Claude",
+        agentProvider: "claude",
+        limits: {
+          maxPrompts: 2,
+          maxTokens: 100_000,
+          // Use the schema's minimum so the timeout's well past test
+          // duration without forcing us to mock setTimeout.
+          sessionTimeoutMs: 60_000,
+        },
+      });
+      expect(inviteResult.ok).toBe(true);
+      if (!inviteResult.ok) return;
+      const inviteId = inviteResult.invite.inviteId;
+      // The friend's accept-row data should carry the limits through.
+      await waitFor(
+        () => bob.listInboundAiShareInvites().find((i) => i.inviteId === inviteId)?.limits,
+        { label: "Bob sees limits on accept row" },
+      );
+      bob.acceptAiShareInvite(inviteId);
+      await waitFor(() => alice.listActiveAiShares().some((s) => s.inviteId === inviteId), {
+        label: "Alice marks share active",
+      });
+
+      // Two prompts allowed.
+      bob.sendAiSharePrompt({ inviteId, body: "p1" });
+      await waitFor(
+        () => bob.listAiShareTimeline(inviteId).some((r) => r.entry.kind === "turn_completed"),
+        { label: "first prompt completes" },
+      );
+      bob.sendAiSharePrompt({ inviteId, body: "p2" });
+      await waitFor(
+        () =>
+          bob.listAiShareTimeline(inviteId).filter((r) => r.entry.kind === "turn_completed")
+            .length === 2,
+        { label: "second prompt completes" },
+      );
+      // Still active after the second.
+      expect(alice.listActiveAiShares().some((s) => s.inviteId === inviteId)).toBe(true);
+
+      // Third prompt trips the cap. Owner ends the share with reason
+      // "prompt-limit"; Bob's daemon receives the end envelope and
+      // drops the active row.
+      bob.sendAiSharePrompt({ inviteId, body: "p3-over-cap" });
+
+      await waitFor(() => alice.listActiveAiShares().every((s) => s.inviteId !== inviteId), {
+        label: "Alice's active list drops the share after cap exhaustion",
+      });
+      await waitFor(() => bob.listActiveAiShares().every((s) => s.inviteId !== inviteId), {
+        label: "Bob's active list drops the share via end envelope",
+      });
+
+      // Friend-side transcript records the peer-end with reason.
+      const bobFile = aiShareTranscriptFilePath(bobHome, inviteId);
+      expect(bobFile).not.toBeNull();
+      const bobLines = readFileSync(bobFile as string, "utf8")
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l));
+      const endLine = bobLines.find((l) => l.kind === "end");
+      expect(endLine).toBeDefined();
+      expect(endLine.origin).toBe("peer");
+      expect(endLine.reason).toBe("prompt-limit");
+    },
+    E2E_TIMEOUT_MS,
+  );
 });

@@ -418,21 +418,45 @@ send-prompt` ships it. No friend-side UI yet — verified via
   tool_call → friend's buffer fills with 4 entries (no tool
   call) → end → both transcripts on disk audit-clean.
 
-**v3 — multi-daemon picker (§7.5):**
+**v3 — multi-daemon picker (§7.5) (limits ✅ shipped; rest pending):**
 
-Today's v1 hardcodes a placeholder agent
-(`agentLabel: "Claude Code"`). v3 wires:
+Two of the four bullets are already shipped (real agent list
+landed in v2/b; limits in v3/a). The remaining two are:
 
-- Real local agent list — owner picks which agent from the
-  modal (replaces the placeholder).
 - §7.5's two-step picker when the owner has multiple online
   daemons. Requires peer-sync to broadcast "which device picked
   up" so the other devices' modals dismiss.
 - First-share friction (Q2) — extra confirm gate on the first
   share to a new friend.
-- Limits enforcement (max prompts / max tokens / session
-  timeout). Probably a small `share-limits-store.json` per
-  invite, daemon-enforced.
+
+**Done:**
+
+- ~~Real local agent list — owner picks which agent from the
+  modal (replaces the placeholder).~~ ✅ shipped in v2/b.
+- **v3/a — limits enforcement.** ✅ shipped. Adds an optional
+  `limits` field to the invite envelope (`maxPrompts`,
+  `maxTokens`, `sessionTimeoutMs`) — defaults applied at
+  `sendAiShareInvite` (50 prompts, 100k tokens, 1 h timeout
+  per §7). The canonical signed payload includes a trailing
+  `limits=…` line so a relay-side adversary can't tamper
+  caps. Owner-side enforcer:
+  · increments `promptCount` on inbound prompt; ends with
+  `reason="prompt-limit"` when the cap is exhausted (the
+  cap-tripping prompt itself is rejected, not run).
+  · tallies `usage_updated.{inputTokens,outputTokens}` from
+  the broadcaster's subscription; ends with
+  `reason="token-limit"` when the cap is hit.
+  · `setTimeout(sessionTimeoutMs)` scheduled on accept;
+  fires `endAiShareSession(reason="session-timeout")`.
+  Cleared in `applyOutboundEnd`.
+  Friend's UI surfaces the caps as a third row on the accept
+  notification ("max 50 prompts · 100k tokens · 60 min", en
+  - zh). Mock-relay e2e covers the prompt-cap path: tight
+    cap=2 invite, two prompts complete, third trips the cap,
+    Bob's transcript records `end:peer reason="prompt-limit"`.
+    Back-compat: invites without `limits` still verify, and
+    v3+ owner daemons treat absent limits as the defaults at
+    enforcement time.
 
 **Out-of-scope for the whole Phase 4 chain (defer to Phase 5+):**
 

@@ -67,6 +67,15 @@ interface OutboundEntry {
    * the "you sent" row with "agent run started".
    */
   lastInboundPromptId: string | null;
+  /** Phase 4 v3/a — running totals for the owner-side limits enforcer. */
+  promptCount: number;
+  tokenCount: number;
+  /**
+   * Phase 4 v3/a — handle returned by `setTimeout` when the share
+   * goes active. Fires `endAiShareSession` on session-timeout. Cleared
+   * (and cleared via clearTimeout) in `applyOutboundEnd`.
+   */
+  sessionTimeoutHandle: ReturnType<typeof setTimeout> | null;
 }
 
 interface InboundEntry {
@@ -113,6 +122,9 @@ export class AiShareInviteRegistry {
       unsubscribeBroadcaster: null,
       nextTimelineSeq: 0,
       lastInboundPromptId: null,
+      promptCount: 0,
+      tokenCount: 0,
+      sessionTimeoutHandle: null,
     });
     this.logger?.info(
       {
@@ -169,6 +181,36 @@ export class AiShareInviteRegistry {
     const id = entry.lastInboundPromptId;
     entry.lastInboundPromptId = null;
     return id;
+  }
+
+  /**
+   * Phase 4 v3/a — atomically increment the prompt counter and
+   * return the new value. Caller compares against `invite.limits?.maxPrompts`.
+   */
+  incrementPromptCount(inviteId: string): number {
+    const entry = this.outbound.get(inviteId);
+    if (!entry) return 0;
+    entry.promptCount += 1;
+    return entry.promptCount;
+  }
+
+  /** Phase 4 v3/a — accumulate token usage from agent_stream events. */
+  addTokens(inviteId: string, delta: number): number {
+    const entry = this.outbound.get(inviteId);
+    if (!entry || delta <= 0) return entry?.tokenCount ?? 0;
+    entry.tokenCount += delta;
+    return entry.tokenCount;
+  }
+
+  /** Phase 4 v3/a — store the session-timeout handle for later cleanup. */
+  attachSessionTimeoutHandle(inviteId: string, handle: ReturnType<typeof setTimeout>): void {
+    const entry = this.outbound.get(inviteId);
+    if (!entry) {
+      clearTimeout(handle);
+      return;
+    }
+    if (entry.sessionTimeoutHandle) clearTimeout(entry.sessionTimeoutHandle);
+    entry.sessionTimeoutHandle = handle;
   }
 
   applyOutboundAccept(envelope: AiShareAcceptEnvelope): OutboundEntry | null {
@@ -254,6 +296,12 @@ export class AiShareInviteRegistry {
         );
       }
       entry.unsubscribeBroadcaster = null;
+    }
+    // Phase 4 v3/a: clear any pending session-timeout so it doesn't
+    // fire after the share has already ended.
+    if (entry.sessionTimeoutHandle) {
+      clearTimeout(entry.sessionTimeoutHandle);
+      entry.sessionTimeoutHandle = null;
     }
     this.logger?.info(
       { inviteId: args.inviteId, endedBy: args.endedBy },
