@@ -1,4 +1,4 @@
-import type { KeyObject } from "node:crypto";
+import { randomUUID as randomUuid, type KeyObject } from "node:crypto";
 import type pino from "pino";
 
 import type { RelayConnectionHandler } from "../relay-transport.js";
@@ -39,8 +39,24 @@ import {
   type RedeemFriendPairOfferInput,
   type RedeemFriendPairOfferOutcome,
 } from "./friend-pair-sender.js";
+import { p2pRoomId, type ChatMessage } from "../chat/chat-types.js";
+
+import {
+  buildFriendChatMessageEnvelope,
+  verifyFriendChatMessageEnvelope,
+} from "./friend-chat-crypto.js";
+import {
+  appendFriendChatMessage,
+  listFriendChatMessages,
+  type StoredFriendChatMessage,
+} from "./friend-chat-store.js";
+import {
+  FriendChatMessageEnvelopeSchema,
+  type FriendChatMessageEnvelope,
+} from "./friend-chat-types.js";
 import { FriendSessionRegistry } from "./friend-session-registry.js";
 import { FriendSyncDialer } from "./friend-sync-dialer.js";
+import { encryptFriendSyncFrame } from "./friend-sync-handshake.js";
 import { createFriendSyncConnectionHandler } from "./friend-sync-receiver.js";
 import { loadPeerList, savePeerList, upsertPeer } from "./peer-store.js";
 import type { StoredPeer, StoredPeerList } from "./peer-types.js";
@@ -721,17 +737,7 @@ export class IdentityService {
       selfDeviceId: this.selfDeviceContext.serverId,
       getLocalPeerList: () => this.peerList?.peers ?? [],
       sessions: this.friendSessions,
-      // Phase 3.b/1c plumbs payloads opaquely; 3.b/1d will swap this
-      // for a chat-message-envelope schema check + persistence path.
-      applyInboundPayload: (input) => {
-        this.logger.debug(
-          {
-            peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
-            payloadKind: typeof input.payload,
-          },
-          "friend_sync_payload_received_no_handler",
-        );
-      },
+      applyInboundPayload: (input) => this.handleInboundFriendSyncPayload(input),
     });
   }
 
@@ -752,15 +758,7 @@ export class IdentityService {
       selfDeviceId: this.selfDeviceContext.serverId,
       getLocalPeerList: () => this.peerList?.peers ?? [],
       sessions: this.friendSessions,
-      applyInboundPayload: (input) => {
-        this.logger.debug(
-          {
-            peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
-            payloadKind: typeof input.payload,
-          },
-          "friend_sync_payload_received_no_handler",
-        );
-      },
+      applyInboundPayload: (input) => this.handleInboundFriendSyncPayload(input),
       logger: this.logger,
     });
     this.friendDialer.start();
@@ -788,6 +786,223 @@ export class IdentityService {
   refreshFriendDialerTargets(): void {
     if (!this.friendDialer) return;
     this.friendDialer.refreshTargets();
+  }
+
+  /**
+   * Phase 3.b/1d: handler invoked by friend-sync receiver/dialer for
+   * every successfully-decrypted inbound payload. Schema-validates as
+   * a chat-message envelope, verifies the author's root signature,
+   * persists into the per-peer JSONL store. Schema/sig failures are
+   * logged but don't tear down the session — Phase 4+ may add other
+   * envelope kinds (ai-share/*) on the same channel.
+   */
+  private handleInboundFriendSyncPayload(input: {
+    peerRootPubKey: string;
+    payload: unknown;
+  }): void {
+    const validated = FriendChatMessageEnvelopeSchema.safeParse(input.payload);
+    if (!validated.success) {
+      this.logger.warn(
+        {
+          issues: validated.error.issues,
+          peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
+        },
+        "friend_chat_envelope_schema_rejected",
+      );
+      return;
+    }
+    if (this.state.kind !== "loaded") {
+      this.logger.warn("friend_chat_inbound_envelope_dropped_no_identity");
+      return;
+    }
+    const expectedRoomId = p2pRoomId({
+      aRootPubKey: this.state.bundle.stored.signPublicKeyB64,
+      bRootPubKey: input.peerRootPubKey,
+    });
+    const verifyOutcome = verifyFriendChatMessageEnvelope({
+      envelope: validated.data,
+      expectedPeerRootPubKey: input.peerRootPubKey,
+      expectedRoomId,
+    });
+    if (!verifyOutcome.ok) {
+      this.logger.warn(
+        {
+          reason: verifyOutcome.reason,
+          peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
+        },
+        "friend_chat_envelope_sig_invalid",
+      );
+      return;
+    }
+
+    try {
+      appendFriendChatMessage(
+        this.ottieHome,
+        input.peerRootPubKey,
+        {
+          message: validated.data.message,
+          authorSignatureB64: validated.data.authorSignatureB64,
+          persistedAt: new Date().toISOString(),
+        },
+        this.logger,
+      );
+      this.logger.info(
+        {
+          peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
+          messageId: validated.data.message.id,
+        },
+        "friend_chat_message_received",
+      );
+    } catch (err) {
+      this.logger.error(
+        { err, peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8) },
+        "friend_chat_persist_failed",
+      );
+    }
+  }
+
+  /**
+   * Phase 3.b/1d: send a chat message to a paired friend over the
+   * friend-sync session. Returns the persisted record on success or
+   * an error string on failure (no active session, no peer record,
+   * disk write failure, etc.).
+   *
+   * The caller (UI / WS RPC `chat/p2p/send`) supplies just the body
+   * + optional clientMessageId; the daemon mints id/createdAt and
+   * stamps in author root + device.
+   */
+  sendFriendChatMessage(input: {
+    peerRootPubKey: string;
+    body: string;
+    clientMessageId?: string;
+    replyToMessageId?: string;
+  }): { ok: true; stored: StoredFriendChatMessage } | { ok: false; error: string } {
+    if (this.state.kind !== "loaded") {
+      return { ok: false, error: "Cannot send chat — root identity not loaded" };
+    }
+    if (!this.selfDeviceContext) {
+      return { ok: false, error: "Cannot send chat — selfDeviceContext not configured" };
+    }
+    const body = input.body.trim();
+    if (body.length === 0) {
+      return { ok: false, error: "Message body must not be empty" };
+    }
+
+    const peer = this.peerList?.peers.find(
+      (p) => p.peerRootSignPublicKeyB64 === input.peerRootPubKey,
+    );
+    if (!peer) {
+      return { ok: false, error: "Peer is not in your friend list" };
+    }
+    if (peer.status !== "active") {
+      return { ok: false, error: `Peer is ${peer.status}, refusing to send` };
+    }
+
+    const session = this.friendSessions.get(input.peerRootPubKey);
+    if (!session) {
+      // Phase 3.b/2 will queue these into a Cloudflare KV inbox so
+      // they reach the friend on next connect. For 3.b/1d the
+      // semantics are strictly live-only.
+      return {
+        ok: false,
+        error: "Friend is offline — message not delivered (offline inbox arrives in Phase 3.b/2)",
+      };
+    }
+
+    const roomId = p2pRoomId({
+      aRootPubKey: this.state.bundle.stored.signPublicKeyB64,
+      bRootPubKey: input.peerRootPubKey,
+    });
+    const now = new Date();
+    const messageId = `fcm_${randomUuid()}`;
+    const clientMessageId = input.clientMessageId ?? messageId;
+    const message: ChatMessage = {
+      id: messageId,
+      roomId,
+      authorAgentId: `human:${this.state.bundle.stored.signPublicKeyB64.slice(0, 12)}`,
+      body,
+      replyToMessageId: input.replyToMessageId ?? null,
+      mentionAgentIds: [],
+      createdAt: now.toISOString(),
+      clientMessageId,
+      authorRootPubKey: this.state.bundle.stored.signPublicKeyB64,
+      authorDeviceId: this.selfDeviceContext.serverId,
+      kind: "text",
+    };
+
+    let envelope: FriendChatMessageEnvelope;
+    try {
+      envelope = buildFriendChatMessageEnvelope({
+        roomId,
+        message,
+        authorRootSignPrivateKey: this.state.bundle.signPrivateKey,
+      });
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+
+    // Encrypt + send through the live session.
+    let frame;
+    try {
+      frame = encryptFriendSyncFrame({
+        sharedKey: session.sharedKey,
+        plaintext: JSON.stringify(envelope),
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Failed to encrypt message: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    try {
+      session.socket.send(JSON.stringify(frame));
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Failed to send through session: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
+    // Persist locally so the sender's UI can render it immediately.
+    let stored: StoredFriendChatMessage;
+    try {
+      stored = appendFriendChatMessage(
+        this.ottieHome,
+        input.peerRootPubKey,
+        {
+          message,
+          authorSignatureB64: envelope.authorSignatureB64,
+          persistedAt: now.toISOString(),
+        },
+        this.logger,
+      );
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Sent over the wire but failed to persist locally: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      };
+    }
+
+    this.logger.info(
+      {
+        peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8),
+        messageId,
+        storedSeq: stored.storedSeq,
+      },
+      "friend_chat_message_sent",
+    );
+    return { ok: true, stored };
+  }
+
+  /**
+   * Phase 3.b/1d: snapshot of all stored chat messages with a peer.
+   * Returns [] if no history yet. Phase 3.b/3 will add a cursor /
+   * subscription path so the UI can stream updates.
+   */
+  listFriendChatMessages(peerRootPubKey: string): readonly StoredFriendChatMessage[] {
+    return listFriendChatMessages(this.ottieHome, peerRootPubKey, this.logger);
   }
 
   /**

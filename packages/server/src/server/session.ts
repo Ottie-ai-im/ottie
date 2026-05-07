@@ -2245,6 +2245,10 @@ export class Session {
         return this.handleFriendPairRejectRequest(msg);
       case "friend/list":
         return this.handleFriendListRequest(msg);
+      case "chat/p2p/send":
+        return this.handleChatP2pSendRequest(msg);
+      case "chat/p2p/list":
+        return this.handleChatP2pListRequest(msg);
       default:
         return undefined;
     }
@@ -2645,6 +2649,71 @@ export class Session {
       type: "friend/list/response",
       payload: { requestId: request.requestId, peers: [...peers], error: null },
     });
+  }
+
+  private async handleChatP2pSendRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/send" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/send/response",
+        payload: {
+          requestId: request.requestId,
+          stored: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.sendFriendChatMessage({
+      peerRootPubKey: request.peerRootPubKey,
+      body: request.body,
+      ...(request.clientMessageId ? { clientMessageId: request.clientMessageId } : {}),
+      ...(request.replyToMessageId ? { replyToMessageId: request.replyToMessageId } : {}),
+    });
+    if (result.ok) {
+      this.emit({
+        type: "chat/p2p/send/response",
+        payload: { requestId: request.requestId, stored: result.stored, error: null },
+      });
+    } else {
+      this.emit({
+        type: "chat/p2p/send/response",
+        payload: { requestId: request.requestId, stored: null, error: result.error },
+      });
+    }
+  }
+
+  private async handleChatP2pListRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/list" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/list/response",
+        payload: {
+          requestId: request.requestId,
+          messages: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    try {
+      const messages = this.identityService.listFriendChatMessages(request.peerRootPubKey);
+      this.emit({
+        type: "chat/p2p/list/response",
+        payload: { requestId: request.requestId, messages: [...messages], error: null },
+      });
+    } catch (err) {
+      this.emit({
+        type: "chat/p2p/list/response",
+        payload: {
+          requestId: request.requestId,
+          messages: null,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
   }
 
   private async handleDeviceLinkRedeemRequest(

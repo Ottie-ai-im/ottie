@@ -142,6 +142,15 @@ export class FriendSyncDialer {
       // Skip peers without routing info (pre-3.b/1a pairings or future
       // failure modes where we lost the serverId).
       if (!p.peerServerId || !p.peerRelayEndpoint) return false;
+      // Simultaneous-connect tie-break: only the side with the
+      // lexicographically *smaller* root pubkey opens an outbound
+      // dial. The other side waits for the incoming connection. This
+      // prevents the case where both sides dial at the same time,
+      // each registers two sessions, and most-recent-wins on each
+      // side independently picks mismatched socket pairs (writer's
+      // socket on one end → reader's socket on the other end of a
+      // different pair → messages go into a closed socket).
+      if (this.options.selfRootPubKey >= p.peerRootSignPublicKeyB64) return false;
       return true;
     });
   }

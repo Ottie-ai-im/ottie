@@ -21,6 +21,24 @@ function mintRootKeys(): RootKeys {
   return { signPublicKeyB64: jwkPub.x, signPrivateKey: privateKey };
 }
 
+/**
+ * Mint a pair of root keypairs `(smaller, larger)` ordered by their
+ * pubkey strings. The dialer's tie-break for simultaneous-connect
+ * prevents the side with the *larger* pubkey from dialing, so tests
+ * that exercise the dialer end-to-end need the dialer to be on the
+ * smaller side.
+ */
+function mintOrderedRootKeyPair(): { dialer: RootKeys; receiver: RootKeys } {
+  while (true) {
+    const a = mintRootKeys();
+    const b = mintRootKeys();
+    if (a.signPublicKeyB64 === b.signPublicKeyB64) continue;
+    return a.signPublicKeyB64 < b.signPublicKeyB64
+      ? { dialer: a, receiver: b }
+      : { dialer: b, receiver: a };
+  }
+}
+
 function makePeer(overrides: Partial<StoredPeer> = {}): StoredPeer {
   return {
     v: 1,
@@ -124,8 +142,11 @@ async function runReceiver(
 
 describe("FriendSyncDialer end-to-end against createFriendSyncConnectionHandler", () => {
   test("happy path: handshake completes both sides + frames flow both directions", async () => {
-    const alice = mintRootKeys();
-    const bob = mintRootKeys();
+    // Bob is the dialer, so he needs the smaller pubkey to satisfy
+    // the simultaneous-connect tie-break.
+    const ordered = mintOrderedRootKeyPair();
+    const bob = ordered.dialer;
+    const alice = ordered.receiver;
     const aliceSessions = new FriendSessionRegistry();
     const bobSessions = new FriendSessionRegistry();
     const aliceReceived: Array<{ peerRootPubKey: string; payload: unknown }> = [];
@@ -279,8 +300,9 @@ describe("FriendSyncDialer end-to-end against createFriendSyncConnectionHandler"
   });
 
   test("refreshTargets picks up newly-paired peers without restart", async () => {
-    const alice = mintRootKeys();
-    const bob = mintRootKeys();
+    const ordered = mintOrderedRootKeyPair();
+    const alice = ordered.dialer;
+    const bob = ordered.receiver;
     const peers: StoredPeer[] = [];
     let factoryCalls = 0;
     const dialer = new FriendSyncDialer({

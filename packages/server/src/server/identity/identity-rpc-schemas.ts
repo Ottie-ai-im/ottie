@@ -495,6 +495,75 @@ export const FriendListResponseSchema = z.object({
   }),
 });
 
+// ----- chat/p2p/send (Phase 3.b/1d) --------------------------------------
+// Send a chat message to a paired friend over their live friend-sync
+// session. Refuses if the friend isn't online (Phase 3.b/2 adds an
+// offline KV inbox).
+
+const StoredFriendChatMessageOnWireSchema = z.object({
+  message: z.object({
+    id: z.string(),
+    roomId: z.string(),
+    authorAgentId: z.string(),
+    body: z.string(),
+    replyToMessageId: z.string().nullable(),
+    mentionAgentIds: z.array(z.string()),
+    createdAt: z.string(),
+    seq: z.number().int().nonnegative().optional(),
+    clientMessageId: z.string().optional(),
+    authorRootPubKey: z.string().optional(),
+    authorDeviceId: z.string().optional(),
+    kind: z.string().optional(),
+    payload: z.unknown().optional(),
+  }),
+  authorSignatureB64: z.string(),
+  persistedAt: z.string(),
+  storedSeq: z.number().int().positive(),
+});
+
+export type StoredFriendChatMessageOnWire = z.infer<typeof StoredFriendChatMessageOnWireSchema>;
+
+export const ChatP2pSendRequestSchema = z.object({
+  type: z.literal("chat/p2p/send"),
+  requestId: z.string(),
+  /** Recipient's root sign pubkey (must already be paired). */
+  peerRootPubKey: z.string().min(1),
+  body: z.string().min(1),
+  /** Optional client-supplied message id for dedupe / send-status. */
+  clientMessageId: z.string().min(1).optional(),
+  /** Optional reply-to message id within the same p2p room. */
+  replyToMessageId: z.string().min(1).optional(),
+});
+
+export const ChatP2pSendResponseSchema = z.object({
+  type: z.literal("chat/p2p/send/response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** The freshly-stored message; null on failure. */
+    stored: StoredFriendChatMessageOnWireSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- chat/p2p/list (Phase 3.b/1d) --------------------------------------
+// Snapshot of all stored chat messages with a peer. Phase 3.b/3 will add
+// cursor + subscription so the UI streams updates instead of polling.
+
+export const ChatP2pListRequestSchema = z.object({
+  type: z.literal("chat/p2p/list"),
+  requestId: z.string(),
+  peerRootPubKey: z.string().min(1),
+});
+
+export const ChatP2pListResponseSchema = z.object({
+  type: z.literal("chat/p2p/list/response"),
+  payload: z.object({
+    requestId: z.string(),
+    messages: z.array(StoredFriendChatMessageOnWireSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 // ----- device/remove (Phase 2.g) -----------------------------------------
 // Remove a peer device from THIS user's device list. Refused for self
 // (a daemon can't sign its own revocation — use another device).

@@ -1087,9 +1087,37 @@ Two laptops + a phone (one daemon each) under one identity now:
         `getFriendSessions`, `refreshFriendDialerTargets`. Inbound
         payload handler is a debug-log no-op; 3.b/1d will plug in the
         chat-message envelope schema + persistence path here.
-      - ⏳ 3.b/1d — chat-message envelope (signed + schema-validated),
-        persistence into the existing durable chat store, WS RPC
-        `chat/p2p/send`, real-relay end-to-end test.
+      - ✅ 3.b/1d — live messaging end-to-end. New files:
+        - `friend-chat-types.ts` — `FriendChatMessageEnvelopeSchema`
+          (the wire shape over the friend-sync session) +
+          `friendChatMessagePayload(...)` canonical signed bytes
+          (prefix `ottie-friend-chat-message-v1`).
+        - `friend-chat-crypto.ts` — `buildFriendChatMessageEnvelope`
+          (sign with author's root key) +
+          `verifyFriendChatMessageEnvelope` (sig + roomId + peer-
+          identity binding check; defends against relay-side message
+          substitution).
+        - `friend-chat-store.ts` — append-only per-peer JSONL at
+          `$OTTIE_HOME/chat/friends/{sha256(rootPubKey).slice(0,32)}.jsonl`,
+          mode 0o600. Filename digests so the pubkey doesn't appear
+          in shell history / logs.
+        - IdentityService gains `sendFriendChatMessage(...)`,
+          `listFriendChatMessages(peerRootPubKey)`,
+          `handleInboundFriendSyncPayload(...)` (replaces the no-op
+          debug-log handler from 3.b/1c).
+        - WS RPCs `chat/p2p/send` and `chat/p2p/list`. DaemonClient
+          gains `chatP2pSend` and `chatP2pList`.
+        - Mock-relay e2e (`friend-chat-mock-relay.e2e.test.ts`):
+          Alice + Bob pair, both dialers come up, Bob → Alice and
+          Alice → Bob each persist on both sides (via the receive
+          handler), history survives Alice's restart.
+        - Subtle bug-fix surfaced by the e2e: simultaneous-connect
+          tie-break in `friend-sync-dialer.ts` — the side with the
+          *larger* root pubkey skips dialing and waits for the
+          smaller side's incoming connection. Without this both
+          sides could end up with two sessions each, "most-recent-
+          wins" picks mismatched socket pairs, and writes go into
+          closed sockets.
   - ⏳ 3.b/2 — Cloudflare KV inbox for offline delivery; recipient
     pulls on connect with cursor
   - ⏳ 3.b/3 — read receipts + UI integration (chats list shows

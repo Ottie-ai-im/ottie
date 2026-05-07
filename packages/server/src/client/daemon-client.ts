@@ -1676,6 +1676,61 @@ export class DaemonClient {
     });
   }
 
+  async chatP2pSend(args: {
+    peerRootPubKey: string;
+    body: string;
+    clientMessageId?: string;
+    replyToMessageId?: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{
+    stored:
+      | import("../server/identity/identity-rpc-schemas.js").StoredFriendChatMessageOnWire
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "chat/p2p/send",
+        requestId,
+        peerRootPubKey: args.peerRootPubKey,
+        body: args.body,
+        ...(args.clientMessageId ? { clientMessageId: args.clientMessageId } : {}),
+        ...(args.replyToMessageId ? { replyToMessageId: args.replyToMessageId } : {}),
+      },
+      timeout: args.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/send/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { stored: msg.payload.stored, error: msg.payload.error };
+      },
+    });
+  }
+
+  async chatP2pList(
+    peerRootPubKey: string,
+    params?: { requestId?: string; timeoutMs?: number },
+  ): Promise<{
+    messages:
+      | readonly import("../server/identity/identity-rpc-schemas.js").StoredFriendChatMessageOnWire[]
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "chat/p2p/list", requestId, peerRootPubKey },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/list/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { messages: msg.payload.messages, error: msg.payload.error };
+      },
+    });
+  }
+
   async deviceLinkRedeem(args: {
     deepLink: string;
     deviceLabel: string;
