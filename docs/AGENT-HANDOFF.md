@@ -32,14 +32,12 @@ from here.
   "queued (offline)". Restart bob → his daemon's `startInboxReceiver`
   drains the inbox on boot → message lands in his chat history
   within seconds.
-- **Next work** (no longer in Phase 3 scope — those four items pick
+- **Next work** (no longer in Phase 3 scope — those items pick
   the next direction; user picks by value):
-  1. **Multi-device X25519 sync** — Phase 3.b/2 follow-up.
-     Currently the X25519 priv key only lives on the device that
-     minted/first-loaded the identity. To let Wendell decrypt his
-     inbox from his Mac AND his iPhone, peer-sync (Phase 2.f) needs
-     to ferry the X25519 priv key across same-identity devices.
-     ~1 session. Schema-additive change to peer-sync events.
+  1. ~~Multi-device X25519 sync~~ — ✅ done. Already worked
+     end-to-end as a side-effect of 3.b/2a's design; today's
+     commit added the explicit e2e assertion proving it. See
+     §6.1 below.
   2. **Phase 4 — AI sharing** — design + v1. The actual product
      value of this whole side-quest. Cross-identity AI agent
      sharing (Wendell shares his Claude Code session with Bob; Bob
@@ -290,34 +288,32 @@ complete and production-validated**. Don't try to "implement Phase
 remaining tracks (in his preferred order, last-confirmed
 2026-05-07):
 
-### 6.1. Multi-device X25519 sync (Phase 3.b/2 follow-up, ~1 session)
+### 6.1. Multi-device X25519 sync (✅ DONE — see commit a few hashes above)
 
-Today the X25519 priv key (`encryptionPrivateKeyB64` in
-`root.json`) is generated on whichever device first loads the
-identity. When the user device-links a second machine, the new
-device gets the Ed25519 keypair via the device-link approval
-(`writeImportedRootIdentity`) but synthesizes its OWN X25519
-keypair locally (see comment in `root-identity-store.ts` around
-"Phase 3.b/2a: identity-bearing X25519 keys must travel with the
-root identity"). Result: friends paired with one device can't
-deliver inbox messages decryptable on a second device.
+**Already working — 3.b/2a's design pre-built the pass-through.**
+`RootIdentitySchema` has the X25519 fields as `.optional()`;
+`DeviceLinkApprovalReplySchema` embeds the full schema; the
+approval reply passes `input.rootIdentity.stored` (which post-
+migration contains the X25519 keys); and `writeImportedRootIdentity`
+already has the conditional: "if X25519 fields present, persist;
+else synthesize fresh".
 
-**The fix**: peer-sync (Phase 2.f) already syncs device-list
-events between same-identity devices. Extend it to also ferry
-the X25519 priv key. A few options:
+What today's commit added: an explicit assertion in
+`device-link-end-to-end.test.ts` that proves the round-trip —
+after Alice approves Bob's link, Bob's `root.json` carries
+identical `encryptionPublicKeyB64` and `encryptionPrivateKeyB64`
+to Alice's, and Bob's in-memory `RootIdentityBundle` exposes the
+same. Without this assertion the round-trip behavior was
+implicit — easy to break with a future schema or sender change.
 
-- **Embed in device-link approval** — easiest. Add an optional
-  `encryptionPrivateKeyB64` field to `DeviceLinkApprovalReply`'s
-  approved variant; old device sends → new device's
-  `writeImportedRootIdentity` writes it (instead of synthesizing).
-  Schema-additive, no peer-sync change. **Recommended.**
-- **Sync via peer-sync event** — broadcast a one-shot event when
-  a device discovers it's missing the field. More complex, but
-  handles "device linked before 3.b/2a" recovery.
-
-**Plan a minimal commit:** add field to schema, send from
-`approveDeviceLinkCandidate`, consume in `writeImportedRootIdentity`,
-update the device-link e2e test. ~30 min coding + tests.
+**Cursor + dedup across same-identity devices** is the related
+follow-up that's still open. If Bob has two devices, both can
+NOW decrypt his inbox (this commit), but if both pull
+concurrently, KV's eventual consistency briefly lets both see
+the same entry → both `appendFriendChatMessage` → duplicate
+JSONL lines. UI dedup by `clientMessageId` is one fix; cursor
+sync via peer-sync is another. Defer to 3.b/3-multidevice
+alongside chat-history fan-out.
 
 ### 6.2. Phase 4 — AI sharing (multi-session, the core feature)
 
@@ -440,12 +436,15 @@ fix-and-commit-per-category sweep is fine.
 
 ## 6.5. Open known limitations to call out before claiming "done"
 
-- **Multi-device X25519 fan-out missing**. Today the X25519 priv
-  key for inbox decryption is per-DEVICE (whichever device first
-  loaded the identity). If Wendell device-links a phone to his
-  laptop's identity, the phone CAN'T decrypt offline-inbox messages
-  addressed to that identity — only the laptop can. Fix is §6.1
-  (Phase 3.b/2 follow-up).
+- **Same-identity device cursor + dedup**. The X25519 priv key
+  itself NOW fans out across same-identity devices via
+  device-link (§6.1 above). But there's no cursor sync between
+  Bob's two devices, and `appendFriendChatMessage` doesn't dedup
+  by `clientMessageId`. If both devices pull the inbox
+  concurrently, KV's eventual consistency briefly lets both
+  see the same entry → both append → duplicate JSONL lines.
+  Track for 3.b/3-multidevice (alongside chat-history fan-out
+  via peer-sync).
 - **Polling delay (live)**. The chat screen polls every 2s for
   live messages from the friend-sync session; inbound messages
   show up with up to 2s of UI lag even though the daemon receives

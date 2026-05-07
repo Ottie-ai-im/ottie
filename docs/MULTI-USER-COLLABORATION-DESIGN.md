@@ -1317,16 +1317,34 @@ create OTTIE_INBOX`). Three HTTP routes added to the
     receiver in 3.b/2d) and isn't meaningful to the
     reader anyway.
     Phase 3.b/2 is now feature-complete on the daemon,
-    relay, and UI. Multi-device X25519 priv-key fan-out
-    via peer-sync remains the only outstanding piece —
-    tracked separately. - Multi-device fan-out caveat: the X25519 keypair is
-    **per-identity** (not per-device). Today only the device
-    that minted the identity has the matching private key, so
-    only that device can decrypt the inbox. Once peer-sync
-    (Phase 2.f) is extended to ferry the X25519 private key
-    across devices under the same identity (planned alongside
-    3.b/2c), all of the user's devices can decrypt offline
-    messages addressed to their identity.
+    relay, and UI. - ✅ Multi-device X25519 priv-key fan-out — already
+    working as a side-effect of 3.b/2a's design. The
+    `RootIdentitySchema` makes the X25519 fields
+    `.optional()` and `writeImportedRootIdentity` has
+    pass-through logic: if the incoming
+    `StoredRootIdentity` carries `encryptionPrivateKeyB64`,
+    it's persisted as-is on the new device; if missing
+    (linker on a pre-3.b/2a build), the new device
+    synthesizes its own keypair. The
+    `DeviceLinkApprovalReplySchema` already embeds the
+    full `RootIdentitySchema`, so the X25519 keys travel
+    with the Ed25519 keys through the existing approval
+    reply — no schema or wire change. Verified end-to-end
+    via `device-link-end-to-end.test.ts`: after the
+    approve flow, both Alice's and Bob's `root.json` carry
+    identical `encryptionPublicKeyB64` /
+    `encryptionPrivateKeyB64`, and the in-memory
+    `RootIdentityBundle` exposes them. Result: any of a
+    user's devices can decrypt offline-inbox messages
+    addressed to that user's identity X25519 pubkey. - Cursor + dedup across same-identity devices is a
+    separate concern: if two of Bob's devices both pull
+    the inbox concurrently, KV's eventual consistency
+    can briefly let both see the same entry. Both decrypt
+    successfully (they share the priv key) and both
+    `appendFriendChatMessage` — producing duplicate JSONL
+    lines that the UI must dedup by `clientMessageId`.
+    Tracked as a 3.b/3-multidevice follow-up alongside
+    friend-chat history fan-out via peer-sync.
   - 🚧 3.b/3 — read receipts + UI integration. Done in sub-commits:
     - ✅ 3.b/3 UI v1 — standalone friend chat screen at
       `/h/[serverId]/friend/[peerRootPubKey]` (message bubbles,

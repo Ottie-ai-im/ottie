@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -267,6 +267,26 @@ describe("Phase 2.d/2.e end-to-end — two IdentityService instances", () => {
     expect(bob.getState().kind).toBe("loaded");
     expect(bob.requireBundle().stored.displayName).toBe("Alice");
     expect(bob.getDeviceList()).toHaveLength(2);
+
+    // === Phase 3.b/2 follow-up (multi-device X25519 sync): the
+    // identity-bearing X25519 keypair travels with the device-link
+    // approval reply. After adopt, Bob's root.json carries the SAME
+    // X25519 keypair as Alice's — so Bob can decrypt offline-inbox
+    // messages addressed to their shared identity pubkey. Without
+    // this guarantee, only the device that minted the identity
+    // could ever read its inbox (single-point-of-failure for
+    // multi-device users).
+    const aliceRoot = JSON.parse(
+      readFileSync(path.join(aliceHome, "identity", "root.json"), "utf8"),
+    );
+    const bobRoot = JSON.parse(readFileSync(path.join(bobHome, "identity", "root.json"), "utf8"));
+    expect(aliceRoot.encryptionPublicKeyB64).toBeDefined();
+    expect(aliceRoot.encryptionPublicKeyB64.length).toBe(43); // 32 bytes raw base64url
+    expect(bobRoot.encryptionPublicKeyB64).toBe(aliceRoot.encryptionPublicKeyB64);
+    expect(bobRoot.encryptionPrivateKeyB64).toBe(aliceRoot.encryptionPrivateKeyB64);
+    // In-memory bundle on Bob also exposes the matching keys.
+    expect(bob.requireBundle().encryptionPublicKeyB64).toBe(aliceRoot.encryptionPublicKeyB64);
+    expect(bob.requireBundle().encryptionPrivateKeyB64).toBe(aliceRoot.encryptionPrivateKeyB64);
   });
 
   test("Bob reboot: a fresh IdentityService on the same home picks the adopted identity up", async () => {
