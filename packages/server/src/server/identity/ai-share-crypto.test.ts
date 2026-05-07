@@ -7,11 +7,13 @@ import {
   buildAiShareDeclineEnvelope,
   buildAiShareEndEnvelope,
   buildAiShareInviteEnvelope,
+  buildAiSharePromptEnvelope,
   tryParseAiShareEnvelope,
   verifyAiShareAcceptEnvelope,
   verifyAiShareDeclineEnvelope,
   verifyAiShareEndEnvelope,
   verifyAiShareInviteEnvelope,
+  verifyAiSharePromptEnvelope,
 } from "./ai-share-crypto.js";
 import { AiShareEnvelopeSchema, AiShareInviteEnvelopeSchema } from "./ai-share-types.js";
 
@@ -197,8 +199,67 @@ describe("ai-share crypto — Phase 4 v1", () => {
     });
   });
 
+  describe("prompt", () => {
+    test("build → verify roundtrip with the matching sender pubkey", () => {
+      const sender = makeIdentity();
+      const envelope = buildAiSharePromptEnvelope({
+        inviteId: "ais_test1",
+        promptId: "aip_1",
+        senderRootSignPrivateKey: sender.rootSignPrivateKey,
+        senderRootPubKeyB64: sender.rootSignPublicKeyB64,
+        sentAt: "2026-05-07T03:03:00.000Z",
+        body: "Refactor the auth module to drop the legacy session cookie.",
+      });
+      const ok = verifyAiSharePromptEnvelope({
+        envelope,
+        expectedSenderRootSignPublicKeyB64: sender.rootSignPublicKeyB64,
+      });
+      expect(ok.ok).toBe(true);
+    });
+
+    test("fails when the expected sender pubkey doesn't match", () => {
+      const sender = makeIdentity();
+      const wrong = makeIdentity();
+      const envelope = buildAiSharePromptEnvelope({
+        inviteId: "ais_test1",
+        promptId: "aip_2",
+        senderRootSignPrivateKey: sender.rootSignPrivateKey,
+        senderRootPubKeyB64: sender.rootSignPublicKeyB64,
+        sentAt: "2026-05-07T03:03:00.000Z",
+        body: "anything",
+      });
+      const result = verifyAiSharePromptEnvelope({
+        envelope,
+        expectedSenderRootSignPublicKeyB64: wrong.rootSignPublicKeyB64,
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.reason).toMatch(/sender pubkey/i);
+    });
+
+    test("fails when a tampered body is swapped post-sign", () => {
+      const sender = makeIdentity();
+      const envelope = buildAiSharePromptEnvelope({
+        inviteId: "ais_test1",
+        promptId: "aip_3",
+        senderRootSignPrivateKey: sender.rootSignPrivateKey,
+        senderRootPubKeyB64: sender.rootSignPublicKeyB64,
+        sentAt: "2026-05-07T03:03:00.000Z",
+        body: "do thing X",
+      });
+      const swapped = { ...envelope, body: "rm -rf /" };
+      const result = verifyAiSharePromptEnvelope({
+        envelope: swapped,
+        expectedSenderRootSignPublicKeyB64: sender.rootSignPublicKeyB64,
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.reason).toMatch(/signature did not verify/i);
+    });
+  });
+
   describe("tryParseAiShareEnvelope", () => {
-    test("routes all four kinds correctly", () => {
+    test("routes all five kinds correctly", () => {
       const owner = makeIdentity();
       const responder = makeIdentity();
       const invite = buildAiShareInviteEnvelope({
@@ -230,10 +291,19 @@ describe("ai-share crypto — Phase 4 v1", () => {
         senderRootPubKeyB64: responder.rootSignPublicKeyB64,
         endedAt: "2026-05-07T03:02:00.000Z",
       });
+      const prompt = buildAiSharePromptEnvelope({
+        inviteId: "ais_test1",
+        promptId: "aip_a",
+        senderRootSignPrivateKey: responder.rootSignPrivateKey,
+        senderRootPubKeyB64: responder.rootSignPublicKeyB64,
+        sentAt: "2026-05-07T03:03:00.000Z",
+        body: "Hi agent.",
+      });
       expect(tryParseAiShareEnvelope(invite)?.kind).toBe("invite");
       expect(tryParseAiShareEnvelope(accept)?.kind).toBe("accept");
       expect(tryParseAiShareEnvelope(decline)?.kind).toBe("decline");
       expect(tryParseAiShareEnvelope(end)?.kind).toBe("end");
+      expect(tryParseAiShareEnvelope(prompt)?.kind).toBe("prompt");
     });
 
     test("returns null for non-ai-share payloads (chat envelopes)", () => {

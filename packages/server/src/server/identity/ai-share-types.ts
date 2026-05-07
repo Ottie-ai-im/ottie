@@ -110,19 +110,54 @@ export const AiShareEndEnvelopeSchema = z.object({
 });
 export type AiShareEndEnvelope = z.infer<typeof AiShareEndEnvelopeSchema>;
 
+// ----- prompt (friend → owner) -------------------------------------------
+
+/**
+ * Phase 4 v2/b — friend's compose box ships its prompt to the owner
+ * across the active share. The owner's daemon verifies the signature,
+ * looks up the active outbound entry by inviteId, and injects the
+ * prompt into the chosen agent's input via `AgentManager.runAgent`.
+ *
+ * Trust model is the friend-side analogue of the invite: the prompt is
+ * signed by the FRIEND's root sign privkey (the responder of the
+ * handshake), and the owner verifies against the same peer pubkey it
+ * already uses for accept/decline. Riding inside FriendSyncFrame keeps
+ * the relay zero-knowledge.
+ *
+ * `body` is hard-capped at 16 KiB. v2 doesn't try to be a generic
+ * file-attachment channel; long context goes through the agent's own
+ * tool-call surface, not this envelope.
+ */
+export const AiSharePromptEnvelopeSchema = z.object({
+  v: z.literal(1),
+  kind: z.literal("ai-share-prompt"),
+  inviteId: z.string().min(1),
+  /** Stable per-prompt id minted by the friend's daemon. */
+  promptId: z.string().min(1),
+  /** Sender (friend) — same field name pattern as `ai-share-end`. */
+  senderRootPubKeyB64: z.string().min(1),
+  /** ISO timestamp when the friend's daemon sent the prompt. */
+  sentAt: z.string(),
+  /** The user-typed prompt body. Capped at 16 KiB (UTF-8 bytes-ish). */
+  body: z.string().min(1).max(16384),
+  signatureB64: z.string().min(1),
+});
+export type AiSharePromptEnvelope = z.infer<typeof AiSharePromptEnvelopeSchema>;
+
 // ----- discriminated union ------------------------------------------------
 
 /**
- * Discriminated union of every ai-share envelope kind v1 + v2/a ships.
- * Used by the friend-sync inbound dispatcher to route each frame's
- * decrypted payload to the right handler. Future kinds (v2/b's
- * `ai-share-prompt`, v2/d's `ai-share-timeline`) extend this union.
+ * Discriminated union of every ai-share envelope kind v1 + v2/a + v2/b
+ * ship. Used by the friend-sync inbound dispatcher to route each
+ * frame's decrypted payload to the right handler. Future kinds (v2/d's
+ * `ai-share-timeline`) extend this union.
  */
 export const AiShareEnvelopeSchema = z.discriminatedUnion("kind", [
   AiShareInviteEnvelopeSchema,
   AiShareAcceptEnvelopeSchema,
   AiShareDeclineEnvelopeSchema,
   AiShareEndEnvelopeSchema,
+  AiSharePromptEnvelopeSchema,
 ]);
 export type AiShareEnvelope = z.infer<typeof AiShareEnvelopeSchema>;
 
@@ -221,5 +256,34 @@ export function aiShareEndPayload(args: {
     args.senderRootPubKeyB64,
     args.endedAt,
     args.reason ?? "",
+  ].join("\n");
+}
+
+/**
+ *   ottie-ai-share-prompt-v1
+ *   {inviteId}
+ *   {promptId}
+ *   {senderRootPubKeyB64}
+ *   {sentAt}
+ *   {body}
+ *
+ * `body` is the last line, raw — no length prefix, no escaping. We
+ * include it inside the signed payload so a relay-side adversary can't
+ * tamper the prompt the owner injects into the agent.
+ */
+export function aiSharePromptPayload(args: {
+  inviteId: string;
+  promptId: string;
+  senderRootPubKeyB64: string;
+  sentAt: string;
+  body: string;
+}): string {
+  return [
+    "ottie-ai-share-prompt-v1",
+    args.inviteId,
+    args.promptId,
+    args.senderRootPubKeyB64,
+    args.sentAt,
+    args.body,
   ].join("\n");
 }

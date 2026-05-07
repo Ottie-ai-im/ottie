@@ -715,6 +715,49 @@ export const ChatP2pAiShareListActiveResponseSchema = z.object({
   }),
 });
 
+// Phase 4 v2/b — friend-side: send a prompt over an active share.
+// Owner-side: list shareable agents for the invite picker.
+
+export const ChatP2pAiShareSendPromptRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/send-prompt"),
+  requestId: z.string(),
+  inviteId: z.string().min(1),
+  body: z.string().min(1).max(16384),
+});
+
+export const ChatP2pAiShareSendPromptResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/send-prompt/response"),
+  payload: z.object({
+    requestId: z.string(),
+    /** Echoed back so the caller can correlate UI bubbles with the wire prompt. */
+    promptId: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ShareableAgentOnWireSchema = z.object({
+  agentId: z.string().min(1),
+  agentLabel: z.string().min(1),
+  agentProvider: z.string().min(1),
+  lifecycle: z.enum(["initializing", "idle", "running", "error", "closed"]),
+  cwd: z.string(),
+});
+export type ShareableAgentOnWire = z.infer<typeof ShareableAgentOnWireSchema>;
+
+export const ChatP2pAiShareListShareableAgentsRequestSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-shareable-agents"),
+  requestId: z.string(),
+});
+
+export const ChatP2pAiShareListShareableAgentsResponseSchema = z.object({
+  type: z.literal("chat/p2p/ai-share/list-shareable-agents/response"),
+  payload: z.object({
+    requestId: z.string(),
+    agents: z.array(ShareableAgentOnWireSchema).nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
 // ----- device/remove (Phase 2.g) -----------------------------------------
 // Remove a peer device from THIS user's device list. Refused for self
 // (a daemon can't sign its own revocation — use another device).

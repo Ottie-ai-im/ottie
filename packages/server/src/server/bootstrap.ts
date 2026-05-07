@@ -552,6 +552,39 @@ export async function createOttieDaemon(
     agentStorage,
   );
   await agentStorage.initialize();
+
+  // Phase 4 v2/b: bind AgentManager into IdentityService so the ai-share
+  // dispatcher can route inbound `ai-share-prompt` envelopes into the
+  // owner's chosen agent (via runAgent) and `listShareableAgents` returns
+  // the local agent list for the friend's invite picker.
+  identityService.setAiShareAgentBridge({
+    listShareableAgents: () => {
+      return agentManager
+        .listAgents()
+        .filter((agent) => agent.lifecycle !== "closed")
+        .map((agent) => {
+          const shortId = agent.id.slice(0, 7);
+          return {
+            agentId: agent.id,
+            agentProvider: agent.provider,
+            // v2/b: no title in ManagedAgent — fall back to provider+shortId.
+            // v3 picker can swap this for the persisted title once it's
+            // wired through the projection layer.
+            agentLabel: `${agent.provider} ${shortId}`,
+            lifecycle: agent.lifecycle,
+            cwd: agent.cwd,
+          };
+        });
+    },
+    injectPrompt: async (input) => {
+      // Logged at the boundary; runAgent's own logs cover the agent run.
+      logger.info(
+        { agentId: input.agentId, bodyChars: input.body.length },
+        "ai_share_prompt_inject_runAgent",
+      );
+      await agentManager.runAgent(input.agentId, input.body);
+    },
+  });
   logger.info({ elapsed: elapsed() }, "Agent storage initialized");
   await bootstrapWorkspaceRegistries({
     ottieHome: config.ottieHome,

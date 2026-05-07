@@ -5,14 +5,17 @@ import {
   AiShareDeclineEnvelopeSchema,
   AiShareEndEnvelopeSchema,
   AiShareInviteEnvelopeSchema,
+  AiSharePromptEnvelopeSchema,
   aiShareAcceptPayload,
   aiShareDeclinePayload,
   aiShareEndPayload,
   aiShareInvitePayload,
+  aiSharePromptPayload,
   type AiShareAcceptEnvelope,
   type AiShareDeclineEnvelope,
   type AiShareEndEnvelope,
   type AiShareInviteEnvelope,
+  type AiSharePromptEnvelope,
 } from "./ai-share-types.js";
 
 /**
@@ -276,6 +279,68 @@ export function verifyAiShareEndEnvelope(
   );
 }
 
+// ----- prompt (Phase 4 v2/b — friend side: sign / owner side: verify) ----
+
+export interface BuildAiSharePromptInput {
+  inviteId: string;
+  promptId: string;
+  /** Friend's root sign privkey — signs the prompt. */
+  senderRootSignPrivateKey: KeyObject;
+  senderRootPubKeyB64: string;
+  sentAt: string;
+  body: string;
+}
+
+export function buildAiSharePromptEnvelope(input: BuildAiSharePromptInput): AiSharePromptEnvelope {
+  const payload = aiSharePromptPayload({
+    inviteId: input.inviteId,
+    promptId: input.promptId,
+    senderRootPubKeyB64: input.senderRootPubKeyB64,
+    sentAt: input.sentAt,
+    body: input.body,
+  });
+  const signatureB64 = signEd25519(input.senderRootSignPrivateKey, payload);
+  return {
+    v: 1,
+    kind: "ai-share-prompt",
+    inviteId: input.inviteId,
+    promptId: input.promptId,
+    senderRootPubKeyB64: input.senderRootPubKeyB64,
+    sentAt: input.sentAt,
+    body: input.body,
+    signatureB64,
+  };
+}
+
+export interface VerifyAiSharePromptInput {
+  envelope: AiSharePromptEnvelope;
+  /** Owner side: the friend's root pubkey from their peer record. */
+  expectedSenderRootSignPublicKeyB64: string;
+}
+
+export function verifyAiSharePromptEnvelope(
+  input: VerifyAiSharePromptInput,
+): { ok: true } | { ok: false; reason: string } {
+  if (input.envelope.senderRootPubKeyB64 !== input.expectedSenderRootSignPublicKeyB64) {
+    return {
+      ok: false,
+      reason: `prompt sender pubkey ${input.envelope.senderRootPubKeyB64.slice(0, 8)}… does not match peer ${input.expectedSenderRootSignPublicKeyB64.slice(0, 8)}…`,
+    };
+  }
+  const payload = aiSharePromptPayload({
+    inviteId: input.envelope.inviteId,
+    promptId: input.envelope.promptId,
+    senderRootPubKeyB64: input.envelope.senderRootPubKeyB64,
+    sentAt: input.envelope.sentAt,
+    body: input.envelope.body,
+  });
+  return verifyDetached(
+    input.expectedSenderRootSignPublicKeyB64,
+    payload,
+    input.envelope.signatureB64,
+  );
+}
+
 // ----- shared parse-and-route helper -------------------------------------
 
 /**
@@ -291,6 +356,7 @@ export function tryParseAiShareEnvelope(
   | { kind: "accept"; envelope: AiShareAcceptEnvelope }
   | { kind: "decline"; envelope: AiShareDeclineEnvelope }
   | { kind: "end"; envelope: AiShareEndEnvelope }
+  | { kind: "prompt"; envelope: AiSharePromptEnvelope }
   | null {
   if (typeof parsed !== "object" || parsed === null) return null;
   const k = (parsed as { kind?: unknown }).kind;
@@ -309,6 +375,10 @@ export function tryParseAiShareEnvelope(
   if (k === "ai-share-end") {
     const r = AiShareEndEnvelopeSchema.safeParse(parsed);
     return r.success ? { kind: "end", envelope: r.data } : null;
+  }
+  if (k === "ai-share-prompt") {
+    const r = AiSharePromptEnvelopeSchema.safeParse(parsed);
+    return r.success ? { kind: "prompt", envelope: r.data } : null;
   }
   return null;
 }

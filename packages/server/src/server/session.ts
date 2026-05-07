@@ -2257,6 +2257,10 @@ export class Session {
         return this.handleChatP2pAiShareEndRequest(msg);
       case "chat/p2p/ai-share/list-active":
         return this.handleChatP2pAiShareListActiveRequest(msg);
+      case "chat/p2p/ai-share/send-prompt":
+        return this.handleChatP2pAiShareSendPromptRequest(msg);
+      case "chat/p2p/ai-share/list-shareable-agents":
+        return this.handleChatP2pAiShareListShareableAgentsRequest(msg);
       default:
         return undefined;
     }
@@ -2313,6 +2317,65 @@ export class Session {
           agentLabel: s.agentLabel,
           agentProvider: s.agentProvider,
           acceptedAt: s.acceptedAt,
+        })),
+        error: null,
+      },
+    });
+  }
+
+  private async handleChatP2pAiShareSendPromptRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/send-prompt" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/send-prompt/response",
+        payload: {
+          requestId: request.requestId,
+          promptId: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const result = this.identityService.sendAiSharePrompt({
+      inviteId: request.inviteId,
+      body: request.body,
+    });
+    this.emit({
+      type: "chat/p2p/ai-share/send-prompt/response",
+      payload: {
+        requestId: request.requestId,
+        promptId: result.ok ? result.promptId : null,
+        error: result.ok ? null : result.error,
+      },
+    });
+  }
+
+  private async handleChatP2pAiShareListShareableAgentsRequest(
+    request: Extract<SessionInboundMessage, { type: "chat/p2p/ai-share/list-shareable-agents" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "chat/p2p/ai-share/list-shareable-agents/response",
+        payload: {
+          requestId: request.requestId,
+          agents: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+    const agents = this.identityService.listShareableAgents();
+    this.emit({
+      type: "chat/p2p/ai-share/list-shareable-agents/response",
+      payload: {
+        requestId: request.requestId,
+        agents: agents.map((a) => ({
+          agentId: a.agentId,
+          agentLabel: a.agentLabel,
+          agentProvider: a.agentProvider,
+          lifecycle: a.lifecycle,
+          cwd: a.cwd,
         })),
         error: null,
       },

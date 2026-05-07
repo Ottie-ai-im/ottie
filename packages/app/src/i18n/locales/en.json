@@ -128,10 +128,10 @@
     "shareAi": {
       "button": "Share AI",
       "modalTitle": "Share an AI agent",
-      "intro": "Send your friend an invite to share {{label}}. They'll get a notification and can accept or decline.",
-      "disclaimer": "v1 ships the invitation handshake only; live agent timeline + prompt-injection arrive in v2.",
+      "pickIntro": "Pick a local agent to share. Your friend will get a notification and can accept or decline.",
+      "loadError": "Could not load agent list. Try reopening this modal.",
+      "empty": "No agents yet on this daemon. Create one from the workspace screen first.",
       "sent": "Invite for {{label}} sent. Friend will see it in their bell.",
-      "send": "Send invite",
       "sending": "Sending…"
     },
     "activeShareBanner": "AI share active — {{label}}",

@@ -1894,6 +1894,52 @@ export class DaemonClient {
     });
   }
 
+  async chatP2pAiShareSendPrompt(args: {
+    inviteId: string;
+    body: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{ promptId: string | null; error: string | null }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "chat/p2p/ai-share/send-prompt",
+        requestId,
+        inviteId: args.inviteId,
+        body: args.body,
+      },
+      timeout: args.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/send-prompt/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { promptId: msg.payload.promptId, error: msg.payload.error };
+      },
+    });
+  }
+
+  async chatP2pAiShareListShareableAgents(params?: {
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{
+    agents:
+      | readonly import("../server/identity/identity-rpc-schemas.js").ShareableAgentOnWire[]
+      | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "chat/p2p/ai-share/list-shareable-agents", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "chat/p2p/ai-share/list-shareable-agents/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { agents: msg.payload.agents, error: msg.payload.error };
+      },
+    });
+  }
+
   async deviceLinkRedeem(args: {
     deepLink: string;
     deviceLabel: string;

@@ -10,8 +10,12 @@ import { Button } from "@/components/ui/button";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useActiveAiShares } from "@/hooks/use-active-ai-shares";
+import { useShareableAgents } from "@/hooks/use-shareable-agents";
 import { useQueryClient } from "@tanstack/react-query";
-import type { StoredFriendChatMessageOnWire } from "@server/server/identity/identity-rpc-schemas";
+import type {
+  ShareableAgentOnWire,
+  StoredFriendChatMessageOnWire,
+} from "@server/server/identity/identity-rpc-schemas";
 import type { StoredPeer } from "@server/server/identity/peer-types";
 
 // Phase 3.b/3 (UI v1) — friend chat screen. Standalone surface, NOT
@@ -116,6 +120,50 @@ const styles = StyleSheet.create((theme) => ({
     fontFamily: theme.fontFamily.system,
     color: theme.colors.destructive,
     fontSize: theme.fontSize.sm,
+  },
+  sharePickerList: {
+    gap: theme.spacing[1],
+  },
+  sharePickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+    backgroundColor: theme.colors.surface1,
+  },
+  sharePickerRowHovered: {
+    backgroundColor: theme.colors.surface2,
+    borderColor: theme.colors.border,
+  },
+  sharePickerRowPressed: {
+    opacity: 0.7,
+  },
+  sharePickerRowDisabled: {
+    opacity: 0.5,
+  },
+  sharePickerRowText: {
+    flex: 1,
+    gap: 2,
+  },
+  sharePickerLabel: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
+  },
+  sharePickerMeta: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  sharePickerStatus: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
   },
   activeShareBanner: {
     flexDirection: "row",
@@ -556,16 +604,12 @@ function ChatBubble({
 }
 
 /**
- * Phase 4 v1 — "Share AI" button in the friend chat header. Opens a
- * single-step confirm modal and fires `chatP2pAiShareInvite` with
- * placeholder agent details (label / provider hardcoded for v1; the
- * full agent picker matching §7.5's two-step flow is v3).
- *
- * The active-share state isn't shown anywhere yet — once the friend
- * accepts, the only confirmation the owner gets is a toast-style
- * success state in this modal, plus the outbound invite list in
- * `listOutboundAiShareInvites` (no UI for that list either; v2
- * surfaces it via the active-share banner).
+ * Phase 4 v2/b — "Share AI" button in the friend chat header. Opens a
+ * picker modal sourced from `chatP2pAiShareListShareableAgents`
+ * (replaces v1's hardcoded placeholder). The user taps an agent row
+ * to fire `chatP2pAiShareInvite` with that agent's real id / label /
+ * provider. v3 swaps in §7.5's two-step picker for the multi-daemon
+ * case.
  */
 function ShareAiButton({
   serverId,
@@ -578,50 +622,52 @@ function ShareAiButton({
   const { theme } = useUnistyles();
   const client = useHostRuntimeClient(serverId ?? "");
   const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [submittingAgentId, setSubmittingAgentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sentLabel, setSentLabel] = useState<string | null>(null);
-
-  // v1: placeholder agent details. v1.5 wires this to the daemon's
-  // local agent list so the user can pick which one to share.
-  const placeholderAgentLabel = "Claude Code";
-  const placeholderAgentProvider = "claude";
-  const placeholderAgentId = "ai-share-v1-placeholder";
+  const { agents, isLoading, hasError, refetch } = useShareableAgents(serverId);
 
   const handleOpen = useCallback(() => {
     setError(null);
     setSentLabel(null);
+    setSubmittingAgentId(null);
     setOpen(true);
-  }, []);
+    // Refetch on open so the picker reflects any agents created since
+    // the modal was last dismissed.
+    refetch();
+  }, [refetch]);
   const handleClose = useCallback(() => {
     setOpen(false);
   }, []);
 
-  const handleSubmit = useCallback(async () => {
-    if (!client) {
-      setError("Not connected to daemon");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const response = await client.chatP2pAiShareInvite({
-        peerRootPubKey,
-        agentId: placeholderAgentId,
-        agentLabel: placeholderAgentLabel,
-        agentProvider: placeholderAgentProvider,
-      });
-      if (response.error) {
-        setError(response.error);
-      } else if (response.invite) {
-        setSentLabel(placeholderAgentLabel);
+  const handlePickAgent = useCallback(
+    async (agent: ShareableAgentOnWire) => {
+      if (!client) {
+        setError("Not connected to daemon");
+        return;
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }, [client, peerRootPubKey]);
+      setSubmittingAgentId(agent.agentId);
+      setError(null);
+      try {
+        const response = await client.chatP2pAiShareInvite({
+          peerRootPubKey,
+          agentId: agent.agentId,
+          agentLabel: agent.agentLabel,
+          agentProvider: agent.agentProvider,
+        });
+        if (response.error) {
+          setError(response.error);
+        } else if (response.invite) {
+          setSentLabel(agent.agentLabel);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSubmittingAgentId(null);
+      }
+    },
+    [client, peerRootPubKey],
+  );
 
   const buttonStyle = useCallback(
     ({ hovered }: { hovered?: boolean }) => [
@@ -653,26 +699,51 @@ function ShareAiButton({
         desktopMaxWidth={460}
       >
         <View style={styles.shareModalBody}>
-          <Text style={styles.shareModalIntro}>
-            {sentLabel
-              ? t("p2pChat.shareAi.sent", {
-                  label: sentLabel,
-                  defaultValue: "Invite for {{label}} sent. Friend will see it in their bell.",
-                })
-              : t("p2pChat.shareAi.intro", {
-                  label: placeholderAgentLabel,
-                  defaultValue:
-                    "Send your friend an invite to share {{label}}. They'll get a notification and can accept or decline.",
-                })}
-          </Text>
-          {!sentLabel ? (
-            <Text style={styles.shareModalDisclaimer}>
-              {t("p2pChat.shareAi.disclaimer", {
-                defaultValue:
-                  "v1 ships the invitation handshake only; live agent timeline + prompt-injection arrive in v2.",
+          {sentLabel ? (
+            <Text style={styles.shareModalIntro}>
+              {t("p2pChat.shareAi.sent", {
+                label: sentLabel,
+                defaultValue: "Invite for {{label}} sent. Friend will see it in their bell.",
               })}
             </Text>
-          ) : null}
+          ) : (
+            <>
+              <Text style={styles.shareModalIntro}>
+                {t("p2pChat.shareAi.pickIntro", {
+                  defaultValue:
+                    "Pick a local agent to share. Your friend will get a notification and can accept or decline.",
+                })}
+              </Text>
+              {isLoading ? (
+                <ActivityIndicator size="small" color={theme.colors.foregroundMuted} />
+              ) : hasError ? (
+                <Text style={styles.shareModalError}>
+                  {t("p2pChat.shareAi.loadError", {
+                    defaultValue: "Could not load agent list. Try reopening this modal.",
+                  })}
+                </Text>
+              ) : agents.length === 0 ? (
+                <Text style={styles.shareModalDisclaimer}>
+                  {t("p2pChat.shareAi.empty", {
+                    defaultValue:
+                      "No agents yet on this daemon. Create one from the workspace screen first.",
+                  })}
+                </Text>
+              ) : (
+                <View style={styles.sharePickerList}>
+                  {agents.map((agent) => (
+                    <ShareablePickerRow
+                      key={agent.agentId}
+                      agent={agent}
+                      submitting={submittingAgentId === agent.agentId}
+                      anySubmitting={submittingAgentId !== null}
+                      onPick={handlePickAgent}
+                    />
+                  ))}
+                </View>
+              )}
+            </>
+          )}
           {error ? <Text style={styles.shareModalError}>{error}</Text> : null}
           <View style={styles.shareModalActions}>
             <Button variant="secondary" onPress={handleClose}>
@@ -680,17 +751,59 @@ function ShareAiButton({
                 ? t("common.close", { defaultValue: "Close" })
                 : t("common.cancel", { defaultValue: "Cancel" })}
             </Button>
-            {!sentLabel ? (
-              <Button variant="default" onPress={() => void handleSubmit()} disabled={submitting}>
-                {submitting
-                  ? t("p2pChat.shareAi.sending", { defaultValue: "Sending…" })
-                  : t("p2pChat.shareAi.send", { defaultValue: "Send invite" })}
-              </Button>
-            ) : null}
           </View>
         </View>
       </AdaptiveModalSheet>
     </>
+  );
+}
+
+function ShareablePickerRow({
+  agent,
+  submitting,
+  anySubmitting,
+  onPick,
+}: {
+  agent: ShareableAgentOnWire;
+  submitting: boolean;
+  anySubmitting: boolean;
+  onPick: (agent: ShareableAgentOnWire) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const handlePress = useCallback(() => {
+    void onPick(agent);
+  }, [agent, onPick]);
+  const rowStyle = useCallback(
+    ({ pressed, hovered }: { pressed?: boolean; hovered?: boolean }) => [
+      styles.sharePickerRow,
+      hovered && !anySubmitting ? styles.sharePickerRowHovered : null,
+      pressed ? styles.sharePickerRowPressed : null,
+      anySubmitting && !submitting ? styles.sharePickerRowDisabled : null,
+    ],
+    [anySubmitting, submitting],
+  );
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={handlePress}
+      disabled={anySubmitting}
+      style={rowStyle}
+      testID={`ai-share-pick-${agent.agentId}`}
+    >
+      <View style={styles.sharePickerRowText}>
+        <Text style={styles.sharePickerLabel} numberOfLines={1}>
+          {agent.agentLabel}
+        </Text>
+        <Text style={styles.sharePickerMeta} numberOfLines={1}>
+          {agent.lifecycle} · {agent.cwd}
+        </Text>
+      </View>
+      {submitting ? (
+        <Text style={styles.sharePickerStatus}>
+          {t("p2pChat.shareAi.sending", { defaultValue: "Sending…" })}
+        </Text>
+      ) : null}
+    </Pressable>
   );
 }
 

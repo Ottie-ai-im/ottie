@@ -66,11 +66,13 @@ import {
   buildAiShareDeclineEnvelope,
   buildAiShareEndEnvelope,
   buildAiShareInviteEnvelope,
+  buildAiSharePromptEnvelope,
   tryParseAiShareEnvelope,
   verifyAiShareAcceptEnvelope,
   verifyAiShareDeclineEnvelope,
   verifyAiShareEndEnvelope,
   verifyAiShareInviteEnvelope,
+  verifyAiSharePromptEnvelope,
 } from "./ai-share-crypto.js";
 import { AiShareInviteRegistry } from "./ai-share-registry.js";
 import type {
@@ -78,6 +80,7 @@ import type {
   AiShareDeclineEnvelope,
   AiShareEndEnvelope,
   AiShareInviteEnvelope,
+  AiSharePromptEnvelope,
 } from "./ai-share-types.js";
 import { loadPeerList, savePeerList, upsertPeer } from "./peer-store.js";
 import type { StoredPeer, StoredPeerList } from "./peer-types.js";
@@ -144,6 +147,41 @@ export interface SelfDeviceContext {
 }
 
 /**
+ * Phase 4 v2/b — picker-friendly view of a local agent. Just enough
+ * for the owner's invite modal to render a row + send a real
+ * `agentId` / `agentLabel` / `agentProvider` in the invite envelope.
+ */
+export interface ShareableAgentSummary {
+  agentId: string;
+  /** Provider key — `claude` / `codex` / `opencode` etc. */
+  agentProvider: string;
+  /** Display label. Falls back to provider+shortId when no title is set. */
+  agentLabel: string;
+  /** Live state — picker can grey out non-idle/running rows if it wants. */
+  lifecycle: "initializing" | "idle" | "running" | "error" | "closed";
+  /** Current working directory (helps disambiguate same-provider agents). */
+  cwd: string;
+}
+
+/**
+ * Phase 4 v2/b — narrow interface that lets the identity service talk
+ * to AgentManager without depending on the full module. Bootstrap wires
+ * the real implementation; tests that don't need prompt routing leave
+ * it null and `sendAiSharePrompt`/inbound prompt arrival become no-ops
+ * (with a logged warning, not a throw).
+ */
+export interface AiShareAgentBridge {
+  listShareableAgents(): ShareableAgentSummary[];
+  /**
+   * Inject a prompt into the named agent. Owner side calls this on
+   * receipt of a verified `ai-share-prompt`. Returns the response
+   * promise but the dispatcher discards it — v2/d streams the timeline
+   * back, v2/b only logs success/failure.
+   */
+  injectPrompt(input: { agentId: string; body: string }): Promise<void>;
+}
+
+/**
  * Daemon-side wrapper around the on-disk root identity and device list.
  * Constructed once at bootstrap; consumed by WS RPC handlers (Phase 1.g),
  * CLI (Phase 1.d), and the cross-device flows in later phases.
@@ -166,6 +204,14 @@ export class IdentityService {
   private readonly aiShareInvites = new AiShareInviteRegistry({
     logger: undefined,
   });
+  /**
+   * Phase 4 v2/b — late-bound bridge to AgentManager so this service
+   * can list shareable agents (for the friend's invite picker, owner
+   * side) and inject inbound prompts (`ai-share-prompt` envelope ->
+   * `runAgent`). Wired from `bootstrap.ts` after AgentManager is
+   * constructed; null in tests that don't exercise the prompt path.
+   */
+  private aiShareAgentBridge: AiShareAgentBridge | null = null;
   /** Phase 3.b/2d: handle for the periodic inbox poller (clearable). */
   private inboxPollHandle: ReturnType<typeof setInterval> | null = null;
   /** Phase 3.b/2d: tracks an in-flight inbox round so kicks dedupe. */
@@ -1083,6 +1129,25 @@ export class IdentityService {
       this.applyInboundAiShareEnd(input.parsed.envelope, input.peerRootPubKey);
       return;
     }
+    if (input.parsed.kind === "prompt") {
+      // Phase 4 v2/b: friend's prompt arrived on the owner side. Verify
+      // signature against the friend's pubkey, then route to AgentManager
+      // via the bridge. Drop silently (with a logged reason) if no
+      // matching active share — could be a duplicate after end.
+      const verifyOutcome = verifyAiSharePromptEnvelope({
+        envelope: input.parsed.envelope,
+        expectedSenderRootSignPublicKeyB64: input.peerRootPubKey,
+      });
+      if (!verifyOutcome.ok) {
+        this.logger.warn(
+          { reason: verifyOutcome.reason, peerPrefix },
+          "ai_share_prompt_sig_invalid",
+        );
+        return;
+      }
+      this.applyInboundAiSharePrompt(input.parsed.envelope, input.peerRootPubKey);
+      return;
+    }
   }
 
   /**
@@ -1105,6 +1170,99 @@ export class IdentityService {
       { inviteId: envelope.inviteId, peerPrefix: peerRootPubKey.slice(0, 8) },
       "ai_share_invite_ended_by_peer",
     );
+  }
+
+  /**
+   * Phase 4 v2/b — apply an inbound `ai-share-prompt` envelope on the
+   * owner side. Looks up the active outbound entry for `inviteId`,
+   * confirms the sender pubkey matches the peer recorded on the
+   * invite, and routes the body into AgentManager via the late-bound
+   * bridge. v2/b only fires the `runAgent` call and logs success;
+   * the timeline streaming back to the friend lands in v2/d.
+   */
+  private applyInboundAiSharePrompt(envelope: AiSharePromptEnvelope, peerRootPubKey: string): void {
+    const peerPrefix = peerRootPubKey.slice(0, 8);
+    const active = this.aiShareInvites.getActive(envelope.inviteId);
+    if (!active) {
+      this.logger.warn(
+        { inviteId: envelope.inviteId, peerPrefix, promptId: envelope.promptId },
+        "ai_share_prompt_no_active_invite",
+      );
+      return;
+    }
+    if (active.side !== "outbound") {
+      // Friend sent us a prompt for an invite we accepted, not one we
+      // sent — that's the wrong direction in v2/b. (v2/c will allow
+      // the friend's daemon to receive owner→friend prompts, but the
+      // shared-agent UI surface is one-way: friend types prompts,
+      // owner's agent runs them.)
+      this.logger.warn(
+        { inviteId: envelope.inviteId, peerPrefix, side: active.side },
+        "ai_share_prompt_wrong_side",
+      );
+      return;
+    }
+    if (active.peerRootPubKeyB64 !== peerRootPubKey) {
+      this.logger.warn(
+        {
+          inviteId: envelope.inviteId,
+          expectedPrefix: active.peerRootPubKeyB64.slice(0, 8),
+          gotPrefix: peerPrefix,
+        },
+        "ai_share_prompt_peer_mismatch",
+      );
+      return;
+    }
+    const bridge = this.aiShareAgentBridge;
+    if (!bridge) {
+      this.logger.warn(
+        { inviteId: envelope.inviteId, promptId: envelope.promptId },
+        "ai_share_prompt_dropped_no_agent_bridge",
+      );
+      return;
+    }
+    const agentId = active.invite.agentId;
+    this.logger.info(
+      { inviteId: envelope.inviteId, agentId, promptId: envelope.promptId, peerPrefix },
+      "ai_share_prompt_routing_to_agent",
+    );
+    void bridge
+      .injectPrompt({ agentId, body: envelope.body })
+      .then(() => {
+        this.logger.info(
+          { inviteId: envelope.inviteId, agentId, promptId: envelope.promptId },
+          "ai_share_prompt_routed",
+        );
+      })
+      .catch((err: unknown) => {
+        this.logger.error(
+          {
+            err: err instanceof Error ? err.message : String(err),
+            inviteId: envelope.inviteId,
+            agentId,
+            promptId: envelope.promptId,
+          },
+          "ai_share_prompt_route_failed",
+        );
+      });
+  }
+
+  /**
+   * Phase 4 v2/b — bootstrap calls this once after AgentManager is
+   * constructed. After binding, the dispatcher's `prompt` branch can
+   * route inbound prompts and `listShareableAgents` returns real
+   * agent rows.
+   */
+  setAiShareAgentBridge(bridge: AiShareAgentBridge): void {
+    this.aiShareAgentBridge = bridge;
+  }
+
+  /**
+   * Phase 4 v2/b — picker data for the owner's invite modal. Returns
+   * an empty list when no bridge is wired (tests, headless-CLI paths).
+   */
+  listShareableAgents(): ShareableAgentSummary[] {
+    return this.aiShareAgentBridge?.listShareableAgents() ?? [];
   }
 
   /**
@@ -1592,6 +1750,79 @@ export class IdentityService {
     this.aiShareInvites.applyInboundEnd(args);
     this.logger.info({ inviteId, reason }, "ai_share_session_ended");
     return { ok: true, envelope };
+  }
+
+  /**
+   * Phase 4 v2/b — friend side ships a prompt to the owner over the
+   * active share. Builds + signs an `ai-share-prompt` envelope and
+   * sends through the friend-sync session. Returns `{ ok: true,
+   * promptId }` so the caller (UI) can correlate later. We don't add
+   * the prompt to the friend's local chat history here — the shared-
+   * agent surface in v2/c keeps a separate transcript.
+   */
+  sendAiSharePrompt(input: {
+    inviteId: string;
+    body: string;
+  }):
+    | { ok: true; promptId: string; envelope: AiSharePromptEnvelope }
+    | { ok: false; error: string } {
+    if (this.state.kind !== "loaded") {
+      return { ok: false, error: "Cannot send prompt — root identity not loaded" };
+    }
+    const trimmed = input.body.trim();
+    if (trimmed.length === 0) {
+      return { ok: false, error: "Prompt body must not be empty" };
+    }
+    if (trimmed.length > 16384) {
+      return { ok: false, error: "Prompt body exceeds 16 KiB limit" };
+    }
+    const active = this.aiShareInvites.getActive(input.inviteId);
+    if (!active) {
+      return { ok: false, error: "No active share with this id" };
+    }
+    if (active.side !== "inbound") {
+      // Sender direction is friend → owner; only the friend's daemon
+      // (which has the `inbound` entry, because it received the invite)
+      // is allowed to send prompts in v2/b.
+      return { ok: false, error: "Only the share's responder can send prompts" };
+    }
+    const session = this.friendSessions.get(active.peerRootPubKeyB64);
+    if (!session) {
+      return { ok: false, error: "No active friend-sync session with the share owner" };
+    }
+    const promptId = `aip_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const envelope = buildAiSharePromptEnvelope({
+      inviteId: input.inviteId,
+      promptId,
+      senderRootSignPrivateKey: this.state.bundle.signPrivateKey,
+      senderRootPubKeyB64: this.state.bundle.stored.signPublicKeyB64,
+      sentAt: new Date().toISOString(),
+      body: trimmed,
+    });
+    try {
+      const frame = encryptFriendSyncFrame({
+        sharedKey: session.sharedKey,
+        plaintext: JSON.stringify(envelope),
+      });
+      session.socket.send(JSON.stringify(frame));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        { err: message, inviteId: input.inviteId, promptId },
+        "ai_share_prompt_send_failed",
+      );
+      return { ok: false, error: message };
+    }
+    this.logger.info(
+      {
+        inviteId: input.inviteId,
+        promptId,
+        peerPrefix: active.peerRootPubKeyB64.slice(0, 8),
+        bodyChars: trimmed.length,
+      },
+      "ai_share_prompt_sent",
+    );
+    return { ok: true, promptId, envelope };
   }
 
   /**

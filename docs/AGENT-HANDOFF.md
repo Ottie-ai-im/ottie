@@ -347,21 +347,26 @@ The active-share state currently has nothing in it (banner text
 reads "live timeline + prompt-injection ship in v2"). v2 ships
 in five sub-commits, each independently mergeable + testable:
 
-- **v2/a — active state + end-session.** Smallest unit; gives
-  v1 a real lifecycle. Adds `ai-share-end` envelope (either
+- **v2/a — active state + end-session.** ✅ shipped
+  (commit `f7181251`). Adds `ai-share-end` envelope (either
   side can emit), tracks an "active" state on each registry
   entry post-accept, replaces the v1 stub banner with a real
   one ("AI share active with {peer} — End session"), wires
-  the End button. No actual agent streaming yet, but the user
-  can invite → accept → end and the UI reflects each step.
-  Tests for the end-envelope round-trip.
-- **v2/b — owner side: agent picker + prompt receive.**
-  Replace v1's placeholder agent in the invite modal with the
-  daemon's real agent list. Add `ai-share-prompt` envelope
-  (friend → owner). On receive, owner's daemon injects the
-  prompt into the chosen `AgentManager` agent's input
-  channel. No friend-side UI yet — verified via daemon logs
-  - the agent's normal output emerging on the owner side.
+  the End button. Tests cover end-envelope round-trip + the
+  `pending → active → ended` lifecycle.
+- **v2/b — owner side: agent picker + prompt receive.** ✅
+  shipped. Replaces v1's hardcoded `Claude Code` placeholder
+  with `useShareableAgents` (new RPC `chat/p2p/ai-share/
+list-shareable-agents` → `agentManager.listAgents()`). Adds
+  `ai-share-prompt` envelope (friend → owner). On receive,
+  owner's daemon verifies signature + matches active outbound
+  invite + injects body into `AgentManager.runAgent(agentId,
+  body)` via a late-bound bridge. Friend-side `sendAiShare
+Prompt` API is in place + a new RPC `chat/p2p/ai-share/
+send-prompt` ships it. No friend-side UI yet — verified via
+  daemon logs (`ai_share_prompt_routing_to_agent` then the
+  agent's normal output flowing through the owner's existing
+  timeline).
 - **v2/c — friend side: shared agent view + send prompt.**
   New route at `/h/[serverId]/friend/[peerRootPubKey]/share/
 [inviteId]` showing a stripped chat surface. Compose box
