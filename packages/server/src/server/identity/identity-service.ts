@@ -1931,6 +1931,29 @@ export class IdentityService {
       side: "outbound",
       invite,
     });
+    // Phase 4 v3/b: stamp the peer record so the friend's UI can
+    // skip the first-share friction gate next time. Idempotent —
+    // only writes the first time, so the timestamp records when this
+    // peer was first shared with.
+    if (this.peerList && peer.firstAiShareSentAt === undefined) {
+      const updatedPeer: StoredPeer = {
+        ...peer,
+        firstAiShareSentAt: now.toISOString(),
+      };
+      const updated = upsertPeer(this.peerList, updatedPeer);
+      try {
+        savePeerList(this.ottieHome, updated, this.logger);
+        this.peerList = updated;
+      } catch (err) {
+        this.logger.warn(
+          {
+            err: err instanceof Error ? err.message : String(err),
+            peerPrefix: input.peerRootPubKey.slice(0, 8),
+          },
+          "ai_share_first_share_stamp_failed",
+        );
+      }
+    }
     this.logger.info(
       {
         inviteId: invite.inviteId,

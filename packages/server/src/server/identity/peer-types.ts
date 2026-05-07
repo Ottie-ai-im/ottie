@@ -85,6 +85,16 @@ export const PeerSchema = z.object({
    * here in Phase 3.a — the friend list is identity-only at first.
    */
   peerDevices: z.array(z.unknown()).optional(),
+  /**
+   * Phase 4 v3/b — first ai-share-invite this daemon successfully
+   * sent to this peer. Drives the "type the friend's name" friction
+   * gate from §7's Q2: present means the gate has already been
+   * cleared once for this peer, so subsequent shares skip it.
+   * Stamped on `sendAiShareInvite` success (regardless of whether the
+   * friend later accepts or declines — the friction prevents
+   * misroutes, not bad outcomes).
+   */
+  firstAiShareSentAt: z.string().optional(),
 });
 
 export type StoredPeer = z.infer<typeof PeerSchema>;

@@ -132,7 +132,10 @@
       "loadError": "无法加载代理列表,请重新打开此窗口再试。",
       "empty": "此守护进程上还没有代理。请先到工作区页面创建一个。",
       "sent": "已发送 {{label}} 的邀请。对方会在铃铛里看到。",
-      "sending": "发送中…"
+      "sending": "发送中…",
+      "firstShareTitle": "第一次与 {{name}} 分享 AI",
+      "firstShareBody": "分享 AI 后,朋友可以向你的 agent 发送 prompt — 费用算你的,且对当前工作区有完整访问权限。请在下方输入朋友的名字以确认。",
+      "firstShareConfirm": "确认"
     },
     "activeShareBanner": "AI 分享进行中 — {{label}}",
     "activeShareBannerOffline": "AI 分享 — {{label}}(对方离线)",

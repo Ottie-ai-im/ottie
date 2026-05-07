@@ -132,7 +132,10 @@
       "loadError": "Could not load agent list. Try reopening this modal.",
       "empty": "No agents yet on this daemon. Create one from the workspace screen first.",
       "sent": "Invite for {{label}} sent. Friend will see it in their bell.",
-      "sending": "Sending…"
+      "sending": "Sending…",
+      "firstShareTitle": "First time sharing with {{name}}",
+      "firstShareBody": "Sharing AI lets your friend run prompts against your agent — billed to you, with full access to whatever workspace it's open in. Type the friend's name below to confirm.",
+      "firstShareConfirm": "Confirm"
     },
     "activeShareBanner": "AI share active — {{label}}",
     "activeShareBannerOffline": "AI share — {{label}} (peer offline)",

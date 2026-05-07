@@ -505,4 +505,86 @@ describe("Phase 4 v2/e mock-relay e2e — full ai-share lifecycle", () => {
     },
     E2E_TIMEOUT_MS,
   );
+
+  test(
+    "v3/b — first share to a peer stamps firstAiShareSentAt; subsequent shares don't restamp",
+    async () => {
+      const relayEndpoint = mockRelay.endpoint();
+      const aliceBridge = new InProcessAgentBridge([
+        {
+          agentId: "agent-alice-1",
+          agentLabel: "Alice's Claude",
+          agentProvider: "claude",
+          lifecycle: "idle",
+          cwd: "/home/alice/repo",
+        },
+      ]);
+      const { svc: alice } = startService({
+        ottieHome: aliceHome,
+        serverId: "srv_alice_v3b",
+        deviceLabel: "Alice's Mac",
+        relayEndpoint,
+        displayName: "Alice",
+        agentBridge: aliceBridge,
+      });
+      const { svc: bob } = startService({
+        ottieHome: bobHome,
+        serverId: "srv_bob_v3b",
+        deviceLabel: "Bob's Laptop",
+        relayEndpoint,
+        displayName: "Bob",
+      });
+      const offer = alice.generateFriendPairOffer();
+      if (!offer) throw new Error("offer expected");
+      const redeemPromise = bob.redeemFriendPairOffer({
+        deepLinkOrOffer: offer.deepLink,
+        timeoutMs: 10_000,
+      });
+      const candidate = await waitFor(() => alice.listPendingFriendPairCandidates()[0], {
+        label: "Alice friend-pair candidate",
+      });
+      alice.approveFriendPair(candidate.nonceB64);
+      await redeemPromise;
+      await waitFor(() => alice.getFriendSessions().length === 1, {
+        label: "Alice friend-sync up",
+      });
+
+      const bobRoot = bob.requireBundle().stored.signPublicKeyB64;
+      // Before any share: peer has no firstAiShareSentAt stamp.
+      const peerBeforeFirst = alice
+        .getPeerList()
+        .find((p) => p.peerRootSignPublicKeyB64 === bobRoot);
+      expect(peerBeforeFirst?.firstAiShareSentAt).toBeUndefined();
+
+      // First share: stamp lands.
+      const inviteResult = alice.sendAiShareInvite({
+        peerRootPubKey: bobRoot,
+        agentId: "agent-alice-1",
+        agentLabel: "Alice's Claude",
+        agentProvider: "claude",
+      });
+      expect(inviteResult.ok).toBe(true);
+      const peerAfterFirst = alice
+        .getPeerList()
+        .find((p) => p.peerRootSignPublicKeyB64 === bobRoot);
+      expect(peerAfterFirst?.firstAiShareSentAt).toBeDefined();
+      const firstStamp = peerAfterFirst?.firstAiShareSentAt;
+
+      // Second share: stamp is preserved (not bumped to a later
+      // timestamp), so future first-share friction stays skipped.
+      await new Promise((r) => setTimeout(r, 5));
+      const secondInviteResult = alice.sendAiShareInvite({
+        peerRootPubKey: bobRoot,
+        agentId: "agent-alice-1",
+        agentLabel: "Alice's Claude",
+        agentProvider: "claude",
+      });
+      expect(secondInviteResult.ok).toBe(true);
+      const peerAfterSecond = alice
+        .getPeerList()
+        .find((p) => p.peerRootSignPublicKeyB64 === bobRoot);
+      expect(peerAfterSecond?.firstAiShareSentAt).toBe(firstStamp);
+    },
+    E2E_TIMEOUT_MS,
+  );
 });

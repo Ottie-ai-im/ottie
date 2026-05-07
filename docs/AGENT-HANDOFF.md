@@ -418,16 +418,15 @@ send-prompt` ships it. No friend-side UI yet — verified via
   tool_call → friend's buffer fills with 4 entries (no tool
   call) → end → both transcripts on disk audit-clean.
 
-**v3 — multi-daemon picker (§7.5) (limits ✅ shipped; rest pending):**
+**v3 — multi-daemon picker (§7.5) (limits ✅, friction ✅ shipped):**
 
-Two of the four bullets are already shipped (real agent list
-landed in v2/b; limits in v3/a). The remaining two are:
+Three of the four bullets are now shipped (real agent list
+landed in v2/b; limits in v3/a; first-share friction in v3/b).
+The only remaining piece is:
 
 - §7.5's two-step picker when the owner has multiple online
   daemons. Requires peer-sync to broadcast "which device picked
   up" so the other devices' modals dismiss.
-- First-share friction (Q2) — extra confirm gate on the first
-  share to a new friend.
 
 **Done:**
 
@@ -457,6 +456,20 @@ landed in v2/b; limits in v3/a). The remaining two are:
     Back-compat: invites without `limits` still verify, and
     v3+ owner daemons treat absent limits as the defaults at
     enforcement time.
+- **v3/b — first-share friction (Q2).** ✅ shipped. Adds
+  `firstAiShareSentAt` (optional, ISO timestamp) to the
+  on-disk peer record. Stamped after a successful
+  `sendAiShareInvite` (regardless of whether the friend
+  accepts or declines — friction prevents misroutes, not bad
+  outcomes). UI: friend-chat ShareAi modal opens on a
+  "type the friend's name" confirm step when the peer has
+  no stamp yet, requires case-insensitive trim-equal match
+  against `peerDisplayName`, then proceeds to the picker.
+  Subsequent shares to the same peer skip straight to the
+  picker. Mock-relay e2e covers the stamp lifecycle (no
+  stamp pre-share → stamp set after first send → preserved
+  across a second send to the same peer). Bilingual i18n
+  (`p2pChat.shareAi.firstShareTitle/Body/Confirm`).
 
 **Out-of-scope for the whole Phase 4 chain (defer to Phase 5+):**
 

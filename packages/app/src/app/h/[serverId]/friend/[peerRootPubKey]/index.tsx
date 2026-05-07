@@ -121,6 +121,17 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.destructive,
     fontSize: theme.fontSize.sm,
   },
+  shareConfirmInput: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+    backgroundColor: theme.colors.surface1,
+    color: theme.colors.foreground,
+    fontFamily: theme.fontFamily.system,
+    fontSize: theme.fontSize.base,
+  },
   sharePickerList: {
     gap: theme.spacing[1],
   },
@@ -470,7 +481,7 @@ export default function FriendChatRoute() {
           ) : null}
         </View>
         {peerRootPubKey ? (
-          <ShareAiButton serverId={serverId} peerRootPubKey={peerRootPubKey} />
+          <ShareAiButton serverId={serverId} peerRootPubKey={peerRootPubKey} peer={peer} />
         ) : null}
       </View>
 
@@ -610,13 +621,22 @@ function ChatBubble({
  * to fire `chatP2pAiShareInvite` with that agent's real id / label /
  * provider. v3 swaps in §7.5's two-step picker for the multi-daemon
  * case.
+ *
+ * Phase 4 v3/b — first-share friction gate (Q2). When the peer record
+ * has no `firstAiShareSentAt` stamp yet, the modal opens on a
+ * "type the friend's name" confirmation step before showing the
+ * picker. This stops mistaken shares to the wrong friend (Q2 in §7).
+ * The daemon stamps `firstAiShareSentAt` after a successful invite,
+ * so subsequent shares to the same friend skip straight to the picker.
  */
 function ShareAiButton({
   serverId,
   peerRootPubKey,
+  peer,
 }: {
   serverId: string | null;
   peerRootPubKey: string;
+  peer: StoredPeer | null | undefined;
 }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
@@ -625,12 +645,28 @@ function ShareAiButton({
   const [submittingAgentId, setSubmittingAgentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sentLabel, setSentLabel] = useState<string | null>(null);
+  const [confirmPassed, setConfirmPassed] = useState(false);
+  const [confirmInput, setConfirmInput] = useState("");
   const { agents, isLoading, hasError, refetch } = useShareableAgents(serverId);
+
+  const needsFirstShareConfirm = peer != null && peer.firstAiShareSentAt === undefined;
+  // Match against `peerDisplayName`, case-insensitive trimmed. Avoids
+  // tripping on trailing spaces / casing without diluting the friction.
+  const expectedName = peer?.peerDisplayName ?? "";
+  const inputMatches =
+    expectedName.length > 0 &&
+    confirmInput.trim().toLowerCase() === expectedName.trim().toLowerCase();
+  // Skip the gate when the peer record is still loading (peer === undefined)
+  // or already-shared. confirmPassed flips on once the user types the
+  // name, so re-opening the modal in the same render scope keeps it skipped.
+  const showPicker = !needsFirstShareConfirm || confirmPassed;
 
   const handleOpen = useCallback(() => {
     setError(null);
     setSentLabel(null);
     setSubmittingAgentId(null);
+    setConfirmInput("");
+    setConfirmPassed(false);
     setOpen(true);
     // Refetch on open so the picker reflects any agents created since
     // the modal was last dismissed.
@@ -639,6 +675,10 @@ function ShareAiButton({
   const handleClose = useCallback(() => {
     setOpen(false);
   }, []);
+
+  const handleConfirmTyping = useCallback(() => {
+    if (inputMatches) setConfirmPassed(true);
+  }, [inputMatches]);
 
   const handlePickAgent = useCallback(
     async (agent: ShareableAgentOnWire) => {
@@ -706,6 +746,32 @@ function ShareAiButton({
                 defaultValue: "Invite for {{label}} sent. Friend will see it in their bell.",
               })}
             </Text>
+          ) : !showPicker ? (
+            <>
+              <Text style={styles.shareModalIntro}>
+                {t("p2pChat.shareAi.firstShareTitle", {
+                  name: expectedName,
+                  defaultValue: "First time sharing with {{name}}",
+                })}
+              </Text>
+              <Text style={styles.shareModalDisclaimer}>
+                {t("p2pChat.shareAi.firstShareBody", {
+                  name: expectedName,
+                  defaultValue:
+                    "Sharing AI lets your friend run prompts against your agent — billed to you, with full access to whatever workspace it's open in. Type the friend's name below to confirm.",
+                })}
+              </Text>
+              <TextInput
+                value={confirmInput}
+                onChangeText={setConfirmInput}
+                placeholder={expectedName}
+                placeholderTextColor={theme.colors.foregroundMuted}
+                style={styles.shareConfirmInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+                testID="ai-share-first-share-confirm-input"
+              />
+            </>
           ) : (
             <>
               <Text style={styles.shareModalIntro}>
@@ -751,6 +817,16 @@ function ShareAiButton({
                 ? t("common.close", { defaultValue: "Close" })
                 : t("common.cancel", { defaultValue: "Cancel" })}
             </Button>
+            {!sentLabel && !showPicker ? (
+              <Button
+                variant="default"
+                onPress={handleConfirmTyping}
+                disabled={!inputMatches}
+                testID="ai-share-first-share-confirm-button"
+              >
+                {t("p2pChat.shareAi.firstShareConfirm", { defaultValue: "Confirm" })}
+              </Button>
+            ) : null}
           </View>
         </View>
       </AdaptiveModalSheet>
