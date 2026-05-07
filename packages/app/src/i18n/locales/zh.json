@@ -124,6 +124,7 @@
     "send": "发送",
     "sending": "发送中…",
     "sendFailedGeneric": "无法发送消息。",
+    "statusQueued": "已暂存(对方离线)",
     "peerStatus": {
       "active": "正常",
       "blocked": "已屏蔽",

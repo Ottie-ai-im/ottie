@@ -1297,9 +1297,29 @@ create OTTIE_INBOX`). Three HTTP routes added to the
     same-identity devices is the last piece — deferred to a
     follow-up commit since it requires peer-sync schema
     changes. Single-device users (today's testbed: Wendell
-    on Mac, Bob on Mac) work end-to-end with this commit. - ⏳ 3.b/2e — UI delivery status: per-message indicator
-    `sending` → `queued (offline)` → `delivered`. Builds on
-    the same chat row component used for live messages. - Multi-device fan-out caveat: the X25519 keypair is
+    on Mac, Bob on Mac) work end-to-end with this commit. - ✅ 3.b/2e — UI delivery status. The friend-chat screen
+    now renders a small italic "queued (offline)" /
+    "已暂存(对方离线)" badge under outgoing bubbles whose
+    stored `deliveryStatus === "queued"`. Bubbles with
+    `deliveryStatus === "delivered"` (the live-session
+    path) render with no badge — same as before — since
+    the timestamp itself implies "sent". `undefined`
+    (messages persisted before 3.b/2c) also renders no
+    badge, preserving the pre-3.b/2 visual. - Wire shape: `StoredFriendChatMessageOnWireSchema`
+    gains an optional `deliveryStatus` with the same
+    `.optional().catch(undefined)` pattern as the
+    on-disk schema, so old daemons stay parseable on
+    new clients and unknown future enum values don't
+    poison the row. - Bilingual strings live under `p2pChat.statusQueued`
+    (en + zh). - Inbound (peer-authored) bubbles never show a
+    badge: the recipient's local `deliveryStatus`
+    would always be "delivered" (set by the inbox
+    receiver in 3.b/2d) and isn't meaningful to the
+    reader anyway.
+    Phase 3.b/2 is now feature-complete on the daemon,
+    relay, and UI. Multi-device X25519 priv-key fan-out
+    via peer-sync remains the only outstanding piece —
+    tracked separately. - Multi-device fan-out caveat: the X25519 keypair is
     **per-identity** (not per-device). Today only the device
     that minted the identity has the matching private key, so
     only that device can decrypt the inbox. Once peer-sync

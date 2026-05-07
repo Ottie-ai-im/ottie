@@ -124,6 +124,7 @@
     "send": "Send",
     "sending": "Sending…",
     "sendFailedGeneric": "Couldn't send message.",
+    "statusQueued": "queued (offline)",
     "peerStatus": {
       "active": "Active",
       "blocked": "Blocked",

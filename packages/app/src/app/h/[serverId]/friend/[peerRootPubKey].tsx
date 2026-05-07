@@ -119,6 +119,31 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: 2,
     paddingHorizontal: 4,
   },
+  /**
+   * Phase 3.b/2e: row containing the timestamp + delivery-status badge,
+   * shown under outgoing bubbles only. Inbound (peer-authored) messages
+   * never carry a deliveryStatus the local UI should care about — the
+   * remote daemon's status applies to its own send, not the recipient's
+   * read.
+   */
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    paddingHorizontal: 4,
+    gap: theme.spacing[2],
+  },
+  statusQueued: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontStyle: "italic",
+  },
+  statusDelivered: {
+    fontFamily: theme.fontFamily.system,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
   emptyHint: {
     fontFamily: theme.fontFamily.system,
     color: theme.colors.foregroundMuted,
@@ -403,7 +428,16 @@ function ChatBubble({
   entry: StoredFriendChatMessageOnWire;
   peerRootPubKey: string;
 }) {
+  const { t } = useTranslation();
   const isMine = entry.message.authorRootPubKey !== peerRootPubKey;
+  // Phase 3.b/2e: only render a status badge for our own outgoing
+  // messages. The "queued" string is intentionally informational —
+  // recipients see the message regardless of how it was delivered, but
+  // the sender wants to know "did the live session take it, or did it
+  // get parked at the relay for later". Inbound messages never have a
+  // meaningful deliveryStatus from this device's perspective.
+  const showStatus = isMine && entry.deliveryStatus !== undefined;
+  const statusLabel = entry.deliveryStatus === "queued" ? t("p2pChat.statusQueued") : null;
   return (
     <View style={isMine ? styles.bubbleRowOut : styles.bubbleRowIn}>
       <View style={isMine ? styles.bubbleOut : styles.bubbleIn}>
@@ -411,7 +445,14 @@ function ChatBubble({
           {entry.message.body}
         </Text>
       </View>
-      <Text style={styles.timestamp}>{formatTime(entry.message.createdAt)}</Text>
+      {showStatus && statusLabel ? (
+        <View style={styles.metaRow}>
+          <Text style={styles.timestamp}>{formatTime(entry.message.createdAt)}</Text>
+          <Text style={styles.statusQueued}>· {statusLabel}</Text>
+        </View>
+      ) : (
+        <Text style={styles.timestamp}>{formatTime(entry.message.createdAt)}</Text>
+      )}
     </View>
   );
 }

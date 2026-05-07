@@ -519,6 +519,16 @@ const StoredFriendChatMessageOnWireSchema = z.object({
   authorSignatureB64: z.string(),
   persistedAt: z.string(),
   storedSeq: z.number().int().positive(),
+  /**
+   * Phase 3.b/2e: how the sending daemon delivered this message. Optional
+   * + .catch(undefined) so old daemons (3.b/1d-era) continue parsing
+   * cleanly and a future enum value doesn't poison the wire — the UI
+   * renders no badge when undefined, matching existing behavior.
+   */
+  deliveryStatus: z
+    .union([z.literal("delivered"), z.literal("queued")])
+    .optional()
+    .catch(undefined),
 });
 
 export type StoredFriendChatMessageOnWire = z.infer<typeof StoredFriendChatMessageOnWireSchema>;
