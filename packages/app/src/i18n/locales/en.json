@@ -166,6 +166,7 @@
     "statusDelivered": "delivered",
     "statusFailed": "failed: {{error}}",
     "sendPromptFailed": "Couldn't send prompt.",
+    "sendPrompt": "Send",
     "turnStarted": "agent thinking…",
     "turnCompleted": "agent done",
     "agentError": "agent error: {{message}}"

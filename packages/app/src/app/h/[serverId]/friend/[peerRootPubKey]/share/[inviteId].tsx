@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  type NativeSyntheticEvent,
+  type TextInputKeyPressEventData,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Send, X } from "lucide-react-native";
@@ -41,6 +49,15 @@ interface LocalPromptEntry {
   error?: string;
   /** Wire id once the daemon ACKs. Useful for v2/d's reconciliation. */
   promptId?: string;
+  /**
+   * Number of timeline records visible at the moment this prompt was
+   * sent — equals the array index where the agent's first response
+   * event will land. Lets the merge place this local bubble right
+   * before that index so "user said X / agent says Y" appears in the
+   * order events actually happened, even though §7 redactor strips
+   * the `user_message` echo from the friend's view.
+   */
+  sentAtTimelineSize: number;
 }
 
 function resolveParam(raw: string | string[] | undefined): string | null {
@@ -316,7 +333,11 @@ export default function FriendShareInvitePage() {
     const body = draft.trim();
     if (body.length === 0 || !client || !inviteId) return;
     const localId = makeLocalId();
-    setLocalPrompts((prev) => [...prev, { localId, body, status: "sending" }]);
+    const sentAtTimelineSize = timelineRecords.length;
+    setLocalPrompts((prev) => [
+      ...prev,
+      { localId, body, status: "sending", sentAtTimelineSize },
+    ]);
     setSubmitting(true);
     setComposerError(null);
     try {
@@ -351,6 +372,28 @@ export default function FriendShareInvitePage() {
   const handleSendPress = useCallback(() => {
     void handleSendPrompt();
   }, [handleSendPrompt]);
+
+  // Web: Enter sends, Shift+Enter inserts a newline. `isComposing`
+  // skips IME composition so typing pinyin / Chinese characters
+  // doesn't trigger send when the candidate menu's Enter confirms.
+  const handleComposerKeyPress = useCallback(
+    (
+      event: NativeSyntheticEvent<
+        TextInputKeyPressEventData & {
+          shiftKey?: boolean;
+          isComposing?: boolean;
+        }
+      >,
+    ) => {
+      if (event.nativeEvent.key !== "Enter") return;
+      if (event.nativeEvent.shiftKey) return;
+      if (event.nativeEvent.isComposing) return;
+      event.preventDefault();
+      if (submitting || draft.trim().length === 0) return;
+      void handleSendPrompt();
+    },
+    [draft, handleSendPrompt, submitting],
+  );
 
   const handleEndShare = useCallback(async () => {
     if (!client || !inviteId) return;
@@ -501,6 +544,7 @@ export default function FriendShareInvitePage() {
             <TextInput
               value={draft}
               onChangeText={setDraft}
+              onKeyPress={handleComposerKeyPress}
               placeholder={t("aiShare.composerPlaceholder", {
                 defaultValue: "Send a prompt to the shared agent…",
               })}
@@ -514,10 +558,10 @@ export default function FriendShareInvitePage() {
               variant="default"
               onPress={handleSendPress}
               disabled={submitting || draft.trim().length === 0}
+              leftIcon={sendIcon}
+              accessibilityLabel={t("aiShare.sendPrompt", { defaultValue: "Send" })}
               testID="ai-share-composer-send"
-            >
-              {sendIcon}
-            </Button>
+            />
           </View>
         </>
       )}
@@ -536,32 +580,34 @@ type MergedRow =
   | { key: string; kind: "error"; message: string };
 
 /**
- * v2/d merge rule: render local "you sent" rows up to (but not
- * including) the first inbound `user_message` whose `promptId`
- * matches a local row's `promptId`. From that point on, the inbound
- * stream takes over — we trust the owner's redacted timeline, which
- * also serves as confirmation that the agent saw the prompt.
+ * Merge rule: timeline records arrive in monotonic `eventId` order.
+ * Each local prompt was sent at a moment when the timeline had some
+ * highest `eventId = N`; the agent's response to that prompt arrives
+ * later with `eventId > N`. So the local bubble belongs immediately
+ * before the first timeline record whose eventId exceeds the prompt's
+ * `sentAfterEventId`.
  *
- * Specifically: if an inbound `user_message` carries a `promptId` and
- * a local row matches that id, the local row is suppressed (the
- * inbound version is the canonical one). Local rows with no matching
- * inbound echo (still "sending" / failed / network glitch) stay
- * visible so the friend isn't left wondering.
+ * Why not dedupe via inbound `user_message` echo: §7 redactor strips
+ * `user_message` from the friend's stream (the friend already typed
+ * it, no need to round-trip). So we never get an echo to dedupe
+ * against — the local bubble is the only record of what the friend
+ * said, and we just need to place it in the right slot.
  */
 function mergeFriendShareTranscript(
   localPrompts: ReadonlyArray<LocalPromptEntry>,
   timeline: ReadonlyArray<AiShareTimelineRecordOnWire>,
 ): MergedRow[] {
-  const echoedPromptIds = new Set<string>();
-  for (const r of timeline) {
-    if (r.entry.kind === "user_message" && r.entry.promptId) {
-      echoedPromptIds.add(r.entry.promptId);
-    }
-  }
+  // Timeline is already monotonic per owner-side seq when the daemon
+  // returns it; preserve that order. Sort prompts by their captured
+  // "size of timeline at send time" so multi-prompt sessions interleave
+  // correctly: prompt for turn N goes right before the events of turn N.
+  const sortedPrompts = [...localPrompts].sort(
+    (a, b) => a.sentAtTimelineSize - b.sentAtTimelineSize,
+  );
   const out: MergedRow[] = [];
-  // Inbound timeline is monotonic per `eventId` (owner-side seq).
-  // Render it as-is, then append still-unechoed local rows at the end.
-  for (const r of timeline) {
+  let promptIdx = 0;
+
+  function pushTimelineEntry(r: AiShareTimelineRecordOnWire): void {
     const e = r.entry;
     switch (e.kind) {
       case "user_message":
@@ -584,10 +630,26 @@ function mergeFriendShareTranscript(
         break;
     }
   }
-  for (const local of localPrompts) {
-    if (local.promptId && echoedPromptIds.has(local.promptId)) continue;
+
+  function pushLocalPrompt(local: LocalPromptEntry): void {
     out.push({ key: `lp-${local.localId}`, kind: "local-prompt", entry: local });
   }
+
+  for (let i = 0; i < timeline.length; i += 1) {
+    while (
+      promptIdx < sortedPrompts.length &&
+      sortedPrompts[promptIdx]!.sentAtTimelineSize <= i
+    ) {
+      pushLocalPrompt(sortedPrompts[promptIdx]!);
+      promptIdx += 1;
+    }
+    pushTimelineEntry(timeline[i]!);
+  }
+  while (promptIdx < sortedPrompts.length) {
+    pushLocalPrompt(sortedPrompts[promptIdx]!);
+    promptIdx += 1;
+  }
+
   return out;
 }
 

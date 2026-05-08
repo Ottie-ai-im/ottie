@@ -166,6 +166,7 @@
     "statusDelivered": "已送达",
     "statusFailed": "发送失败: {{error}}",
     "sendPromptFailed": "无法发送 prompt。",
+    "sendPrompt": "发送",
     "turnStarted": "agent 思考中…",
     "turnCompleted": "agent 完成",
     "agentError": "agent 错误: {{message}}"
