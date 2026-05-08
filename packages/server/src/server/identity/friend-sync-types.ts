@@ -114,3 +114,25 @@ export const FriendSyncFrameSchema = z.object({
 });
 
 export type FriendSyncFrame = z.infer<typeof FriendSyncFrameSchema>;
+
+/**
+ * Plaintext keepalive frame. Both sides send a `ping` every ~30s and
+ * reply with `pong`. Cloudflare Workers silently close idle WebSockets
+ * after ~5 min, with no observable `close` event on the daemon side —
+ * traffic just stops arriving. Without keepalive, the next outbound
+ * message looks like it was sent successfully but never lands.
+ *
+ * Sent as plaintext (no encryption / no signature). The relay already
+ * sits between us as TLS terminator and is zero-knowledge for the
+ * encrypted data frames; the keepalive carries no secret content. A
+ * tampering attacker on the relay path could at most forge pongs to
+ * mask a dead socket — the worst they achieve is the existing pre-fix
+ * behaviour, so encrypting keepalives buys nothing.
+ */
+export const FriendSyncKeepaliveSchema = z.object({
+  v: z.literal(1),
+  kind: z.literal("friend-sync-keepalive"),
+  type: z.enum(["ping", "pong"]),
+});
+
+export type FriendSyncKeepalive = z.infer<typeof FriendSyncKeepaliveSchema>;

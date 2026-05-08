@@ -2366,6 +2366,8 @@ export class IdentityService {
   listInboundAiShareInvites(): ReadonlyArray<{
     inviteId: string;
     ownerRootPubKeyB64: string;
+    ownerDeviceId: string;
+    agentId: string;
     agentLabel: string;
     agentProvider: string;
     receivedAt: string;
@@ -2375,6 +2377,8 @@ export class IdentityService {
     return this.aiShareInvites.listInboundPending().map((entry) => ({
       inviteId: entry.invite.inviteId,
       ownerRootPubKeyB64: entry.invite.ownerRootPubKeyB64,
+      ownerDeviceId: entry.invite.ownerDeviceId,
+      agentId: entry.invite.agentId,
       agentLabel: entry.invite.agentLabel,
       agentProvider: entry.invite.agentProvider,
       receivedAt: new Date(entry.receivedAtMs).toISOString(),

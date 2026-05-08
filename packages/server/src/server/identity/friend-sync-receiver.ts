@@ -11,6 +11,10 @@ import {
   FriendSyncFrameSchema,
   verifyFriendHello,
 } from "./friend-sync-handshake.js";
+import {
+  createFriendSyncKeepaliveController,
+  type FriendSyncKeepaliveController,
+} from "./friend-sync-keepalive.js";
 import type { StoredPeer } from "./peer-types.js";
 
 /**
@@ -100,6 +104,7 @@ export function createFriendSyncConnectionHandler(
       let peerDeviceId: string | null = null;
       let sharedKeyHandle: import("@ottie/relay/e2ee").SharedKey | null = null;
       let registered = false;
+      let keepalive: FriendSyncKeepaliveController | null = null;
 
       const close = (code: number, reason: string): void => {
         if (phase === "closed") return;
@@ -142,6 +147,7 @@ export function createFriendSyncConnectionHandler(
           return;
         }
         if (phase === "established") {
+          if (keepalive?.tryHandleParsed(parsed)) return;
           handleIncomingFrame(parsed);
         }
       });
@@ -212,6 +218,23 @@ export function createFriendSyncConnectionHandler(
         registered = true;
         phase = "established";
 
+        keepalive = createFriendSyncKeepaliveController({
+          send: (frame) => {
+            try {
+              socket.send(frame);
+            } catch (err) {
+              logger.warn({ err }, "friend_sync_handler_keepalive_send_failed");
+            }
+          },
+          onDead: () => {
+            logger.warn("friend_sync_handler_socket_dead_via_keepalive");
+            close(1011, "keepalive_timeout");
+          },
+          logger,
+          now: deps.now,
+        });
+        keepalive.start();
+
         logger.info(
           {
             peerRootPubKeyPrefix: peerRootPubKey.slice(0, 8),
@@ -276,6 +299,7 @@ export function createFriendSyncConnectionHandler(
 
       socket.on("close", (code, reason) => {
         const wasRegistered = registered;
+        keepalive?.stop();
         if (registered && peerRootPubKey) {
           deps.sessions.remove(peerRootPubKey);
           registered = false;

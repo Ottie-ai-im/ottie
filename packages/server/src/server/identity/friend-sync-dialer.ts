@@ -13,6 +13,10 @@ import {
   FriendSyncFrameSchema,
   verifyFriendHello,
 } from "./friend-sync-handshake.js";
+import {
+  createFriendSyncKeepaliveController,
+  type FriendSyncKeepaliveController,
+} from "./friend-sync-keepalive.js";
 import type { StoredPeer } from "./peer-types.js";
 
 /**
@@ -183,6 +187,7 @@ export class FriendSyncDialer {
     let ourEphPrivKeyB64: string | null = null;
     let sharedKeyHandle: import("@ottie/relay/e2ee").SharedKey | null = null;
     let registered = false;
+    let keepalive: FriendSyncKeepaliveController | null = null;
 
     const handshakeDeadline = setTimeout(() => {
       if (phase === "established" || phase === "closed") return;
@@ -273,12 +278,39 @@ export class FriendSyncDialer {
             clearTimeout(handshakeDeadline);
             const st = this.perPeer.get(peer.peerRootSignPublicKeyB64);
             if (st) st.reconnectAttempts = 0;
+            keepalive = createFriendSyncKeepaliveController({
+              send: (frame) => {
+                try {
+                  socket.send(frame);
+                } catch (err) {
+                  this.log.warn(
+                    { err, peerRootPubKeyPrefix: peer.peerRootSignPublicKeyB64.slice(0, 8) },
+                    "friend_sync_dialer_keepalive_send_failed",
+                  );
+                }
+              },
+              onDead: () => {
+                this.log.warn(
+                  { peerRootPubKeyPrefix: peer.peerRootSignPublicKeyB64.slice(0, 8) },
+                  "friend_sync_dialer_socket_dead_via_keepalive",
+                );
+                try {
+                  socket.close(1011, "keepalive_timeout");
+                } catch {
+                  // ignore
+                }
+              },
+              logger: this.log,
+              now: this.options.now,
+            });
+            keepalive.start();
           },
         });
         return;
       }
 
       if (phase === "established" && sharedKeyHandle) {
+        if (keepalive?.tryHandleParsed(parsed)) return;
         this.handlePostHandshakeFrame({
           parsed,
           peerRootPubKey: peer.peerRootSignPublicKeyB64,
@@ -290,6 +322,7 @@ export class FriendSyncDialer {
 
     socket.on("close", (code, reason) => {
       clearTimeout(handshakeDeadline);
+      keepalive?.stop();
       const wasEstablished = phase === "established";
       phase = "closed";
       if (registered) {

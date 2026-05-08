@@ -19,6 +19,7 @@ import {
 import {
   FriendHelloSchema,
   FriendSyncFrameSchema,
+  FriendSyncKeepaliveSchema,
   friendHelloPayload,
   type FriendHello,
   type FriendSyncFrame,
@@ -203,7 +204,7 @@ export function decryptFriendSyncFrame(args: {
 }
 
 // Re-export schemas for convenience so callers only import this file.
-export { FriendHelloSchema, FriendSyncFrameSchema };
+export { FriendHelloSchema, FriendSyncFrameSchema, FriendSyncKeepaliveSchema };
 
 // ----- internal: base64 / base64url helpers -----------------------------
 

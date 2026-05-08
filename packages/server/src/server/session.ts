@@ -2636,11 +2636,8 @@ export class Session {
         invites: invites.map((i) => ({
           inviteId: i.inviteId,
           ownerRootPubKeyB64: i.ownerRootPubKeyB64,
-          // The OnWire schema requires ownerDeviceId / agentId — for an
-          // inbound list the daemon held them in the registry but we
-          // truncated to the slim DTO. Re-pull is cheap enough.
-          ownerDeviceId: "",
-          agentId: "",
+          ownerDeviceId: i.ownerDeviceId,
+          agentId: i.agentId,
           agentLabel: i.agentLabel,
           agentProvider: i.agentProvider,
           generatedAt: i.receivedAt,
