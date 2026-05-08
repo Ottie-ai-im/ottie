@@ -72,6 +72,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build highlight (dependency for server)
+        run: pnpm --filter @ottie/highlight run build
+
       - name: Build relay (dependency for server tests)
         run: pnpm --filter @ottie/relay run build
 
