@@ -269,7 +269,11 @@ async function runSimulation(): Promise<void> {
 
   const wendellHome = mkdtempSync(path.join(os.tmpdir(), "ottie-aishare-demo-wendell-"));
   const bobHome = mkdtempSync(path.join(os.tmpdir(), "ottie-aishare-demo-bob-"));
+  // DEMO_KEEP=1 keeps the tmp dirs around so you can inspect the on-disk
+  // transcripts after the run. Otherwise they're cleaned up on exit.
+  const keepArtifacts = process.env.DEMO_KEEP === "1";
   const cleanup = (): void => {
+    if (keepArtifacts) return;
     rmSync(wendellHome, { recursive: true, force: true });
     rmSync(bobHome, { recursive: true, force: true });
   };
@@ -581,8 +585,16 @@ async function runSimulation(): Promise<void> {
   console.log(`  • v3/b firstAiShareSentAt 戳在第一次 invite 后落到 peer 记录${COLORS.reset}\n`);
 
   await mockRelay.stop();
-  // eslint-disable-next-line no-console
-  console.log(`${COLORS.dim}清理 tmp dirs...${COLORS.reset}`);
+  if (keepArtifacts) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `${COLORS.bold}已保留产物以便检查:${COLORS.reset}\n` +
+        `${COLORS.dim}  Wendell: ${wendellHome}\n  Bob:     ${bobHome}${COLORS.reset}\n`,
+    );
+  } else {
+    // eslint-disable-next-line no-console
+    console.log(`${COLORS.dim}清理 tmp dirs...${COLORS.reset}`);
+  }
   cleanup();
 }
 
