@@ -90,6 +90,20 @@
       "rules": {
         "max-nested-callbacks": "off"
       }
+    },
+    {
+      "files": ["**/local-services/service-installer.ts"],
+      "rules": {
+        "promise/no-multiple-resolved": "off"
+      }
+    },
+    {
+      "files": ["**/scripts/**", "**/debug-web.js"],
+      "rules": {
+        "complexity": "off",
+        "max-nested-callbacks": "off",
+        "promise/always-return": "off"
+      }
     }
   ]
 }

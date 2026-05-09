@@ -1,4 +1,5 @@
 import "@/styles/unistyles";
+// eslint-disable-next-line import/no-unassigned-import
 import "@/i18n/init";
 import { PortalProvider } from "@gorhom/portal";
 import { QueryClientProvider } from "@tanstack/react-query";

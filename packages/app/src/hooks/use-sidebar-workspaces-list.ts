@@ -217,6 +217,30 @@ export function appendMissingOrderKeys(input: {
   return [...input.currentOrder, ...missingKeys];
 }
 
+function collectAgentsForWorkspace(
+  workspace: SidebarWorkspaceEntry,
+  agents: Map<string, { id: string; title?: string | null; provider: string; cwd?: string | null }>,
+): { id: string; title: string; provider: string }[] {
+  const result: { id: string; title: string; provider: string }[] = [];
+  for (const agent of agents.values()) {
+    if (
+      agent.cwd &&
+      workspace.workspaceDirectory &&
+      agent.cwd.startsWith(workspace.workspaceDirectory)
+    ) {
+      result.push({ id: agent.id, title: agent.title || "Untitled", provider: agent.provider });
+    } else if (
+      agent.cwd &&
+      workspace.projectRootPath &&
+      agent.cwd.startsWith(workspace.projectRootPath) &&
+      workspace.workspaceKind === "checkout"
+    ) {
+      result.push({ id: agent.id, title: agent.title || "Untitled", provider: agent.provider });
+    }
+  }
+  return result;
+}
+
 function toWorkspaceDescriptor(payload: WorkspaceDescriptorPayload): WorkspaceDescriptor {
   return normalizeWorkspaceDescriptor(payload);
 }
@@ -275,35 +299,7 @@ export function useSidebarWorkspacesList(options?: {
       // Group agents by workspaceId (or cwd if workspaceId isn't on the agent, though Agent uses `cwd` to derive workspace placement usually)
       for (const project of projectsWithAgents) {
         for (const workspace of project.workspaces) {
-          const workspaceAgents: { id: string; title: string; provider: string }[] = [];
-          for (const agent of sessionAgents.values()) {
-            // For now we map based on agent.cwd matching workspace.workspaceDirectory or fallback to project placement.
-            // Agents in session store have `cwd`. Workspaces have `workspaceDirectory`.
-            if (
-              agent.cwd &&
-              workspace.workspaceDirectory &&
-              agent.cwd.startsWith(workspace.workspaceDirectory)
-            ) {
-              workspaceAgents.push({
-                id: agent.id,
-                title: agent.title || "Untitled",
-                provider: agent.provider,
-              });
-            } else if (
-              agent.cwd &&
-              workspace.projectRootPath &&
-              agent.cwd.startsWith(workspace.projectRootPath) &&
-              workspace.workspaceKind === "checkout"
-            ) {
-              // Fallback for default workspaces
-              workspaceAgents.push({
-                id: agent.id,
-                title: agent.title || "Untitled",
-                provider: agent.provider,
-              });
-            }
-          }
-          workspace.agents = workspaceAgents;
+          workspace.agents = collectAgentsForWorkspace(workspace, sessionAgents);
         }
       }
     }

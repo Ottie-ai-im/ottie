@@ -416,7 +416,7 @@ export function ContextMenuContent({
     [],
   );
 
-  const sheetBackgroundStyle = useMemo(
+  const _sheetBackgroundStyle = useMemo(
     () => [
       styles.sheetBackground,
       {

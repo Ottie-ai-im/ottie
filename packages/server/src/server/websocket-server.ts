@@ -1279,7 +1279,53 @@ export class VoiceAssistantWebSocketServer {
       }
       return;
     }
+    this.handleInvalidActiveMessage({ ws, parsed, parsedMessage, activeConnection, log });
+  }
 
+  /** Send a validation error response back to the client. */
+  private sendValidationError(
+    ws: WebSocketLike,
+    requestInfo: ReturnType<typeof extractRequestInfoFromUnknownWsInbound>,
+    isUnknownSchema: boolean,
+    errorMessage: string,
+  ): void {
+    if (requestInfo) {
+      this.sendToClient(
+        ws,
+        wrapSessionMessage({
+          type: "rpc_error",
+          payload: {
+            requestId: requestInfo.requestId,
+            requestType: requestInfo.requestType,
+            error: isUnknownSchema ? "Unknown request schema" : "Invalid message",
+            code: isUnknownSchema ? "unknown_schema" : "invalid_message",
+          },
+        }),
+      );
+      return;
+    }
+
+    this.sendToClient(
+      ws,
+      wrapSessionMessage({
+        type: "status",
+        payload: {
+          status: "error",
+          message: `Invalid message: ${errorMessage}`,
+        },
+      }),
+    );
+  }
+
+  /** Handle a validation failure on an already-established (non-pending) connection. */
+  private handleInvalidActiveMessage(args: {
+    ws: WebSocketLike;
+    parsed: unknown;
+    parsedMessage: { success: false; error: { message: string } } & Record<string, unknown>;
+    activeConnection: SessionConnection | undefined;
+    log: pino.Logger;
+  }): void {
+    const { ws, parsed, parsedMessage, activeConnection, log } = args;
     const requestInfo = extractRequestInfoFromUnknownWsInbound(parsed);
 
     const isUnknownSchema =
@@ -1321,33 +1367,7 @@ export class VoiceAssistantWebSocketServer {
       "WS inbound message validation failed",
     );
 
-    if (requestInfo) {
-      this.sendToClient(
-        ws,
-        wrapSessionMessage({
-          type: "rpc_error",
-          payload: {
-            requestId: requestInfo.requestId,
-            requestType: requestInfo.requestType,
-            error: isUnknownSchema ? "Unknown request schema" : "Invalid message",
-            code: isUnknownSchema ? "unknown_schema" : "invalid_message",
-          },
-        }),
-      );
-      return;
-    }
-
-    const errorMessage = `Invalid message: ${parsedMessage.error.message}`;
-    this.sendToClient(
-      ws,
-      wrapSessionMessage({
-        type: "status",
-        payload: {
-          status: "error",
-          message: errorMessage,
-        },
-      }),
-    );
+    this.sendValidationError(ws, requestInfo, isUnknownSchema, parsedMessage.error.message);
   }
 
   private maybeHandleBinaryFrame(params: {

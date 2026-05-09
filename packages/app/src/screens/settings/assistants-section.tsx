@@ -37,6 +37,52 @@ const SPECS: AssistantSpec[] = [
   },
 ];
 
+function AssistantRow({
+  spec,
+  running,
+  url,
+  isFirst,
+  onPress,
+}: {
+  spec: AssistantSpec;
+  running: boolean;
+  url: string | null | undefined;
+  isFirst: boolean;
+  onPress: () => void;
+}) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const rowStyle = useMemo(
+    () => [settingsStyles.row, !isFirst && settingsStyles.rowBorder],
+    [isFirst],
+  );
+  return (
+    <Pressable
+      style={rowStyle}
+      onPress={onPress}
+      accessibilityRole="button"
+      testID={`settings-assistant-row-${spec.id}`}
+    >
+      <View style={settingsStyles.rowContent}>
+        <View style={styles.titleRow}>
+          <Sparkles size={theme.iconSize.sm} color={theme.colors.foreground} />
+          <Text style={settingsStyles.rowTitle}>{spec.label}</Text>
+        </View>
+        <Text style={settingsStyles.rowHint}>{spec.description}</Text>
+        {running && url ? <Text style={styles.urlText}>{url}</Text> : null}
+      </View>
+      <StatusBadge
+        label={
+          running
+            ? t("assistants.settingsSection.installed")
+            : t("assistants.settingsSection.notInstalled")
+        }
+        variant={running ? "success" : "muted"}
+      />
+    </Pressable>
+  );
+}
+
 export interface AssistantsSectionProps {
   serverId: string;
 }
@@ -109,30 +155,14 @@ export function AssistantsSection({ serverId }: AssistantsSectionProps) {
             const status = services.find((s) => s.id === spec.id);
             const running = Boolean(status?.running);
             return (
-              <Pressable
+              <AssistantRow
                 key={spec.id}
-                style={[settingsStyles.row, index !== 0 && settingsStyles.rowBorder]}
+                spec={spec}
+                running={running}
+                url={status?.url}
+                isFirst={index === 0}
                 onPress={handleRowPress}
-                accessibilityRole="button"
-                testID={`settings-assistant-row-${spec.id}`}
-              >
-                <View style={settingsStyles.rowContent}>
-                  <View style={styles.titleRow}>
-                    <Sparkles size={theme.iconSize.sm} color={theme.colors.foreground} />
-                    <Text style={settingsStyles.rowTitle}>{spec.label}</Text>
-                  </View>
-                  <Text style={settingsStyles.rowHint}>{spec.description}</Text>
-                  {running && status?.url ? <Text style={styles.urlText}>{status.url}</Text> : null}
-                </View>
-                <StatusBadge
-                  label={
-                    running
-                      ? t("assistants.settingsSection.installed")
-                      : t("assistants.settingsSection.notInstalled")
-                  }
-                  variant={running ? "success" : "muted"}
-                />
-              </Pressable>
+              />
             );
           })}
         </View>

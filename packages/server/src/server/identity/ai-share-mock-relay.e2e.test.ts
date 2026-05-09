@@ -261,7 +261,7 @@ describe("Phase 4 v2/e mock-relay e2e — full ai-share lifecycle", () => {
       });
 
       const bobRoot = bob.requireBundle().stored.signPublicKeyB64;
-      const aliceRoot = alice.requireBundle().stored.signPublicKeyB64;
+      const _aliceRoot = alice.requireBundle().stored.signPublicKeyB64;
 
       // Alice sends an ai-share invite for her agent.
       const inviteResult = alice.sendAiShareInvite({

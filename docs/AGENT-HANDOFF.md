@@ -498,7 +498,7 @@ appear on every online owner-device per §7.5.1.
   map.
   · `ai-share-intent-resolution`: emitted when any device
   claims the intent. Carries `intentId` + `claimedBy
-    DeviceId`. Other devices flip the registry entry to
+DeviceId`. Other devices flip the registry entry to
   claimed; UI dismisses.
   Both kinds are signed by the source-device's self-device
   Ed25519 privkey, verified at the receiver against the local

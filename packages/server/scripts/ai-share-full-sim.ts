@@ -77,7 +77,9 @@ async function main(): Promise<void> {
     failStep(`alice 没有可分享 agent: ${agents.error ?? "empty"}`);
   }
   const targetAgent = agents.agents[0]!;
-  alice(`agent: ${targetAgent.agentLabel} (${targetAgent.agentProvider}, ${targetAgent.lifecycle})`);
+  alice(
+    `agent: ${targetAgent.agentLabel} (${targetAgent.agentProvider}, ${targetAgent.lifecycle})`,
+  );
   ok("agent picker 数据正常");
 
   step(3, "alice 看 friend list 找 bob");
@@ -85,8 +87,11 @@ async function main(): Promise<void> {
   if (!friends.peers || friends.peers.length === 0) {
     failStep("alice 没有好友 — 配对断了?");
   }
-  const bobPeer = friends.peers.find((p) => p.peerDisplayName?.toLowerCase() === "bob") ?? friends.peers[0]!;
-  alice(`peer: ${bobPeer.peerDisplayName} (root pubkey: ${bobPeer.peerRootSignPublicKeyB64.slice(0, 12)}...)`);
+  const bobPeer =
+    friends.peers.find((p) => p.peerDisplayName?.toLowerCase() === "bob") ?? friends.peers[0]!;
+  alice(
+    `peer: ${bobPeer.peerDisplayName} (root pubkey: ${bobPeer.peerRootSignPublicKeyB64.slice(0, 12)}...)`,
+  );
 
   step(4, "alice 发 invite 给 bob");
   const inviteResult = await aliceClient.chatP2pAiShareInvite({
@@ -102,9 +107,11 @@ async function main(): Promise<void> {
   alice(`已发出 invite: ${inviteId}`);
 
   step(5, "等 bob daemon 收到 invite (peer-sync 通过 friend-sync 通道)");
-  let bobInvite: NonNullable<
-    Awaited<ReturnType<typeof bobClient.chatP2pAiShareListInbound>>["invites"]
-  >[number] | null = null;
+  let bobInvite:
+    | NonNullable<
+        Awaited<ReturnType<typeof bobClient.chatP2pAiShareListInbound>>["invites"]
+      >[number]
+    | null = null;
   for (let i = 0; i < 30; i++) {
     const inbound = await bobClient.chatP2pAiShareListInbound();
     const found = inbound.invites?.find((inv) => inv.inviteId === inviteId);
@@ -125,7 +132,8 @@ async function main(): Promise<void> {
   ok("bob 已接受");
 
   step(7, "等两边都看到 active");
-  let aliceActive = false, bobActive = false;
+  let aliceActive = false,
+    bobActive = false;
   for (let i = 0; i < 30; i++) {
     if (!aliceActive) {
       const a = await aliceClient.chatP2pAiShareListActive();

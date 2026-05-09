@@ -111,6 +111,38 @@ function NotificationRow({
     [client, onActioned, queryClient, serverId],
   );
 
+  const friendPairRowStyle = useCallback(
+    ({ hovered }: { hovered?: boolean }) => [styles.row, hovered ? styles.rowHovered : null],
+    [],
+  );
+
+  const handleAiShareAcceptPress = useCallback(() => {
+    if (item.kind !== "ai-share-invite") return;
+    void handleAiShareAccept(item.payload.invite.inviteId);
+  }, [handleAiShareAccept, item]);
+
+  const handleAiShareDeclinePress = useCallback(() => {
+    if (item.kind !== "ai-share-invite") return;
+    void handleAiShareDecline(item.payload.invite.inviteId);
+  }, [handleAiShareDecline, item]);
+
+  const aiShareAcceptButtonStyle = useCallback(
+    ({ hovered }: { hovered?: boolean }) => [
+      styles.actionButton,
+      styles.actionButtonAccept,
+      hovered ? styles.actionButtonHovered : null,
+    ],
+    [],
+  );
+
+  const aiShareDeclineButtonStyle = useCallback(
+    ({ hovered }: { hovered?: boolean }) => [
+      styles.actionButton,
+      hovered ? styles.actionButtonHovered : null,
+    ],
+    [],
+  );
+
   if (item.kind === "friend-pair-candidate") {
     const candidate = item.payload.candidate;
     const pubKeyShort = candidate.peerRootSignPublicKeyB64.slice(0, 8);
@@ -118,7 +150,7 @@ function NotificationRow({
       <Pressable
         accessibilityRole="button"
         onPress={handleFriendPairPress}
-        style={({ hovered }) => [styles.row, hovered ? styles.rowHovered : null]}
+        style={friendPairRowStyle}
         testID={`notification-row-friend-pair-${candidate.nonceB64.slice(0, 8)}`}
       >
         <View style={styles.iconCircle}>
@@ -176,12 +208,8 @@ function NotificationRow({
           <View style={styles.aiShareActions}>
             <Pressable
               accessibilityRole="button"
-              onPress={() => void handleAiShareAccept(invite.inviteId)}
-              style={({ hovered }) => [
-                styles.actionButton,
-                styles.actionButtonAccept,
-                hovered ? styles.actionButtonHovered : null,
-              ]}
+              onPress={handleAiShareAcceptPress}
+              style={aiShareAcceptButtonStyle}
               testID={`notification-ai-share-accept-${invite.inviteId.slice(0, 8)}`}
             >
               <Text style={styles.actionButtonAcceptText}>
@@ -190,11 +218,8 @@ function NotificationRow({
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              onPress={() => void handleAiShareDecline(invite.inviteId)}
-              style={({ hovered }) => [
-                styles.actionButton,
-                hovered ? styles.actionButtonHovered : null,
-              ]}
+              onPress={handleAiShareDeclinePress}
+              style={aiShareDeclineButtonStyle}
               testID={`notification-ai-share-decline-${invite.inviteId.slice(0, 8)}`}
             >
               <Text style={styles.actionButtonText}>
@@ -245,7 +270,7 @@ function PendingShareIntentRow({
 }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const router = useRouter();
+  const navRouter = useRouter();
   const [isClaiming, setIsClaiming] = useState(false);
 
   const handleClaim = useCallback(async () => {
@@ -259,7 +284,7 @@ function PendingShareIntentRow({
       // Navigate to the friend chat where the v2/b ShareAi modal is
       // surfaced. The user picks the agent there.
       if (serverId) {
-        router.push({
+        navRouter.push({
           pathname: "/h/[serverId]/friend/[peerRootPubKey]",
           params: { serverId, peerRootPubKey: response.peerRootPubKeyB64 },
         });
@@ -271,7 +296,16 @@ function PendingShareIntentRow({
       });
       onActioned();
     }
-  }, [client, intent.intentId, isClaiming, onActioned, queryClient, router, serverId]);
+  }, [client, intent.intentId, isClaiming, navRouter, onActioned, queryClient, serverId]);
+
+  const claimButtonStyle = useCallback(
+    ({ hovered }: { hovered?: boolean }) => [
+      styles.actionButton,
+      styles.actionButtonAccept,
+      hovered ? styles.actionButtonHovered : null,
+    ],
+    [],
+  );
 
   const peerPrefix = intent.peerRootPubKeyB64.slice(0, 8);
   const sourcePrefix = intent.sourceDeviceId.slice(0, 8);
@@ -298,11 +332,7 @@ function PendingShareIntentRow({
             accessibilityRole="button"
             onPress={handleClaim}
             disabled={isClaiming || !client}
-            style={({ hovered }) => [
-              styles.actionButton,
-              styles.actionButtonAccept,
-              hovered ? styles.actionButtonHovered : null,
-            ]}
+            style={claimButtonStyle}
             testID={`notification-ai-share-claim-${peerPrefix}`}
           >
             <Text style={styles.actionButtonAcceptText}>

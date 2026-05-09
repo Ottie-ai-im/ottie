@@ -141,6 +141,32 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function computeScrollHandleVisuals(flags: {
+  isDraggingScrollbar: boolean;
+  isHandleHovered: boolean;
+  isScrollVisible: boolean;
+  isScrollActive: boolean;
+}) {
+  const { isDraggingScrollbar, isHandleHovered, isScrollVisible, isScrollActive } = flags;
+  let handleOpacity: number;
+  if (isDraggingScrollbar) {
+    handleOpacity = SCROLLBAR_HANDLE_OPACITY_DRAGGING;
+  } else if (isHandleHovered) {
+    handleOpacity = SCROLLBAR_HANDLE_OPACITY_HOVERED;
+  } else if (isScrollVisible) {
+    handleOpacity = SCROLLBAR_HANDLE_OPACITY_VISIBLE;
+  } else {
+    handleOpacity = 0;
+  }
+  const handleWidth =
+    isDraggingScrollbar || isHandleHovered
+      ? SCROLLBAR_HANDLE_WIDTH_ACTIVE
+      : SCROLLBAR_HANDLE_WIDTH_IDLE;
+  const handleTravelDurationMs =
+    isDraggingScrollbar || isScrollActive ? 0 : SCROLLBAR_HANDLE_TRAVEL_DURATION_MS;
+  return { handleOpacity, handleWidth, handleTravelDurationMs };
+}
+
 function ensureTerminalScrollbarStyle(): void {
   if (typeof document === "undefined") {
     return;
@@ -600,15 +626,12 @@ export default function TerminalEmulator({
 
   const handleVisible =
     scrollbarGeometry.isVisible && (isDraggingScrollbar || isScrollVisible || isHandleHovered);
-  let handleOpacity: number;
-  if (isDraggingScrollbar) handleOpacity = SCROLLBAR_HANDLE_OPACITY_DRAGGING;
-  else if (isHandleHovered) handleOpacity = SCROLLBAR_HANDLE_OPACITY_HOVERED;
-  else if (isScrollVisible) handleOpacity = SCROLLBAR_HANDLE_OPACITY_VISIBLE;
-  else handleOpacity = 0;
-  const handleWidth =
-    isDraggingScrollbar || isHandleHovered
-      ? SCROLLBAR_HANDLE_WIDTH_ACTIVE
-      : SCROLLBAR_HANDLE_WIDTH_IDLE;
+  const { handleOpacity, handleWidth, handleTravelDurationMs } = computeScrollHandleVisuals({
+    isDraggingScrollbar,
+    isHandleHovered,
+    isScrollVisible,
+    isScrollActive,
+  });
   const thumbRegionOffset = Math.max(
     0,
     scrollbarGeometry.handleOffset - SCROLLBAR_HANDLE_GRAB_VERTICAL_PADDING,
@@ -618,8 +641,6 @@ export default function TerminalEmulator({
     scrollbarGeometry.handleSize + SCROLLBAR_HANDLE_GRAB_VERTICAL_PADDING * 2,
   );
   const handleInsetTop = Math.max(0, (thumbRegionHeight - scrollbarGeometry.handleSize) / 2);
-  const handleTravelDurationMs =
-    isDraggingScrollbar || isScrollActive ? 0 : SCROLLBAR_HANDLE_TRAVEL_DURATION_MS;
   const showTerminalContextMenu = useCallback(() => {
     const showContextMenu = window.ottieDesktop?.menu?.showContextMenu;
     if (typeof showContextMenu !== "function") {

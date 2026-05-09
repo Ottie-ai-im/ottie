@@ -239,6 +239,33 @@ function AttachButtonIcon({
   );
 }
 
+function AttachmentMenuGroupItem({
+  item,
+  onSelectGroup,
+}: {
+  item: AttachmentMenuItem;
+  onSelectGroup: (id: string) => void;
+}) {
+  const { theme } = useUnistyles();
+  const handleSelect = useCallback(() => onSelectGroup(item.id), [onSelectGroup, item.id]);
+  const trailingIcon = useMemo(
+    () => <ChevronRight size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />,
+    [theme.iconSize.sm, theme.colors.foregroundMuted],
+  );
+  return (
+    <DropdownMenuItem
+      testID={`message-input-attachment-menu-group-${item.id}`}
+      disabled={item.disabled}
+      onSelect={handleSelect}
+      leading={item.icon ?? null}
+      trailing={trailingIcon}
+      closeOnSelect={false}
+    >
+      {item.label}
+    </DropdownMenuItem>
+  );
+}
+
 function AttachmentMenuList({ items }: { items: AttachmentMenuItem[] }) {
   const { theme } = useUnistyles();
   const hasNestedItems = useMemo(
@@ -251,6 +278,12 @@ function AttachmentMenuList({ items }: { items: AttachmentMenuItem[] }) {
   useEffect(() => {
     setActiveGroupId(null);
   }, [items]);
+
+  const handleBack = useCallback(() => setActiveGroupId(null), []);
+  const backLeading = useMemo(
+    () => <ChevronLeft size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />,
+    [theme.iconSize.sm, theme.colors.foregroundMuted],
+  );
 
   if (!hasNestedItems) {
     return (
@@ -277,8 +310,8 @@ function AttachmentMenuList({ items }: { items: AttachmentMenuItem[] }) {
       <>
         <DropdownMenuItem
           testID="message-input-attachment-menu-back"
-          onSelect={() => setActiveGroupId(null)}
-          leading={<ChevronLeft size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />}
+          onSelect={handleBack}
+          leading={backLeading}
           closeOnSelect={false}
         >
           {activeGroup?.label ?? ""}
@@ -305,19 +338,7 @@ function AttachmentMenuList({ items }: { items: AttachmentMenuItem[] }) {
         const hasChildren = Array.isArray(item.children) && item.children.length > 0;
         if (hasChildren) {
           return (
-            <DropdownMenuItem
-              key={item.id}
-              testID={`message-input-attachment-menu-group-${item.id}`}
-              disabled={item.disabled}
-              onSelect={() => setActiveGroupId(item.id)}
-              leading={item.icon ?? null}
-              trailing={
-                <ChevronRight size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-              }
-              closeOnSelect={false}
-            >
-              {item.label}
-            </DropdownMenuItem>
+            <AttachmentMenuGroupItem key={item.id} item={item} onSelectGroup={setActiveGroupId} />
           );
         }
         return (
@@ -1458,6 +1479,37 @@ function formatScheduleConfirmLabel(args: {
   return `Send on ${args.dateLabel} at ${args.timeLabel}`;
 }
 
+function PickerItem({
+  label,
+  value: itemValue,
+  isSelected,
+  onSelect,
+}: {
+  label: string;
+  value: number;
+  isSelected: boolean;
+  onSelect: (value: number) => void;
+}) {
+  const handlePress = useCallback(() => onSelect(itemValue), [onSelect, itemValue]);
+  const itemStyle = useMemo(
+    () => [styles.pickerItem, isSelected && styles.pickerItemSelected],
+    [isSelected],
+  );
+  const textStyle = useMemo(
+    () => [styles.pickerItemText, isSelected && styles.pickerItemTextSelected],
+    [isSelected],
+  );
+  return (
+    <Pressable onPress={handlePress} style={itemStyle}>
+      <Text style={textStyle}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const scheduleDropdownContentStyle = { flex: 1, padding: 16, minHeight: 320 } as const;
+const scheduleConfirmArrowStyle = { marginRight: 8 } as const;
+const scheduleFooterStyle = { marginTop: "auto" } as const;
+
 function ScheduleSendButton({
   onSchedule,
   value,
@@ -1497,34 +1549,46 @@ function ScheduleSendButton({
   const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
   const minutes = useMemo(() => [0, 15, 30, 45], []);
 
-  const targetDate = setHours(setMinutes(days[selDayOffset].date, selMinute), selHour);
+  const targetDate = setHours(setMinutes(days[selDayOffset]!.date, selMinute), selHour);
   const isInPast = targetDate.getTime() <= Date.now();
   const canSchedule = value.trim().length > 0 && !disabled && !isInPast;
 
-  if (!onSchedule) return null;
-
-  const handleConfirm = () => {
-    if (!canSchedule) return;
+  const handleConfirm = useCallback(() => {
+    if (!canSchedule || !onSchedule) return;
     onSchedule({ text: value, attachments, cwd }, targetDate.toISOString());
-  };
+  }, [canSchedule, onSchedule, value, attachments, cwd, targetDate]);
 
-  const selectedDateLabel = days[selDayOffset].label;
+  const triggerStyle = useCallback(
+    ({ hovered }: { hovered: boolean; pressed: boolean; open: boolean }) => [
+      styles.scheduleButton,
+      hovered && styles.iconButtonHovered,
+      disabled && styles.buttonDisabled,
+    ],
+    [disabled],
+  );
+
+  const confirmButtonStyle = useCallback(
+    ({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [
+      styles.confirmButtonLargeAction,
+      hovered && { opacity: 0.9 },
+      pressed && { opacity: 0.8 },
+      !canSchedule && styles.buttonDisabled,
+    ],
+    [canSchedule],
+  );
+
+  const selectedDateLabel = days[selDayOffset]!.label;
   const selectedTimeLabel = `${selHour.toString().padStart(2, "0")}:${selMinute.toString().padStart(2, "0")}`;
+
+  if (!onSchedule) return null;
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        disabled={disabled}
-        style={({ hovered }) => [
-          styles.scheduleButton,
-          hovered && styles.iconButtonHovered,
-          disabled && styles.buttonDisabled,
-        ]}
-      >
+      <DropdownMenuTrigger disabled={disabled} style={triggerStyle}>
         <Clock size={20} color={theme.colors.foregroundMuted} />
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="end" width={320}>
-        <View style={{ flex: 1, padding: 16, minHeight: 320 }}>
+        <View style={scheduleDropdownContentStyle}>
           <Text style={styles.scheduleTitle}>
             {t("composer.scheduleTitle", { defaultValue: "Schedule send" })}
           </Text>
@@ -1533,77 +1597,47 @@ function ScheduleSendButton({
             <View style={styles.pickerColumnWrapper}>
               <ScrollView style={styles.pickerColumn} showsVerticalScrollIndicator={false}>
                 {days.map((day, i) => (
-                  <Pressable
-                    key={i}
-                    onPress={() => setSelDayOffset(i)}
-                    style={[styles.pickerItem, selDayOffset === i && styles.pickerItemSelected]}
-                  >
-                    <Text
-                      style={[
-                        styles.pickerItemText,
-                        selDayOffset === i && styles.pickerItemTextSelected,
-                      ]}
-                    >
-                      {day.label}
-                    </Text>
-                  </Pressable>
+                  <PickerItem
+                    key={day.label}
+                    label={day.label}
+                    value={i}
+                    isSelected={selDayOffset === i}
+                    onSelect={setSelDayOffset}
+                  />
                 ))}
               </ScrollView>
             </View>
             <View style={styles.pickerColumnWrapper}>
               <ScrollView style={styles.pickerColumn} showsVerticalScrollIndicator={false}>
                 {hours.map((h) => (
-                  <Pressable
+                  <PickerItem
                     key={h}
-                    onPress={() => setSelHour(h)}
-                    style={[styles.pickerItem, selHour === h && styles.pickerItemSelected]}
-                  >
-                    <Text
-                      style={[
-                        styles.pickerItemText,
-                        selHour === h && styles.pickerItemTextSelected,
-                      ]}
-                    >
-                      {h.toString().padStart(2, "0")}
-                    </Text>
-                  </Pressable>
+                    label={h.toString().padStart(2, "0")}
+                    value={h}
+                    isSelected={selHour === h}
+                    onSelect={setSelHour}
+                  />
                 ))}
               </ScrollView>
             </View>
             <View style={styles.pickerColumnWrapper}>
               <ScrollView style={styles.pickerColumn} showsVerticalScrollIndicator={false}>
                 {minutes.map((m) => (
-                  <Pressable
+                  <PickerItem
                     key={m}
-                    onPress={() => setSelMinute(m)}
-                    style={[styles.pickerItem, selMinute === m && styles.pickerItemSelected]}
-                  >
-                    <Text
-                      style={[
-                        styles.pickerItemText,
-                        selMinute === m && styles.pickerItemTextSelected,
-                      ]}
-                    >
-                      {m.toString().padStart(2, "0")}
-                    </Text>
-                  </Pressable>
+                    label={m.toString().padStart(2, "0")}
+                    value={m}
+                    isSelected={selMinute === m}
+                    onSelect={setSelMinute}
+                  />
                 ))}
               </ScrollView>
             </View>
           </View>
 
-          <View style={{ marginTop: "auto" }}>
-            <Pressable
-              onPress={handleConfirm}
-              disabled={!canSchedule}
-              style={({ hovered, pressed }) => [
-                styles.confirmButtonLargeAction,
-                hovered && { opacity: 0.9 },
-                pressed && { opacity: 0.8 },
-                !canSchedule && styles.buttonDisabled,
-              ]}
-            >
-              <ArrowUp size={16} color="#FFF" style={{ marginRight: 8 }} />
+          <View style={scheduleFooterStyle}>
+            <Pressable onPress={handleConfirm} disabled={!canSchedule} style={confirmButtonStyle}>
+              <ArrowUp size={16} color="#FFF" style={scheduleConfirmArrowStyle} />
               <Text style={styles.confirmButtonLargeActionText}>
                 {formatScheduleConfirmLabel({
                   isInPast,
@@ -1618,6 +1652,85 @@ function ScheduleSendButton({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+interface ComposerOverlayState {
+  isDictatingRef: React.MutableRefObject<boolean>;
+  isRealtimeVoiceForCurrentAgent: boolean;
+  showDictationOverlay: boolean;
+  showRealtimeOverlay: boolean;
+  showOverlay: boolean;
+  overlayAnimatedStyle: ReturnType<typeof useAnimatedStyle>;
+  inputAnimatedStyle: ReturnType<typeof useAnimatedStyle>;
+}
+
+function useComposerOverlayState(args: {
+  voice: { isVoiceModeForAgent: (serverId: string, agentId: string) => boolean } | null | undefined;
+  voiceServerId: string | undefined;
+  voiceAgentId: string | undefined;
+  isDictating: boolean;
+  isDictationProcessing: boolean;
+  dictationStatus: string;
+  sendAfterTranscriptRef: React.MutableRefObject<boolean>;
+}): ComposerOverlayState {
+  const {
+    voice,
+    voiceServerId,
+    voiceAgentId,
+    isDictating,
+    isDictationProcessing,
+    dictationStatus,
+    sendAfterTranscriptRef,
+  } = args;
+
+  const isDictatingRef = useRef(isDictating);
+  useEffect(() => {
+    isDictatingRef.current = isDictating;
+  }, [isDictating]);
+
+  const isRealtimeVoiceForCurrentAgent = computeIsRealtimeVoiceForAgent(
+    voice,
+    voiceServerId,
+    voiceAgentId,
+  );
+  const showDictationOverlay = computeShouldShowDictationOverlay(
+    isDictating,
+    isDictationProcessing,
+    dictationStatus,
+  );
+  const showRealtimeOverlay = isRealtimeVoiceForCurrentAgent;
+  const showOverlay = showDictationOverlay || showRealtimeOverlay;
+
+  useEffect(() => {
+    if (isDictating || isDictationProcessing) {
+      return;
+    }
+    sendAfterTranscriptRef.current = false;
+  }, [dictationStatus, isDictating, isDictationProcessing, sendAfterTranscriptRef]);
+
+  const overlayTransition = useSharedValue(0);
+  useEffect(() => {
+    overlayTransition.value = withTiming(showOverlay ? 1 : 0, { duration: 200 });
+  }, [overlayTransition, showOverlay]);
+
+  const overlayAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: overlayTransition.value,
+    pointerEvents: overlayTransition.value > 0.5 ? "auto" : "none",
+  }));
+
+  const inputAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 1 - overlayTransition.value,
+  }));
+
+  return {
+    isDictatingRef,
+    isRealtimeVoiceForCurrentAgent,
+    showDictationOverlay,
+    showRealtimeOverlay,
+    showOverlay,
+    overlayAnimatedStyle,
+    inputAnimatedStyle,
+  };
 }
 
 export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
@@ -1701,7 +1814,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       getNativeElement: () => (isWeb ? getTextInputNativeElement(textInputRef.current) : null),
     }));
     const inputHeightRef = useRef(MIN_INPUT_HEIGHT);
-    const overlayTransition = useSharedValue(0);
     const sendAfterTranscriptRef = useRef(false);
     const valueRef = useRef(value);
     const serverInfo = useSessionStore(
@@ -1772,7 +1884,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     );
 
     const canConfirmDictation = useCallback(() => client?.isConnected ?? false, [client]);
-    const isConnected = client?.isConnected ?? false;
+    const isConnected = Boolean(client?.isConnected);
     const isDictationStartEnabled = computeIsDictationStartEnabled(
       isReadyForDictation,
       isConnected,
@@ -1802,30 +1914,23 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       enableDuration: true,
     });
 
-    const isDictatingRef = useRef(isDictating);
-    useEffect(() => {
-      isDictatingRef.current = isDictating;
-    }, [isDictating]);
-
-    const isRealtimeVoiceForCurrentAgent = computeIsRealtimeVoiceForAgent(
+    const {
+      isDictatingRef,
+      isRealtimeVoiceForCurrentAgent,
+      showDictationOverlay,
+      showRealtimeOverlay,
+      showOverlay: _showOverlay,
+      overlayAnimatedStyle,
+      inputAnimatedStyle,
+    } = useComposerOverlayState({
       voice,
       voiceServerId,
       voiceAgentId,
-    );
-    const showDictationOverlay = computeShouldShowDictationOverlay(
       isDictating,
       isDictationProcessing,
       dictationStatus,
-    );
-    const showRealtimeOverlay = isRealtimeVoiceForCurrentAgent;
-    const showOverlay = showDictationOverlay || showRealtimeOverlay;
-
-    useEffect(() => {
-      if (isDictating || isDictationProcessing) {
-        return;
-      }
-      sendAfterTranscriptRef.current = false;
-    }, [dictationStatus, isDictating, isDictationProcessing]);
+      sendAfterTranscriptRef,
+    });
 
     const startDictationIfAvailable = useCallback(
       () =>
@@ -1836,24 +1941,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           toast,
           startDictation,
         }),
-      [canStartDictation, dictationUnavailableMessage, startDictation, toast],
+      [canStartDictation, dictationUnavailableMessage, isDictatingRef, startDictation, toast],
     );
-
-    // Animate overlay
-    useEffect(() => {
-      overlayTransition.value = withTiming(showOverlay ? 1 : 0, {
-        duration: 200,
-      });
-    }, [overlayTransition, showOverlay]);
-
-    const overlayAnimatedStyle = useAnimatedStyle(() => ({
-      opacity: overlayTransition.value,
-      pointerEvents: overlayTransition.value > 0.5 ? "auto" : "none",
-    }));
-
-    const inputAnimatedStyle = useAnimatedStyle(() => ({
-      opacity: 1 - overlayTransition.value,
-    }));
 
     const handleVoicePress = useCallback(
       () =>
@@ -2080,11 +2169,22 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       [getWebTextArea, onSelectionChangeCallback],
     );
 
-    const shouldHandleDesktopSubmit = isWeb;
-
-    function handleDesktopKeyPress(event: WebTextInputKeyPressEvent) {
-      if (!shouldHandleDesktopSubmit) return;
-      handleDesktopKeyPressImpl(event, {
+    const handleDesktopKeyPress = useCallback(
+      (event: WebTextInputKeyPressEvent) => {
+        if (!isWeb) return;
+        handleDesktopKeyPressImpl(event, {
+          investigationComponentId,
+          onKeyPressCallback,
+          isAgentRunning,
+          onQueue,
+          isSubmitDisabled,
+          isSubmitLoading,
+          disabled,
+          handleAlternateSendAction,
+          handleDefaultSendAction,
+        });
+      },
+      [
         investigationComponentId,
         onKeyPressCallback,
         isAgentRunning,
@@ -2094,8 +2194,8 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         disabled,
         handleAlternateSendAction,
         handleDefaultSendAction,
-      });
-    }
+      ],
+    );
 
     const { shouldShowSendButton } = computeSendableContent({
       value,
@@ -2120,15 +2220,17 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       isAgentRunning,
     });
 
+    const isVoiceMuted = Boolean(voice?.isMuted);
+
     const voiceButtonAccessibilityLabel = resolveVoiceAccessibilityLabel({
       isRealtimeVoiceForCurrentAgent,
-      isMuted: Boolean(voice?.isMuted),
+      isMuted: isVoiceMuted,
       isDictating,
     });
 
     const voiceTooltipText = resolveVoiceTooltipText({
       isRealtimeVoiceForCurrentAgent,
-      isMuted: Boolean(voice?.isMuted),
+      isMuted: isVoiceMuted,
     });
 
     const handleInputChange = useCallback(
@@ -2158,21 +2260,14 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     }, [onFocusChange]);
 
     const attachButtonStyle = useCallback(
-      ({ hovered }: { hovered?: boolean }) => [
-        styles.attachButton,
-        Boolean(hovered) && styles.iconButtonHovered,
-        (!isConnected || disabled) && styles.buttonDisabled,
-      ],
+      ({ hovered }: { hovered?: boolean }) =>
+        computeAttachButtonStyle({ hovered, isConnected, disabled }),
       [isConnected, disabled],
     );
 
     const voiceButtonStyle = useCallback(
-      ({ hovered }: { hovered?: boolean }) => [
-        styles.voiceButton,
-        Boolean(hovered) && !isDictating && styles.iconButtonHovered,
-        !isDictationStartEnabled && styles.buttonDisabled,
-        isDictating && styles.voiceButtonRecording,
-      ],
+      ({ hovered }: { hovered?: boolean }) =>
+        computeVoiceButtonStyle({ hovered, isDictating, isDictationStartEnabled }),
       [isDictating, isDictationStartEnabled],
     );
 
@@ -2183,6 +2278,23 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const inputWrapperCombinedStyle = useMemo(
       () => [styles.inputWrapper, inputWrapperStyle, inputAnimatedStyle],
       [inputWrapperStyle, inputAnimatedStyle],
+    );
+    const inputWrapperCompactCombinedStyle = useMemo(
+      () => [
+        styles.inputWrapper,
+        styles.inputWrapperCompact,
+        inputWrapperStyle,
+        inputAnimatedStyle,
+      ],
+      [inputWrapperStyle, inputAnimatedStyle],
+    );
+    const textInputScrollWrapperCompactStyle = useMemo(
+      () => [styles.textInputScrollWrapper, styles.textInputScrollWrapperCompact],
+      [],
+    );
+    const sendButtonRowStyle = useMemo(
+      () => ({ flexDirection: "row" as const, alignItems: "center" as const }),
+      [],
     );
     const textInputStyle = useMemo(
       () => [styles.textInput, computeTextInputHeightStyle(inputHeight)],
@@ -2231,34 +2343,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       ],
     );
 
-    const composerBlurFill = isNative ? (
-      <BlurView
-        tint={
-          theme.colorScheme === "dark" ? "systemChromeMaterialDark" : "systemChromeMaterialLight"
-        }
-        intensity={70}
-        experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
-        style={RNStyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-    ) : null;
+    const isEditableInput = !isDictating && !isRealtimeVoiceForCurrentAgent && !disabled;
+    const isAutoFocused = isWeb && autoFocus;
+    const isScrollEnabled = isWeb ? inputHeight >= MAX_INPUT_HEIGHT : true;
+    const isDisabledInput = disabled || isSubmitLoading;
 
     return (
       <View ref={rootRef} style={styles.container} testID="message-input-root">
         <Animated.View
           ref={inputWrapperRef}
-          style={
-            isCompact
-              ? [
-                  styles.inputWrapper,
-                  styles.inputWrapperCompact,
-                  inputWrapperStyle,
-                  inputAnimatedStyle,
-                ]
-              : inputWrapperCombinedStyle
-          }
+          style={isCompact ? inputWrapperCompactCombinedStyle : inputWrapperCombinedStyle}
         >
-          {composerBlurFill}
+          <NativeBlurFill colorScheme={theme.colorScheme} />
           {isCompact ? (
             // Mobile WeChat-style: status row above + [mic] [input] [+ / send].
             // The status row hosts AgentStatusBar (model / mode / thinking /
@@ -2276,7 +2372,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                 >
                   {renderVoiceButtonIcon({})}
                 </Pressable>
-                <View style={[styles.textInputScrollWrapper, styles.textInputScrollWrapperCompact]}>
+                <View style={textInputScrollWrapperCompactStyle}>
                   <TextInput
                     ref={textInputRef}
                     value={value}
@@ -2288,22 +2384,22 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                     onBlur={handleInputBlur}
                     style={textInputStyle}
                     multiline
-                    scrollEnabled={isWeb ? inputHeight >= MAX_INPUT_HEIGHT : true}
+                    scrollEnabled={isScrollEnabled}
                     onContentSizeChange={handleContentSizeChange}
-                    editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
+                    editable={isEditableInput}
                     onSelectionChange={handleSelectionChange}
-                    autoFocus={isWeb && autoFocus}
+                    autoFocus={isAutoFocused}
                   />
                   {inputScrollbar}
                 </View>
                 {hasComposerText && shouldShowSendButton ? (
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <View style={sendButtonRowStyle}>
                     <ScheduleSendButton
                       onSchedule={onSchedule}
                       value={value}
                       attachments={attachments}
                       cwd={cwd}
-                      disabled={disabled || isSubmitLoading}
+                      disabled={isDisabledInput}
                     />
                     <SendButtonTooltip
                       shouldShow={shouldShowSendButton}
@@ -2347,12 +2443,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                   onBlur={handleInputBlur}
                   style={textInputStyle}
                   multiline
-                  scrollEnabled={isWeb ? inputHeight >= MAX_INPUT_HEIGHT : true}
+                  scrollEnabled={isScrollEnabled}
                   onContentSizeChange={handleContentSizeChange}
-                  editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
-                  onKeyPress={shouldHandleDesktopSubmit ? handleDesktopKeyPress : undefined}
+                  editable={isEditableInput}
+                  onKeyPress={handleDesktopKeyPress}
                   onSelectionChange={handleSelectionChange}
-                  autoFocus={isWeb && autoFocus}
+                  autoFocus={isAutoFocused}
                 />
                 {inputScrollbar}
                 <FocusHint
@@ -2395,7 +2491,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
                     value={value}
                     attachments={attachments}
                     cwd={cwd}
-                    disabled={disabled || isSubmitLoading}
+                    disabled={isDisabledInput}
                   />
                   <SendButtonTooltip
                     shouldShow={shouldShowSendButton}
@@ -2441,6 +2537,44 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     );
   },
 );
+
+function NativeBlurFill({ colorScheme }: { colorScheme: string }) {
+  if (!isNative) return null;
+  return (
+    <BlurView
+      tint={colorScheme === "dark" ? "systemChromeMaterialDark" : "systemChromeMaterialLight"}
+      intensity={70}
+      experimentalBlurMethod={Platform.OS === "android" ? "dimezisBlurView" : undefined}
+      style={RNStyleSheet.absoluteFill}
+      pointerEvents="none"
+    />
+  );
+}
+
+function computeAttachButtonStyle(params: {
+  hovered?: boolean;
+  isConnected: boolean;
+  disabled: boolean;
+}) {
+  return [
+    styles.attachButton,
+    Boolean(params.hovered) && styles.iconButtonHovered,
+    (!params.isConnected || params.disabled) && styles.buttonDisabled,
+  ];
+}
+
+function computeVoiceButtonStyle(params: {
+  hovered?: boolean;
+  isDictating: boolean;
+  isDictationStartEnabled: boolean;
+}) {
+  return [
+    styles.voiceButton,
+    Boolean(params.hovered) && !params.isDictating && styles.iconButtonHovered,
+    !params.isDictationStartEnabled && styles.buttonDisabled,
+    params.isDictating && styles.voiceButtonRecording,
+  ];
+}
 
 const styles = StyleSheet.create((theme: Theme) => ({
   container: {

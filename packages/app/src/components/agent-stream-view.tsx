@@ -969,6 +969,15 @@ function ScheduledMessageItem({
   const isZh = i18n.language.startsWith("zh");
   const timeLabel = format(new Date(schedule.runAt), isZh ? "M月d日 HH:mm" : "MMM d, HH:mm");
 
+  const cancelButtonStyle = useCallback(
+    ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      stylesheet.scheduledItemCancel,
+      hovered && { backgroundColor: theme.colors.surface2 },
+      pressed && { opacity: 0.7 },
+    ],
+    [theme.colors.surface2],
+  );
+
   return (
     <Animated.View
       entering={FadeInUp.duration(200)}
@@ -983,15 +992,7 @@ function ScheduledMessageItem({
             {timeLabel}
           </Text>
         </View>
-        <Pressable
-          onPress={handleCancel}
-          disabled={isDeleting}
-          style={({ hovered, pressed }) => [
-            stylesheet.scheduledItemCancel,
-            hovered && { backgroundColor: theme.colors.surface2 },
-            pressed && { opacity: 0.7 },
-          ]}
-        >
+        <Pressable onPress={handleCancel} disabled={isDeleting} style={cancelButtonStyle}>
           {isDeleting ? (
             <ActivityIndicator size="small" color={theme.colors.foregroundMuted} />
           ) : (

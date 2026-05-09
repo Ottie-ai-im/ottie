@@ -839,7 +839,7 @@ function ComposerCancelButton({
 }: ComposerCancelButtonProps) {
   const { t } = useTranslation();
   const accessibilityLabel = isCancellingAgent ? "Canceling agent" : "Stop agent";
-  const cancelLoaderSize = Math.round(buttonIconSize * 1.6);
+  const _cancelLoaderSize = Math.round(buttonIconSize * 1.6);
   const icon = isCancellingAgent ? (
     <ActivityIndicator size="small" color="white" />
   ) : (

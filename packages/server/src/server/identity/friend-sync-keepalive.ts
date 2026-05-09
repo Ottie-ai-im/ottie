@@ -85,9 +85,7 @@ export function createFriendSyncKeepaliveController(
       return;
     }
     try {
-      options.send(
-        JSON.stringify({ v: 1, kind: "friend-sync-keepalive", type: "ping" }),
-      );
+      options.send(JSON.stringify({ v: 1, kind: "friend-sync-keepalive", type: "ping" }));
     } catch (err) {
       options.logger.warn({ err }, "friend_sync_keepalive_ping_send_failed");
     }
@@ -111,9 +109,7 @@ export function createFriendSyncKeepaliveController(
       if (!validated.success) return false;
       if (validated.data.type === "ping") {
         try {
-          options.send(
-            JSON.stringify({ v: 1, kind: "friend-sync-keepalive", type: "pong" }),
-          );
+          options.send(JSON.stringify({ v: 1, kind: "friend-sync-keepalive", type: "pong" }));
         } catch (err) {
           options.logger.warn({ err }, "friend_sync_keepalive_pong_send_failed");
         }

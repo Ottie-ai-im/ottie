@@ -21,7 +21,7 @@ import {
   BottomSheetTextInput,
   BottomSheetBackgroundProps,
 } from "@gorhom/bottom-sheet";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { createAnimatedComponent, FadeIn, FadeOut } from "react-native-reanimated";
 import { Check, File, Folder, Search } from "lucide-react-native";
 import {
   flip,
@@ -46,7 +46,7 @@ import {
 } from "./isolated-bottom-sheet-modal";
 
 const IS_WEB = isWeb;
-const AnimatedGlassSurface = Animated.createAnimatedComponent(GlassSurface);
+const AnimatedGlassSurface = createAnimatedComponent(GlassSurface);
 
 export type ComboboxOption = ComboboxOptionModel;
 
@@ -984,7 +984,7 @@ function MobileComboboxBody(props: MobileBodyProps): ReactElement {
       ) : null}
       {IS_WEB ? (
         <ScrollView
-          style={{ flex: 1 }}
+          style={styles.comboboxScrollView}
           contentContainerStyle={styles.comboboxScrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -1614,6 +1614,9 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing[8],
     paddingHorizontal: theme.spacing[2],
     paddingTop: theme.spacing[1],
+  },
+  comboboxScrollView: {
+    flex: 1,
   },
   desktopOverlay: {
     flex: 1,

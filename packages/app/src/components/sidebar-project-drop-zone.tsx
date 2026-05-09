@@ -36,6 +36,7 @@ export function SidebarProjectDropZone({
   });
 
   const style = useMemo(() => [styles.container, isOver && styles.containerOver], [isOver]);
+  const textStyle = useMemo(() => [styles.text, isOver && styles.textOver], [isOver]);
 
   if (!isDraggingProvider || !isWeb) return null;
 
@@ -48,9 +49,7 @@ export function SidebarProjectDropZone({
         size={16}
         color={isOver ? theme.colors.palette.blue[500] : theme.colors.foregroundMuted}
       />
-      <Text style={[styles.text, isOver && styles.textOver]}>
-        Drop AI here to create a new task
-      </Text>
+      <Text style={textStyle}>Drop AI here to create a new task</Text>
     </View>
   );
 }

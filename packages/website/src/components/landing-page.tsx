@@ -7,6 +7,8 @@ interface LandingPageProps {
   [key: string]: unknown;
 }
 
+const landingPageStyle = { padding: 32 };
+
 export function LandingPage(_props: LandingPageProps): React.ReactElement {
-  return <div style={{ padding: 32 }}>TODO: Ottie</div>;
+  return <div style={landingPageStyle}>TODO: Ottie</div>;
 }

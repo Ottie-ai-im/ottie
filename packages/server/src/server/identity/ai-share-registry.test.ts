@@ -77,7 +77,7 @@ describe("AiShareInviteRegistry — Phase 4 v2/a active-state lifecycle", () => 
 
   test("inbound: pending → active on accept → ended on peer end", () => {
     const owner = makeIdentity();
-    const responder = makeIdentity();
+    const _responder = makeIdentity();
     const reg = new AiShareInviteRegistry();
     const invite = makeInvite(owner.privKey, owner.pubB64);
 

@@ -89,6 +89,16 @@ function shouldExcludeFile(absPath: string, rootDir: string, excludes: string[])
 }
 
 function* walkScanFiles(dir: string, rootDir: string, excludes: string[]): Generator<string> {
+  let dirStat;
+  try {
+    dirStat = statSync(dir);
+  } catch {
+    return;
+  }
+  if (dirStat.isFile()) {
+    yield dir;
+    return;
+  }
   const entries = readdirSync(dir);
   for (const name of entries) {
     if (DIR_BLOCKLIST.has(name)) continue;

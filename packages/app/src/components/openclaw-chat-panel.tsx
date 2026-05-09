@@ -28,6 +28,77 @@ export interface OpenclawChatPanelProps {
   serverId: string | null;
 }
 
+function AgentChip({
+  chip,
+  active,
+  onSelect,
+}: {
+  chip: { id: string | null; label: string };
+  active: boolean;
+  onSelect: (id: string | null) => void;
+}) {
+  const chipStyle = useMemo(
+    () => [styles.agentChip, active ? styles.agentChipActive : null],
+    [active],
+  );
+  const textStyle = useMemo(
+    () => [styles.agentChipText, active ? styles.agentChipTextActive : null],
+    [active],
+  );
+  const accessibilityState = useMemo(() => ({ selected: active }), [active]);
+  const handlePress = useCallback(() => onSelect(chip.id), [onSelect, chip.id]);
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={chipStyle}
+      accessibilityRole="button"
+      accessibilityState={accessibilityState}
+    >
+      <Text style={textStyle}>{chip.label}</Text>
+    </Pressable>
+  );
+}
+
+function PendingBubble({ text }: { text: string }) {
+  const pendingBubbleStyle = useMemo(() => [styles.bubble, styles.bubbleAssistant], []);
+  const pendingTextStyle = useMemo(() => [styles.bubbleText, styles.bubbleTextMuted], []);
+  return (
+    <View style={pendingBubbleStyle}>
+      <Text style={pendingTextStyle}>{text}</Text>
+    </View>
+  );
+}
+
+function ChatBubble({ turn }: { turn: OpenclawTurn }) {
+  let roleStyle;
+  if (turn.role === "user") {
+    roleStyle = styles.bubbleUser;
+  } else if (turn.role === "error") {
+    roleStyle = styles.bubbleError;
+  } else {
+    roleStyle = styles.bubbleAssistant;
+  }
+
+  const bubbleStyle = useMemo(() => [styles.bubble, roleStyle], [roleStyle]);
+  const textStyle = useMemo(
+    () => [
+      styles.bubbleText,
+      turn.role === "user" ? styles.bubbleTextUser : null,
+      turn.role === "error" ? styles.bubbleTextError : null,
+    ],
+    [turn.role],
+  );
+
+  return (
+    <View style={bubbleStyle}>
+      <Text style={textStyle} selectable>
+        {turn.text}
+      </Text>
+    </View>
+  );
+}
+
 /**
  * Native Ottie chat panel for OpenClaw. Differs from the trivial
  * request-response version in two ways:
@@ -136,6 +207,7 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
           text: result.reply || "(empty reply)",
           ts: Date.now(),
         });
+        return undefined;
       })
       .catch((err: unknown) => {
         const raw = err instanceof Error ? err.message : String(err);
@@ -187,6 +259,12 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
     return items;
   }, [agents, t]);
 
+  const isSendDisabled = isPending || draft.trim().length === 0;
+  const sendButtonStyle = useMemo(
+    () => [styles.sendButton, isSendDisabled ? styles.sendButtonDisabled : null],
+    [isSendDisabled],
+  );
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -200,22 +278,14 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.agentBarContent}
           >
-            {agentChips.map((chip) => {
-              const active = chip.id === agentId;
-              return (
-                <Pressable
-                  key={chip.id ?? "default"}
-                  onPress={() => setAgentId(chip.id)}
-                  style={[styles.agentChip, active ? styles.agentChipActive : null]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text style={[styles.agentChipText, active ? styles.agentChipTextActive : null]}>
-                    {chip.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {agentChips.map((chip) => (
+              <AgentChip
+                key={chip.id ?? "default"}
+                chip={chip}
+                active={chip.id === agentId}
+                onSelect={setAgentId}
+              />
+            ))}
           </ScrollView>
         </View>
       ) : null}
@@ -265,36 +335,9 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
           </View>
         ) : null}
         {filteredTurns.map((turn) => (
-          <View
-            key={turn.id}
-            style={[
-              styles.bubble,
-              turn.role === "user"
-                ? styles.bubbleUser
-                : turn.role === "error"
-                  ? styles.bubbleError
-                  : styles.bubbleAssistant,
-            ]}
-          >
-            <Text
-              style={[
-                styles.bubbleText,
-                turn.role === "user" ? styles.bubbleTextUser : null,
-                turn.role === "error" ? styles.bubbleTextError : null,
-              ]}
-              selectable
-            >
-              {turn.text}
-            </Text>
-          </View>
+          <ChatBubble key={turn.id} turn={turn} />
         ))}
-        {isPending && !searchOpen ? (
-          <View style={[styles.bubble, styles.bubbleAssistant]}>
-            <Text style={[styles.bubbleText, styles.bubbleTextMuted]}>
-              {t("openclaw.thinking")}
-            </Text>
-          </View>
-        ) : null}
+        {isPending && !searchOpen ? <PendingBubble text={t("openclaw.thinking")} /> : null}
       </ScrollView>
 
       <View style={styles.composer}>
@@ -313,11 +356,8 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
         />
         <Pressable
           onPress={onSend}
-          disabled={isPending || draft.trim().length === 0}
-          style={[
-            styles.sendButton,
-            isPending || draft.trim().length === 0 ? styles.sendButtonDisabled : null,
-          ]}
+          disabled={isSendDisabled}
+          style={sendButtonStyle}
           accessibilityRole="button"
           accessibilityLabel={t("openclaw.send")}
           testID="openclaw-composer-send"

@@ -6,6 +6,7 @@ import { Check } from "lucide-react-native";
 
 import { Button } from "@/components/ui/button";
 import { useMobileNotificationPermissions } from "@/hooks/use-mobile-notification-permissions";
+import type { MobileNotificationPermissionState } from "@/hooks/use-mobile-notification-permissions";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
 import { SettingsSection } from "@/screens/settings/settings-section";
@@ -86,6 +87,29 @@ export function MobilePermissionsSection({
     [theme.colors.destructive],
   );
 
+  const rowWithBorderStyle = useMemo(
+    () => [settingsStyles.row, settingsStyles.rowBorder],
+    // settingsStyles entries are static objects so this memo never re-runs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const handleRequestPermission = useCallback(() => {
+    void requestPermission();
+  }, [requestPermission]);
+
+  const handleOpenSystemSettings = useCallback(() => {
+    void openSystemSettings();
+  }, [openSystemSettings]);
+
+  const handleRefresh = useCallback(() => {
+    void refresh();
+  }, [refresh]);
+
+  const handleSendLocalTest = useCallback(() => {
+    void sendLocalTest();
+  }, [sendLocalTest]);
+
   if (!isNative) return null;
 
   const isGranted = state === "granted";
@@ -95,65 +119,23 @@ export function MobilePermissionsSection({
   return (
     <SettingsSection title={t("mobilePermissions.title", { defaultValue: "Notifications" })}>
       <View style={settingsStyles.card}>
-        <View style={settingsStyles.row}>
-          <View style={settingsStyles.rowContent}>
-            <Text style={settingsStyles.rowTitle}>
-              {t("mobilePermissions.notifications", { defaultValue: "Push notifications" })}
-            </Text>
-            <Text style={styles.subtitle}>
-              {state === "granted"
-                ? t("mobilePermissions.statusGranted", {
-                    defaultValue: "Granted. Tap a test button below to confirm delivery works.",
-                  })
-                : state === "denied" && !canAskAgain
-                  ? t("mobilePermissions.statusDeniedSystem", {
-                      defaultValue:
-                        "Denied. Tap Open settings to re-enable notifications in the OS.",
-                    })
-                  : state === "denied"
-                    ? t("mobilePermissions.statusDenied", {
-                        defaultValue: "Denied. Tap Request to ask again.",
-                      })
-                    : t("mobilePermissions.statusUndetermined", {
-                        defaultValue:
-                          "Not yet decided. Tap Request to grant Ottie permission to notify you.",
-                      })}
-            </Text>
-          </View>
-          <View style={styles.actions}>
-            {isGranted ? (
-              <View style={styles.statusPill}>
-                <Check size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-                <Text style={styles.statusText}>
-                  {t("mobilePermissions.granted", { defaultValue: "Granted" })}
-                </Text>
-              </View>
-            ) : null}
-            {showRequest ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onPress={() => void requestPermission()}
-                disabled={isRequesting || isLoading}
-              >
-                {isRequesting
-                  ? t("mobilePermissions.requesting", { defaultValue: "Requesting…" })
-                  : t("mobilePermissions.request", { defaultValue: "Request" })}
-              </Button>
-            ) : null}
-            {showOpenSettings ? (
-              <Button variant="outline" size="sm" onPress={() => void openSystemSettings()}>
-                {t("mobilePermissions.openSettings", { defaultValue: "Open settings" })}
-              </Button>
-            ) : null}
-            <Button variant="ghost" size="sm" onPress={() => void refresh()} disabled={isLoading}>
-              {t("mobilePermissions.refresh", { defaultValue: "Refresh" })}
-            </Button>
-          </View>
-        </View>
+        <PermissionStatusRow
+          t={t}
+          theme={theme}
+          state={state}
+          canAskAgain={canAskAgain}
+          isGranted={isGranted}
+          showRequest={showRequest}
+          showOpenSettings={showOpenSettings}
+          isRequesting={isRequesting}
+          isLoading={isLoading}
+          onRequestPermission={handleRequestPermission}
+          onOpenSystemSettings={handleOpenSystemSettings}
+          onRefresh={handleRefresh}
+        />
 
         {isGranted ? (
-          <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+          <View style={rowWithBorderStyle}>
             <View style={settingsStyles.rowContent}>
               <Text style={settingsStyles.rowTitle}>
                 {t("mobilePermissions.localTestTitle", {
@@ -170,7 +152,7 @@ export function MobilePermissionsSection({
               <Button
                 variant="outline"
                 size="sm"
-                onPress={() => void sendLocalTest()}
+                onPress={handleSendLocalTest}
                 disabled={isSendingLocalTest}
               >
                 {isSendingLocalTest
@@ -182,7 +164,7 @@ export function MobilePermissionsSection({
         ) : null}
 
         {isGranted ? (
-          <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+          <View style={rowWithBorderStyle}>
             <View style={settingsStyles.rowContent}>
               <Text style={settingsStyles.rowTitle}>
                 {t("mobilePermissions.daemonTestTitle", {
@@ -221,6 +203,94 @@ export function MobilePermissionsSection({
         {daemonTestError ? <Text style={errorTextStyle}>{daemonTestError}</Text> : null}
       </View>
     </SettingsSection>
+  );
+}
+
+function PermissionStatusRow({
+  t,
+  theme,
+  state,
+  canAskAgain,
+  isGranted,
+  showRequest,
+  showOpenSettings,
+  isRequesting,
+  isLoading,
+  onRequestPermission,
+  onOpenSystemSettings,
+  onRefresh,
+}: {
+  t: ReturnType<typeof useTranslation>["t"];
+  theme: ReturnType<typeof useUnistyles>["theme"];
+  state: MobileNotificationPermissionState;
+  canAskAgain: boolean;
+  isGranted: boolean;
+  showRequest: boolean;
+  showOpenSettings: boolean;
+  isRequesting: boolean;
+  isLoading: boolean;
+  onRequestPermission: () => void;
+  onOpenSystemSettings: () => void;
+  onRefresh: () => void;
+}) {
+  let statusText: string;
+  if (state === "granted") {
+    statusText = t("mobilePermissions.statusGranted", {
+      defaultValue: "Granted. Tap a test button below to confirm delivery works.",
+    });
+  } else if (state === "denied" && !canAskAgain) {
+    statusText = t("mobilePermissions.statusDeniedSystem", {
+      defaultValue: "Denied. Tap Open settings to re-enable notifications in the OS.",
+    });
+  } else if (state === "denied") {
+    statusText = t("mobilePermissions.statusDenied", {
+      defaultValue: "Denied. Tap Request to ask again.",
+    });
+  } else {
+    statusText = t("mobilePermissions.statusUndetermined", {
+      defaultValue: "Not yet decided. Tap Request to grant Ottie permission to notify you.",
+    });
+  }
+
+  return (
+    <View style={settingsStyles.row}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>
+          {t("mobilePermissions.notifications", { defaultValue: "Push notifications" })}
+        </Text>
+        <Text style={styles.subtitle}>{statusText}</Text>
+      </View>
+      <View style={styles.actions}>
+        {isGranted ? (
+          <View style={styles.statusPill}>
+            <Check size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+            <Text style={styles.statusText}>
+              {t("mobilePermissions.granted", { defaultValue: "Granted" })}
+            </Text>
+          </View>
+        ) : null}
+        {showRequest ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={onRequestPermission}
+            disabled={isRequesting || isLoading}
+          >
+            {isRequesting
+              ? t("mobilePermissions.requesting", { defaultValue: "Requesting…" })
+              : t("mobilePermissions.request", { defaultValue: "Request" })}
+          </Button>
+        ) : null}
+        {showOpenSettings ? (
+          <Button variant="outline" size="sm" onPress={onOpenSystemSettings}>
+            {t("mobilePermissions.openSettings", { defaultValue: "Open settings" })}
+          </Button>
+        ) : null}
+        <Button variant="ghost" size="sm" onPress={onRefresh} disabled={isLoading}>
+          {t("mobilePermissions.refresh", { defaultValue: "Refresh" })}
+        </Button>
+      </View>
+    </View>
   );
 }
 

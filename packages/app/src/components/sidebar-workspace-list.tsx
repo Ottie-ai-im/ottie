@@ -60,7 +60,6 @@ import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { DraggableList, type DraggableRenderItemInfo } from "./draggable-list";
 import { useDroppable, useDndContext } from "@dnd-kit/core";
 import { SidebarProjectDropZone } from "./sidebar-project-drop-zone";
-import { getProviderIcon } from "./provider-icons";
 import type { DraggableListDragHandleProps } from "./draggable-list.types";
 import { getHostRuntimeStore, isHostRuntimeConnected } from "@/runtime/host-runtime";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -1270,8 +1269,8 @@ function ProjectHeaderRow({
   const unreadCount = useProjectUnreadCount(serverId ?? null, workspaceIdsForActivity);
   const projectAgentIds = useMemo(() => {
     const ids: string[] = [];
-    for (const workspace of project.workspaces) {
-      for (const agent of workspace.agents) {
+    for (const ws of project.workspaces) {
+      for (const agent of ws.agents) {
         ids.push(agent.id);
       }
     }
@@ -1332,30 +1331,30 @@ function ProjectHeaderRow({
   // <div role=... we control>; the activator stays keyboard-accessible via
   // tabIndex + listeners.
   const dragAttributes = stripDragHandleButtonRole(dragHandleProps?.attributes);
-
-  if (menuController) {
-    return (
-      <View
-        {...dragAttributes}
-        {...dragHandleProps?.listeners}
-        ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
-        onPointerEnter={isWeb ? handlePointerEnter : undefined}
-        onPointerLeave={isWeb ? handlePointerLeave : undefined}
-      >
-        <ContextMenuTrigger
-          enabledOnMobile={false}
-          style={projectRowStyle}
-          onPressIn={interaction.handlePressIn}
-          onTouchMove={interaction.handleTouchMove}
-          onPressOut={interaction.handlePressOut}
-          onPress={handlePress}
-          testID={`sidebar-project-row-${project.projectKey}`}
-        >
-          {rowChildren}
-        </ContextMenuTrigger>
-      </View>
-    );
-  }
+  const innerRow = menuController ? (
+    <ContextMenuTrigger
+      enabledOnMobile={false}
+      style={projectRowStyle}
+      onPressIn={interaction.handlePressIn}
+      onTouchMove={interaction.handleTouchMove}
+      onPressOut={interaction.handlePressOut}
+      onPress={handlePress}
+      testID={`sidebar-project-row-${project.projectKey}`}
+    >
+      {rowChildren}
+    </ContextMenuTrigger>
+  ) : (
+    <Pressable
+      style={projectRowStyle}
+      onPressIn={interaction.handlePressIn}
+      onTouchMove={interaction.handleTouchMove}
+      onPressOut={interaction.handlePressOut}
+      onPress={handlePress}
+      testID={`sidebar-project-row-${project.projectKey}`}
+    >
+      {rowChildren}
+    </Pressable>
+  );
 
   return (
     <View
@@ -1365,16 +1364,7 @@ function ProjectHeaderRow({
       onPointerEnter={isWeb ? handlePointerEnter : undefined}
       onPointerLeave={isWeb ? handlePointerLeave : undefined}
     >
-      <Pressable
-        style={projectRowStyle}
-        onPressIn={interaction.handlePressIn}
-        onTouchMove={interaction.handleTouchMove}
-        onPressOut={interaction.handlePressOut}
-        onPress={handlePress}
-        testID={`sidebar-project-row-${project.projectKey}`}
-      >
-        {rowChildren}
-      </Pressable>
+      {innerRow}
     </View>
   );
 }
@@ -2019,62 +2009,6 @@ interface WorkspaceRowItemProps {
   dragHandleProps?: DraggableListDragHandleProps;
 }
 
-function SidebarAgentRow({
-  agent,
-  serverId,
-  workspaceId,
-}: {
-  agent: { id: string; title: string; provider: string };
-  serverId: string | null;
-  workspaceId: string;
-}) {
-  const { theme } = useUnistyles();
-  const { active } = useDndContext();
-  const isDraggingProvider = active?.data.current?.type === "provider";
-
-  const { setNodeRef, isOver } = useDroppable({
-    id: `agent-row-${serverId}:${agent.id}`,
-    data: {
-      type: "agent-change-provider",
-      serverId,
-      agentId: agent.id,
-      workspaceId,
-    },
-  });
-
-  return (
-    <View
-      // dnd-kit's setNodeRef expects an HTMLElement-typed ref; React
-      // Native's <View> ref is a different (RN-internal) shape. The
-      // cast is a known dnd-kit + RN papercut.
-      // eslint-disable-next-line typescript-eslint/no-explicit-any
-      ref={setNodeRef as any}
-      style={[
-        styles.agentRow,
-        isOver &&
-          isDraggingProvider && {
-            backgroundColor: theme.colors.palette.blue[500] + "1A",
-            borderRadius: 6,
-          },
-      ]}
-    >
-      <View style={styles.agentRowContent}>
-        {agent.provider ? (
-          <View style={{ width: 14, height: 14, alignItems: "center", justifyContent: "center" }}>
-            {(() => {
-              const Icon = getProviderIcon(agent.provider);
-              return Icon ? <Icon size={12} color={theme.colors.foregroundMuted} /> : null;
-            })()}
-          </View>
-        ) : null}
-        <Text style={styles.agentRowText} numberOfLines={1}>
-          {agent.title}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
 function WorkspaceRowItem({
   workspace,
   shortcutNumber,
@@ -2113,6 +2047,14 @@ function WorkspaceRowItem({
     },
   });
 
+  const dropHighlightStyle = useMemo(
+    () =>
+      isOver && isDraggingProvider && !hasRunningScripts
+        ? { backgroundColor: theme.colors.palette.blue[500] + "1A", borderRadius: 6 }
+        : undefined,
+    [isOver, isDraggingProvider, hasRunningScripts, theme.colors.palette.blue],
+  );
+
   return (
     <View
       // dnd-kit's setNodeRef expects an HTMLElement-typed ref; React
@@ -2120,14 +2062,7 @@ function WorkspaceRowItem({
       // cast is a known dnd-kit + RN papercut.
       // eslint-disable-next-line typescript-eslint/no-explicit-any
       ref={setNodeRef as any}
-      style={
-        isOver && isDraggingProvider && !hasRunningScripts
-          ? {
-              backgroundColor: theme.colors.palette.blue[500] + "1A",
-              borderRadius: 6,
-            }
-          : undefined
-      }
+      style={dropHighlightStyle}
     >
       <WorkspaceRow
         workspace={workspace}
@@ -2402,6 +2337,20 @@ function ProjectBlock({
     };
   }, [isOver, isDraggingProvider, collapsed, onToggleCollapsed, project.projectKey]);
 
+  const firstWorkspaceId = project.workspaces[0]?.workspaceId;
+  const projectDropZone = useMemo(
+    () => (
+      <SidebarProjectDropZone
+        projectKey={project.projectKey}
+        serverId={serverId!}
+        workspaceId={firstWorkspaceId}
+        projectRootPath={project.iconWorkingDir}
+        projectName={project.projectName}
+      />
+    ),
+    [project.projectKey, serverId, firstWorkspaceId, project.iconWorkingDir, project.projectName],
+  );
+
   return (
     // dnd-kit setNodeRef vs RN View ref shape mismatch — see other
     // occurrences above for the rationale.
@@ -2464,15 +2413,7 @@ function ProjectBlock({
               skipDndContextWrapper={isWeb}
               simultaneousGestureRef={parentGestureRef}
               containerStyle={styles.workspaceListContainer}
-              ListFooterComponent={
-                <SidebarProjectDropZone
-                  projectKey={project.projectKey}
-                  serverId={serverId!}
-                  workspaceId={project.workspaces[0]?.workspaceId}
-                  projectRootPath={project.iconWorkingDir}
-                  projectName={project.projectName}
-                />
-              }
+              ListFooterComponent={projectDropZone}
             />
           ) : null}
         </>

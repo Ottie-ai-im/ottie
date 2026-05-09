@@ -87,19 +87,29 @@ function ActionCard({ icon: Icon, title, description, onPress, testID, tint }: A
   const { theme } = useUnistyles();
   const accentBg = tint === "primary" ? theme.colors.accent : theme.colors.surface2;
   const accentFg = tint === "primary" ? theme.colors.accentForeground : theme.colors.foreground;
+
+  const cardStyle = useCallback(
+    ({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
+      styles.actionCard,
+      hovered ? styles.actionCardHovered : null,
+      pressed ? styles.actionCardPressed : null,
+    ],
+    [],
+  );
+  const iconWrapStyle = useMemo(
+    () => [styles.actionIconWrap, { backgroundColor: accentBg }],
+    [accentBg],
+  );
+
   return (
     <Pressable
-      style={({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
-        styles.actionCard,
-        hovered ? styles.actionCardHovered : null,
-        pressed ? styles.actionCardPressed : null,
-      ]}
+      style={cardStyle}
       accessibilityRole="button"
       accessibilityLabel={title}
       onPress={onPress}
       testID={testID}
     >
-      <View style={[styles.actionIconWrap, { backgroundColor: accentBg }]}>
+      <View style={iconWrapStyle}>
         <Icon size={22} color={accentFg} />
       </View>
       <View style={styles.actionTextWrap}>

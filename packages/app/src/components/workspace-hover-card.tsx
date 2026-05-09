@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { Dimensions, Platform, Text, View } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { createAnimatedComponent, FadeIn, FadeOut } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { ExternalLink } from "lucide-react-native";
 import { GitHubIcon } from "@/components/icons/github-icon";
@@ -198,7 +198,7 @@ function WorkspaceHoverCardDesktop({
   );
 }
 
-const AnimatedGlassSurface = Animated.createAnimatedComponent(GlassSurface);
+const AnimatedGlassSurface = createAnimatedComponent(GlassSurface);
 
 function WorkspaceHoverCardContent({
   workspace,

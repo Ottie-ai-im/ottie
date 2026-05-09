@@ -7,7 +7,7 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Localization from "expo-localization";
-import i18n from "i18next";
+import i18n, { use as i18nUse, changeLanguage as i18nChangeLanguage } from "i18next";
 import { initReactI18next } from "react-i18next";
 
 import en from "./locales/en.json";
@@ -27,7 +27,7 @@ function detectDeviceLanguage(): SupportedLanguage {
 if (!i18n.isInitialized) {
   // Initialize synchronously with the device-detected language. The user's
   // persisted choice is loaded right after; if it differs, we switch.
-  void i18n.use(initReactI18next).init({
+  void i18nUse(initReactI18next).init({
     resources: {
       en: { translation: en },
       zh: { translation: zh },
@@ -49,7 +49,7 @@ if (!i18n.isInitialized) {
   void AsyncStorage.getItem(LANGUAGE_STORAGE_KEY)
     .then((stored) => {
       if (stored && (SUPPORTED_LANGUAGES as readonly string[]).includes(stored)) {
-        void i18n.changeLanguage(stored);
+        void i18nChangeLanguage(stored);
       }
       return undefined;
     })

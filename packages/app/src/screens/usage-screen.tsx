@@ -85,10 +85,11 @@ export function UsageScreen() {
       cancelLabel: t("common.cancel"),
     }).then((confirmed) => {
       if (confirmed) localResetStore();
+      return undefined;
     });
   }, [localResetStore, t]);
 
-  const providers = data?.providers ?? [];
+  const providers = useMemo(() => data?.providers ?? [], [data?.providers]);
   const generatedAt = useMemo(
     () => formatRelativeTime(data?.generatedAt ?? null, now, t),
     [data?.generatedAt, now, t],
@@ -280,17 +281,34 @@ function ProviderCard({ provider, now }: { provider: UsageProviderSummary; now: 
   const ProviderIcon = getProviderIcon(iconProvider);
   const accent = getProviderAccent(iconProvider);
 
-  const providerLabel =
-    provider.provider === "claude-code"
-      ? t("usage.providers.claudeCode")
-      : provider.provider === "codex"
-        ? t("usage.providers.codex")
-        : provider.provider;
+  let providerLabel: string;
+  if (provider.provider === "claude-code") {
+    providerLabel = t("usage.providers.claudeCode");
+  } else if (provider.provider === "codex") {
+    providerLabel = t("usage.providers.codex");
+  } else {
+    providerLabel = provider.provider;
+  }
+
+  const avatarStyle = useMemo(
+    () => [styles.providerAvatar, { backgroundColor: accent.background }],
+    [accent.background],
+  );
+  const blockBarFillStyle = useMemo(
+    () => [
+      styles.blockBarFill,
+      {
+        width: `${(blockProgress * 100).toFixed(1)}%` as unknown as number,
+        backgroundColor: accent.background,
+      },
+    ],
+    [blockProgress, accent.background],
+  );
 
   return (
     <View style={styles.providerCard}>
       <View style={styles.providerHeader}>
-        <View style={[styles.providerAvatar, { backgroundColor: accent.background }]}>
+        <View style={avatarStyle}>
           <ProviderIcon size={20} color={accent.foreground} />
         </View>
         <View style={styles.providerHeaderText}>
@@ -339,15 +357,7 @@ function ProviderCard({ provider, now }: { provider: UsageProviderSummary; now: 
             <Text style={styles.blockMeta}>{t("usage.resetsIn", { time: blockResetIn })}</Text>
           </View>
           <View style={styles.blockBarTrack}>
-            <View
-              style={[
-                styles.blockBarFill,
-                {
-                  width: `${(blockProgress * 100).toFixed(1)}%` as unknown as number,
-                  backgroundColor: accent.background,
-                },
-              ]}
-            />
+            <View style={blockBarFillStyle} />
           </View>
           <Text style={styles.blockTokens}>
             {t("usage.blockTokens", { tokens: formatTokens(provider.currentBlockTokens) })}
@@ -442,6 +452,17 @@ function QuotaBar({
   const remainingLabel = `${Math.round((1 - clamped) * 100)}%`;
   const resetText = resetsAt ? formatRelativeTime(resetsAt, now, t) : null;
 
+  const quotaBarFillStyle = useMemo(
+    () => [
+      styles.quotaBarFill,
+      {
+        width: `${(clamped * 100).toFixed(1)}%` as unknown as number,
+        backgroundColor: accentColor,
+      },
+    ],
+    [clamped, accentColor],
+  );
+
   return (
     <View style={styles.quotaRow}>
       <View style={styles.quotaRowHeader}>
@@ -451,15 +472,7 @@ function QuotaBar({
         </Text>
       </View>
       <View style={styles.quotaBarTrack}>
-        <View
-          style={[
-            styles.quotaBarFill,
-            {
-              width: `${(clamped * 100).toFixed(1)}%` as unknown as number,
-              backgroundColor: accentColor,
-            },
-          ]}
-        />
+        <View style={quotaBarFillStyle} />
       </View>
       <View style={styles.quotaRowFooter}>
         <Text style={styles.quotaRowFootMeta}>{t("usage.quotaUsed", { used: usedLabel })}</Text>

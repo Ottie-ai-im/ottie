@@ -160,7 +160,9 @@ while (queue.length > 0) {
 
   copyPackage(name, pkgJson, destRoot);
   copiedCount++;
-  const tag = optionalSet.has(name) ? " (platform optional)" : nested ? " (nested)" : "";
+  let tag = "";
+  if (optionalSet.has(name)) tag = " (platform optional)";
+  else if (nested) tag = " (nested)";
   process.stdout.write(`  ✓ ${name}@${version}${tag}\n`);
 
   const copiedDest = join(destRoot, name);

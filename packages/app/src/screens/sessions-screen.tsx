@@ -192,7 +192,7 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
           </Button>
         </View>
       ) : null,
-    [hasMore, loadMore, isLoadingMore],
+    [hasMore, loadMore, isLoadingMore, t],
   );
 
   const renderItem = useCallback<ListRenderItem<ListItem>>(({ item }) => {

@@ -21,6 +21,8 @@ interface KnownDashboard {
   installCommand: string;
 }
 
+const IFRAME_STYLE = { width: "100%", height: "100%", border: "none" };
+
 const KNOWN_DASHBOARDS: KnownDashboard[] = [
   {
     id: "openclaw",
@@ -58,7 +60,7 @@ export function AssistantsScreen() {
   const serverId = hosts[0]?.serverId ?? null;
   const { services, installers } = useLocalServices(serverId);
   const { install, isInstalling, lastResult } = useInstallLocalService(serverId);
-  const runningServices = services.filter((s) => s.running && s.url);
+  const runningServices = useMemo(() => services.filter((s) => s.running && s.url), [services]);
   const anyRunning = runningServices.length > 0;
 
   // Default selection: prefer OpenClaw, fall back to first running service.
@@ -91,22 +93,31 @@ export function AssistantsScreen() {
     void openExternalUrl(url);
   }, []);
 
+  const handleToggleSettings = useCallback(() => {
+    setShowSettings((v) => !v);
+  }, []);
+
+  const settingsButton = useMemo(
+    () => (
+      <Pressable
+        onPress={handleToggleSettings}
+        accessibilityRole="button"
+        accessibilityLabel={t("assistants.configure")}
+        testID="assistants-settings"
+        style={styles.headerButton}
+      >
+        <SettingsIcon size={18} color={theme.colors.foreground} />
+      </Pressable>
+    ),
+    [handleToggleSettings, t, theme.colors.foreground],
+  );
+
   return (
     <View style={styles.container}>
       <MobileTabHeader
         title={t("assistants.title")}
         testID="assistants-header"
-        trailing={
-          <Pressable
-            onPress={() => setShowSettings((v) => !v)}
-            accessibilityRole="button"
-            accessibilityLabel={t("assistants.configure")}
-            testID="assistants-settings"
-            style={styles.headerButton}
-          >
-            <SettingsIcon size={18} color={theme.colors.foreground} />
-          </Pressable>
-        }
+        trailing={settingsButton}
       />
 
       {showSettings ? (
@@ -134,36 +145,82 @@ export function AssistantsScreen() {
       ) : null}
 
       {isWeb ? (
-        anyRunning && activeService ? (
-          <>
-            {runningServices.length > 1 ? (
-              <ServiceSwitcher
-                services={runningServices}
-                activeId={activeService.id}
-                onSelect={setSelectedServiceId}
-              />
-            ) : null}
-            {activeService.id === "openclaw" ? (
-              <OpenclawChatPanel serverId={serverId} />
-            ) : (
-              <EmbeddedWebUi url={activeService.url ?? openWebUiUrl} />
-            )}
-          </>
-        ) : (
-          <NotRunningCard
-            configuredUrl={openWebUiUrl}
-            onOpen={handleOpenInBrowser}
-            dockerAvailable={installers?.docker ?? false}
-            pipxAvailable={installers?.pipx ?? false}
-            onInstallDocker={handleInstallDocker}
-            isInstalling={isInstalling}
-            lastInstallResult={lastResult}
-          />
-        )
+        (() => {
+          if (anyRunning && activeService) {
+            return (
+              <>
+                {runningServices.length > 1 ? (
+                  <ServiceSwitcher
+                    services={runningServices}
+                    activeId={activeService.id}
+                    onSelect={setSelectedServiceId}
+                  />
+                ) : null}
+                {activeService.id === "openclaw" ? (
+                  <OpenclawChatPanel serverId={serverId} />
+                ) : (
+                  <EmbeddedWebUi url={activeService.url ?? openWebUiUrl} />
+                )}
+              </>
+            );
+          }
+          return (
+            <NotRunningCard
+              configuredUrl={openWebUiUrl}
+              onOpen={handleOpenInBrowser}
+              dockerAvailable={installers?.docker ?? false}
+              pipxAvailable={installers?.pipx ?? false}
+              onInstallDocker={handleInstallDocker}
+              isInstalling={isInstalling}
+              lastInstallResult={lastResult}
+            />
+          );
+        })()
       ) : (
         <NativeFallback url={openWebUiUrl} onOpen={handleOpenInBrowser} services={services} />
       )}
     </View>
+  );
+}
+
+const SERVICE_LABELS: Record<string, string> = {
+  "open-webui": "Open WebUI",
+  openclaw: "OpenClaw",
+  hermes: "Hermes Agent",
+};
+
+function ServiceChip({
+  service,
+  active,
+  onSelect,
+}: {
+  service: { id: string; label: string; url: string | null };
+  active: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const chipStyle = useMemo(() => [styles.chip, active ? styles.chipActive : null], [active]);
+  const dotStyle = useMemo(
+    () => [styles.chipDot, active ? styles.chipDotActive : styles.chipDotInactive],
+    [active],
+  );
+  const textStyle = useMemo(
+    () => [styles.chipText, active ? styles.chipTextActive : null],
+    [active],
+  );
+  const accessibilityState = useMemo(() => ({ selected: active }), [active]);
+  const handlePress = useCallback(() => onSelect(service.id), [onSelect, service.id]);
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={chipStyle}
+      accessibilityRole="tab"
+      accessibilityState={accessibilityState}
+      testID={`assistants-switch-${service.id}`}
+    >
+      <View style={dotStyle} />
+      <Text style={textStyle}>{SERVICE_LABELS[service.id] ?? service.label}</Text>
+    </Pressable>
   );
 }
 
@@ -176,33 +233,11 @@ function ServiceSwitcher({
   activeId: string;
   onSelect: (id: string) => void;
 }) {
-  const labels: Record<string, string> = {
-    "open-webui": "Open WebUI",
-    openclaw: "OpenClaw",
-    hermes: "Hermes Agent",
-  };
   return (
     <View style={styles.switcher}>
-      {services.map((s) => {
-        const active = s.id === activeId;
-        return (
-          <Pressable
-            key={s.id}
-            onPress={() => onSelect(s.id)}
-            style={[styles.chip, active ? styles.chipActive : null]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            testID={`assistants-switch-${s.id}`}
-          >
-            <View
-              style={[styles.chipDot, active ? styles.chipDotActive : styles.chipDotInactive]}
-            />
-            <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
-              {labels[s.id] ?? s.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {services.map((s) => (
+        <ServiceChip key={s.id} service={s} active={s.id === activeId} onSelect={onSelect} />
+      ))}
     </View>
   );
 }
@@ -231,11 +266,35 @@ function NotRunningCard({
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+
+  const statusDotStyle = useMemo(
+    () => [styles.statusDot, { backgroundColor: theme.colors.destructive }],
+    [theme.colors.destructive],
+  );
+  const installButtonStyle = useMemo(
+    () => [styles.primaryButton, isInstalling ? styles.primaryButtonDisabled : null],
+    [isInstalling],
+  );
+  const installResultStyle = useMemo(
+    () => [
+      styles.installResultText,
+      {
+        color: lastInstallResult?.success
+          ? theme.colors.palette.green[400]
+          : theme.colors.destructive,
+      },
+    ],
+    [lastInstallResult?.success, theme.colors.palette.green, theme.colors.destructive],
+  );
+  const handleOpenDocs = useCallback(() => {
+    onOpen("https://docs.openwebui.com/getting-started/");
+  }, [onOpen]);
+
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
       <View style={styles.notRunningCard}>
         <View style={styles.statusRow}>
-          <View style={[styles.statusDot, { backgroundColor: theme.colors.destructive }]} />
+          <View style={statusDotStyle} />
           <Text style={styles.statusText}>
             {t("assistants.notRunning", { url: configuredUrl })}
           </Text>
@@ -249,7 +308,7 @@ function NotRunningCard({
               {t("assistants.install.docker")} {t("assistants.install.detected")}
             </Text>
             <Pressable
-              style={[styles.primaryButton, isInstalling ? styles.primaryButtonDisabled : null]}
+              style={installButtonStyle}
               onPress={onInstallDocker}
               disabled={isInstalling}
               testID="assistants-install-docker"
@@ -261,18 +320,7 @@ function NotRunningCard({
               </Text>
             </Pressable>
             {lastInstallResult ? (
-              <Text
-                style={[
-                  styles.installResultText,
-                  {
-                    color: lastInstallResult.success
-                      ? theme.colors.palette.green[400]
-                      : theme.colors.destructive,
-                  },
-                ]}
-              >
-                {lastInstallResult.message}
-              </Text>
+              <Text style={installResultStyle}>{lastInstallResult.message}</Text>
             ) : null}
             {lastInstallResult && !lastInstallResult.success && lastInstallResult.output ? (
               <Text style={styles.installCommand} selectable>
@@ -301,10 +349,7 @@ function NotRunningCard({
             pipx install open-webui && open-webui serve
           </Text>
         </View>
-        <Pressable
-          style={styles.secondaryButton}
-          onPress={() => onOpen("https://docs.openwebui.com/getting-started/")}
-        >
+        <Pressable style={styles.secondaryButton} onPress={handleOpenDocs}>
           <ExternalLink size={14} color={theme.colors.foreground} />
           <Text style={styles.secondaryButtonText}>{t("assistants.openDocs")}</Text>
         </Pressable>
@@ -334,13 +379,66 @@ function EmbeddedWebUi({ url }: { url: string }) {
       <Iframe
         src={trustedUrl}
         title="Open WebUI"
-        style={{
-          width: "100%",
-          height: "100%",
-          border: "none",
-        }}
+        style={IFRAME_STYLE}
         allow="clipboard-read; clipboard-write; microphone; camera"
       />
+    </View>
+  );
+}
+
+function DashboardCard({
+  dashboard,
+  liveStatus,
+  fallbackUrl,
+  onOpen,
+}: {
+  dashboard: KnownDashboard;
+  liveStatus: { running: boolean; url: string | null } | undefined;
+  fallbackUrl: string;
+  onOpen: (url: string) => void;
+}) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const isRunning = liveStatus?.running ?? false;
+  const dashboardUrl =
+    liveStatus?.url ?? (dashboard.id === "open-webui" ? fallbackUrl : dashboard.defaultUrl);
+  const statusColor = isRunning ? theme.colors.palette.green[400] : theme.colors.foregroundMuted;
+  const statusDotStyle = useMemo(
+    () => [styles.statusDot, { backgroundColor: statusColor }],
+    [statusColor],
+  );
+  const handleOpen = useCallback(() => onOpen(dashboardUrl), [onOpen, dashboardUrl]);
+
+  return (
+    <View style={styles.dashboardCard}>
+      <View style={styles.dashboardHeader}>
+        <View style={statusDotStyle} />
+        <Sparkles size={20} color={theme.colors.foreground} />
+        <Text style={styles.dashboardName}>{t(dashboard.labelKey)}</Text>
+        <Text style={styles.dashboardStatus}>
+          {isRunning ? t("assistants.running") : t("assistants.stopped")}
+        </Text>
+      </View>
+      <Text style={styles.dashboardDescription}>{t(dashboard.descriptionKey)}</Text>
+      <Text style={styles.dashboardUrl}>{dashboardUrl}</Text>
+      <View style={styles.dashboardActions}>
+        <Pressable
+          style={styles.primaryButton}
+          onPress={handleOpen}
+          testID={`assistants-open-${dashboard.id}`}
+        >
+          <ExternalLink size={14} color={theme.colors.accentForeground} />
+          <Text style={styles.primaryButtonText}>{t("assistants.openInBrowser")}</Text>
+        </Pressable>
+      </View>
+      {!isRunning ? (
+        <>
+          <Text style={styles.dashboardHint}>{t(dashboard.installHintKey)}</Text>
+          <Text style={styles.dashboardCommand} selectable>
+            {dashboard.installCommand}
+          </Text>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -354,7 +452,6 @@ function NativeFallback({
   onOpen: (url: string) => void;
   services: Array<{ id: string; running: boolean; url: string | null }>;
 }) {
-  const { theme } = useUnistyles();
   const { t } = useTranslation();
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -363,43 +460,14 @@ function NativeFallback({
       </View>
       {KNOWN_DASHBOARDS.map((dashboard) => {
         const liveStatus = services.find((s) => s.id === dashboard.id);
-        const isRunning = liveStatus?.running ?? false;
-        const dashboardUrl =
-          liveStatus?.url ?? (dashboard.id === "open-webui" ? url : dashboard.defaultUrl);
-        const statusColor = isRunning
-          ? theme.colors.palette.green[400]
-          : theme.colors.foregroundMuted;
         return (
-          <View key={dashboard.id} style={styles.dashboardCard}>
-            <View style={styles.dashboardHeader}>
-              <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-              <Sparkles size={20} color={theme.colors.foreground} />
-              <Text style={styles.dashboardName}>{t(dashboard.labelKey)}</Text>
-              <Text style={styles.dashboardStatus}>
-                {isRunning ? t("assistants.running") : t("assistants.stopped")}
-              </Text>
-            </View>
-            <Text style={styles.dashboardDescription}>{t(dashboard.descriptionKey)}</Text>
-            <Text style={styles.dashboardUrl}>{dashboardUrl}</Text>
-            <View style={styles.dashboardActions}>
-              <Pressable
-                style={styles.primaryButton}
-                onPress={() => onOpen(dashboardUrl)}
-                testID={`assistants-open-${dashboard.id}`}
-              >
-                <ExternalLink size={14} color={theme.colors.accentForeground} />
-                <Text style={styles.primaryButtonText}>{t("assistants.openInBrowser")}</Text>
-              </Pressable>
-            </View>
-            {!isRunning ? (
-              <>
-                <Text style={styles.dashboardHint}>{t(dashboard.installHintKey)}</Text>
-                <Text style={styles.dashboardCommand} selectable>
-                  {dashboard.installCommand}
-                </Text>
-              </>
-            ) : null}
-          </View>
+          <DashboardCard
+            key={dashboard.id}
+            dashboard={dashboard}
+            liveStatus={liveStatus}
+            fallbackUrl={url}
+            onOpen={onOpen}
+          />
         );
       })}
       <View style={styles.attribution}>

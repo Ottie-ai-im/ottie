@@ -188,6 +188,7 @@ describe("FriendSyncDialer end-to-end against createFriendSyncConnectionHandler"
         // its listeners first.
         void runReceiver(aliceHandler, "friend-sync:test-nonce", receiverSocket).then(() => {
           fireDialerOpen();
+          return undefined;
         });
         return dialerSocket;
       },

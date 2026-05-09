@@ -59,6 +59,7 @@ import {
   collectAllTabs,
   useWorkspaceLayoutStore,
   useWorkspaceLayoutStoreHydrated,
+  type SplitNode,
 } from "@/stores/workspace-layout-store";
 import type { WorkspaceTab, WorkspaceTabTarget } from "@/stores/workspace-tabs-store";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
@@ -949,6 +950,100 @@ function parsePaneDirection(actionId: string): PaneDirection | null {
   return null;
 }
 
+/**
+ * Extracted pane-action handler to reduce cyclomatic complexity of
+ * WorkspaceScreenContent. Called from the `handleWorkspacePaneAction`
+ * useCallback with all needed state/callbacks passed in.
+ */
+function applyWorkspacePaneAction(
+  action: KeyboardActionDefinition,
+  deps: {
+    persistenceKey: string | null;
+    workspaceLayout: ReturnType<
+      typeof import("@/stores/workspace-layout-store").useWorkspaceLayoutStore<unknown>
+    > | null;
+    focusedPane: { id: string; tabIds: string[] } | null | undefined;
+    activeTabId: string | null | undefined;
+    paneFocusSuppressedRef: React.RefObject<boolean>;
+    handleCreateDraftSplit: (input: {
+      targetPaneId: string;
+      position: "left" | "right" | "top" | "bottom";
+    }) => void;
+    focusWorkspacePane: (key: string, paneId: string) => void;
+    moveWorkspaceTabToPane: (key: string, tabId: string, paneId: string) => void;
+    closeWorkspaceTabWithCleanup: (input: {
+      tabId: string;
+      target?: WorkspaceTabTarget | null;
+    }) => void;
+    allTabDescriptorsById: Map<string, WorkspaceTabDescriptor>;
+  },
+): boolean {
+  const {
+    persistenceKey,
+    workspaceLayout,
+    focusedPane,
+    activeTabId,
+    paneFocusSuppressedRef,
+    handleCreateDraftSplit,
+    focusWorkspacePane,
+    moveWorkspaceTabToPane,
+    closeWorkspaceTabWithCleanup,
+    allTabDescriptorsById,
+  } = deps;
+
+  if (!persistenceKey || !workspaceLayout) return true;
+  if (!focusedPane) return true;
+
+  if (action.id === "workspace.pane.split.right") {
+    handleCreateDraftSplit({ targetPaneId: focusedPane.id, position: "right" });
+    return true;
+  }
+  if (action.id === "workspace.pane.split.down") {
+    handleCreateDraftSplit({ targetPaneId: focusedPane.id, position: "bottom" });
+    return true;
+  }
+  if (action.id.startsWith("workspace.pane.focus.")) {
+    const direction = parsePaneDirection(action.id);
+    if (direction) {
+      const adjacentPaneId = findAdjacentPane(
+        (workspaceLayout as { root: SplitNode }).root,
+        focusedPane.id,
+        direction,
+      );
+      if (adjacentPaneId) focusWorkspacePane(persistenceKey, adjacentPaneId);
+    }
+    return true;
+  }
+  if (action.id.startsWith("workspace.pane.move-tab.")) {
+    const direction = parsePaneDirection(action.id);
+    if (direction) {
+      const adjacentPaneId = findAdjacentPane(
+        (workspaceLayout as { root: SplitNode }).root,
+        focusedPane.id,
+        direction,
+      );
+      if (activeTabId && adjacentPaneId) {
+        paneFocusSuppressedRef.current = true;
+        moveWorkspaceTabToPane(persistenceKey, activeTabId, adjacentPaneId);
+        requestAnimationFrame(() => {
+          paneFocusSuppressedRef.current = false;
+        });
+      }
+    }
+    return true;
+  }
+  if (action.id === "workspace.pane.close") {
+    for (const tabId of focusedPane.tabIds) {
+      closeWorkspaceTabWithCleanup({
+        tabId,
+        target: allTabDescriptorsById.get(tabId)?.target ?? null,
+      });
+    }
+    return true;
+  }
+  return false;
+}
+
 interface RenderWorkspaceContentInput {
   showMissingWorkspaceDescriptor: boolean;
   isMissingWorkspaceExecutionAuthority: boolean;
@@ -1172,6 +1267,55 @@ function WorkspaceHeaderTitleBarWithRename(
       ) : null}
     </>
   );
+}
+
+interface WorkspaceTabActionContext {
+  activeTabId: string | null;
+  tabs: WorkspaceTabDescriptor[];
+  handleCreateDraftTab: () => void;
+  handleCreateTerminal: () => void;
+  handleCloseTabById: (tabId: string) => Promise<void>;
+  navigateToTabId: (tabId: string) => void;
+}
+
+function applyWorkspaceTabAction(
+  action: KeyboardActionDefinition,
+  ctx: WorkspaceTabActionContext,
+): boolean {
+  switch (action.id) {
+    case "workspace.tab.new":
+      ctx.handleCreateDraftTab();
+      return true;
+    case "workspace.terminal.new":
+      ctx.handleCreateTerminal();
+      return true;
+    case "workspace.tab.close-current":
+      if (ctx.activeTabId) {
+        void ctx.handleCloseTabById(ctx.activeTabId);
+      }
+      return true;
+    case "workspace.tab.navigate-index": {
+      const next = ctx.tabs[action.index - 1] ?? null;
+      if (next?.tabId) {
+        ctx.navigateToTabId(next.tabId);
+      }
+      return true;
+    }
+    case "workspace.tab.navigate-relative": {
+      if (ctx.tabs.length > 0) {
+        const currentIndex = ctx.tabs.findIndex((tab) => tab.tabId === ctx.activeTabId);
+        const fromIndex = currentIndex >= 0 ? currentIndex : 0;
+        const nextIndex = (fromIndex + action.delta + ctx.tabs.length) % ctx.tabs.length;
+        const next = ctx.tabs[nextIndex] ?? null;
+        if (next?.tabId) {
+          ctx.navigateToTabId(next.tabId);
+        }
+      }
+      return true;
+    }
+    default:
+      return false;
+  }
 }
 
 function WorkspaceScreenContent({
@@ -2348,42 +2492,15 @@ function WorkspaceScreenContent({
   );
 
   const handleWorkspaceTabAction = useCallback(
-    (action: KeyboardActionDefinition): boolean => {
-      switch (action.id) {
-        case "workspace.tab.new":
-          handleCreateDraftTab();
-          return true;
-        case "workspace.terminal.new":
-          handleCreateTerminal();
-          return true;
-        case "workspace.tab.close-current":
-          if (activeTabId) {
-            void handleCloseTabById(activeTabId);
-          }
-          return true;
-        case "workspace.tab.navigate-index": {
-          const next = tabs[action.index - 1] ?? null;
-          if (next?.tabId) {
-            navigateToTabId(next.tabId);
-          }
-          return true;
-        }
-        case "workspace.tab.navigate-relative": {
-          if (tabs.length > 0) {
-            const currentIndex = tabs.findIndex((tab) => tab.tabId === activeTabId);
-            const fromIndex = currentIndex >= 0 ? currentIndex : 0;
-            const nextIndex = (fromIndex + action.delta + tabs.length) % tabs.length;
-            const next = tabs[nextIndex] ?? null;
-            if (next?.tabId) {
-              navigateToTabId(next.tabId);
-            }
-          }
-          return true;
-        }
-        default:
-          return false;
-      }
-    },
+    (action: KeyboardActionDefinition): boolean =>
+      applyWorkspaceTabAction(action, {
+        activeTabId,
+        tabs,
+        handleCreateDraftTab,
+        handleCreateTerminal,
+        handleCloseTabById,
+        navigateToTabId,
+      }),
     [
       activeTabId,
       handleCloseTabById,
@@ -2406,71 +2523,19 @@ function WorkspaceScreenContent({
   );
 
   const handleWorkspacePaneAction = useCallback(
-    (action: KeyboardActionDefinition): boolean => {
-      if (!persistenceKey || !workspaceLayout) {
-        return true;
-      }
-
-      const focusedPane = focusedPaneTabState.pane;
-      if (!focusedPane) {
-        return true;
-      }
-
-      if (action.id === "workspace.pane.split.right") {
-        handleCreateDraftSplit({
-          targetPaneId: focusedPane.id,
-          position: "right",
-        });
-        return true;
-      }
-
-      if (action.id === "workspace.pane.split.down") {
-        handleCreateDraftSplit({
-          targetPaneId: focusedPane.id,
-          position: "bottom",
-        });
-        return true;
-      }
-
-      if (action.id.startsWith("workspace.pane.focus.")) {
-        const direction = parsePaneDirection(action.id);
-        if (direction) {
-          const adjacentPaneId = findAdjacentPane(workspaceLayout.root, focusedPane.id, direction);
-          if (adjacentPaneId) {
-            focusWorkspacePane(persistenceKey, adjacentPaneId);
-          }
-        }
-        return true;
-      }
-
-      if (action.id.startsWith("workspace.pane.move-tab.")) {
-        const direction = parsePaneDirection(action.id);
-        if (direction) {
-          const activePaneTabId = focusedPaneTabState.activeTabId;
-          const adjacentPaneId = findAdjacentPane(workspaceLayout.root, focusedPane.id, direction);
-          if (activePaneTabId && adjacentPaneId) {
-            paneFocusSuppressedRef.current = true;
-            moveWorkspaceTabToPane(persistenceKey, activePaneTabId, adjacentPaneId);
-            requestAnimationFrame(() => {
-              paneFocusSuppressedRef.current = false;
-            });
-          }
-        }
-        return true;
-      }
-
-      if (action.id === "workspace.pane.close") {
-        for (const tabId of focusedPane.tabIds) {
-          closeWorkspaceTabWithCleanup({
-            tabId,
-            target: allTabDescriptorsById.get(tabId)?.target ?? null,
-          });
-        }
-        return true;
-      }
-
-      return false;
-    },
+    (action: KeyboardActionDefinition): boolean =>
+      applyWorkspacePaneAction(action, {
+        persistenceKey,
+        workspaceLayout,
+        focusedPane: focusedPaneTabState.pane,
+        activeTabId: focusedPaneTabState.activeTabId,
+        paneFocusSuppressedRef,
+        handleCreateDraftSplit,
+        focusWorkspacePane,
+        moveWorkspaceTabToPane,
+        closeWorkspaceTabWithCleanup,
+        allTabDescriptorsById,
+      }),
     [
       allTabDescriptorsById,
       closeWorkspaceTabWithCleanup,
@@ -2484,6 +2549,8 @@ function WorkspaceScreenContent({
     ],
   );
 
+  const isWorkspaceReady = Boolean(isRouteFocused && normalizedServerId && normalizedWorkspaceId);
+
   useKeyboardActionHandler({
     handlerId: `workspace-tab-actions:${normalizedServerId}:${normalizedWorkspaceId}`,
     actions: [
@@ -2493,7 +2560,7 @@ function WorkspaceScreenContent({
       "workspace.tab.navigate-relative",
       "workspace.terminal.new",
     ] as const,
-    enabled: Boolean(isRouteFocused && normalizedServerId && normalizedWorkspaceId),
+    enabled: isWorkspaceReady,
     priority: 100,
     isActive: () => true,
     handle: handleWorkspaceTabAction,
@@ -2514,7 +2581,7 @@ function WorkspaceScreenContent({
       "workspace.pane.move-tab.down",
       "workspace.pane.close",
     ] as const,
-    enabled: Boolean(isRouteFocused && normalizedServerId && normalizedWorkspaceId),
+    enabled: isWorkspaceReady,
     priority: 100,
     isActive: () => true,
     handle: handleWorkspacePaneAction,
@@ -2523,7 +2590,7 @@ function WorkspaceScreenContent({
   useKeyboardActionHandler({
     handlerId: `workspace-sidebar-actions:${normalizedServerId}:${normalizedWorkspaceId}`,
     actions: ["sidebar.toggle.right"] as const,
-    enabled: Boolean(isRouteFocused && normalizedServerId && normalizedWorkspaceId),
+    enabled: isWorkspaceReady,
     priority: 100,
     isActive: () => true,
     handle: handleWorkspaceSidebarAction,

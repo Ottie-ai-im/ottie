@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -752,6 +752,108 @@ function ShareAiButton({
     [],
   );
 
+  let phaseContent: ReactNode;
+  if (phase === "sent" && sentLabel) {
+    phaseContent = (
+      <Text style={styles.shareModalIntro}>
+        {t("p2pChat.shareAi.sent", {
+          label: sentLabel,
+          defaultValue: "Invite for {{label}} sent. Friend will see it in their bell.",
+        })}
+      </Text>
+    );
+  } else if (phase === "first-share") {
+    phaseContent = (
+      <>
+        <Text style={styles.shareModalIntro}>
+          {t("p2pChat.shareAi.firstShareTitle", {
+            name: expectedName,
+            defaultValue: "First time sharing with {{name}}",
+          })}
+        </Text>
+        <Text style={styles.shareModalDisclaimer}>
+          {t("p2pChat.shareAi.firstShareBody", {
+            name: expectedName,
+            defaultValue:
+              "Sharing AI lets your friend run prompts against your agent — billed to you, with full access to whatever workspace it's open in. Type the friend's name below to confirm.",
+          })}
+        </Text>
+        <TextInput
+          value={confirmInput}
+          onChangeText={setConfirmInput}
+          placeholder={expectedName}
+          placeholderTextColor={theme.colors.foregroundMuted}
+          style={styles.shareConfirmInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          testID="ai-share-first-share-confirm-input"
+        />
+      </>
+    );
+  } else if (phase === "daemon-picker") {
+    phaseContent = (
+      <>
+        <Text style={styles.shareModalIntro}>
+          {t("p2pChat.shareAi.daemonIntro", {
+            defaultValue: "You have multiple daemons online. Pick one to share from.",
+          })}
+        </Text>
+        <View style={styles.sharePickerList}>
+          {hosts.map((host) => (
+            <DaemonPickerRow key={host.serverId} host={host} onPick={handlePickHost} />
+          ))}
+        </View>
+      </>
+    );
+  } else {
+    let agentPickerContent: ReactNode;
+    if (isLoading) {
+      agentPickerContent = <ActivityIndicator size="small" color={theme.colors.foregroundMuted} />;
+    } else if (hasError) {
+      agentPickerContent = (
+        <Text style={styles.shareModalError}>
+          {t("p2pChat.shareAi.loadError", {
+            defaultValue: "Could not load agent list. Try reopening this modal.",
+          })}
+        </Text>
+      );
+    } else if (agents.length === 0) {
+      agentPickerContent = (
+        <Text style={styles.shareModalDisclaimer}>
+          {t("p2pChat.shareAi.empty", {
+            defaultValue:
+              "No agents yet on this daemon. Create one from the workspace screen first.",
+          })}
+        </Text>
+      );
+    } else {
+      agentPickerContent = (
+        <View style={styles.sharePickerList}>
+          {agents.map((agent) => (
+            <ShareablePickerRow
+              key={agent.agentId}
+              agent={agent}
+              submitting={submittingAgentId === agent.agentId}
+              anySubmitting={submittingAgentId !== null}
+              onPick={handlePickAgent}
+            />
+          ))}
+        </View>
+      );
+    }
+    phaseContent = (
+      <>
+        <Text style={styles.shareModalIntro}>
+          {t("p2pChat.shareAi.pickIntro", {
+            defaultValue:
+              "Pick a local agent to share. Your friend will get a notification and can accept or decline.",
+          })}
+        </Text>
+        {agentPickerContent}
+      </>
+    );
+  }
+
   return (
     <>
       <Pressable
@@ -774,90 +876,7 @@ function ShareAiButton({
         desktopMaxWidth={460}
       >
         <View style={styles.shareModalBody}>
-          {phase === "sent" && sentLabel ? (
-            <Text style={styles.shareModalIntro}>
-              {t("p2pChat.shareAi.sent", {
-                label: sentLabel,
-                defaultValue: "Invite for {{label}} sent. Friend will see it in their bell.",
-              })}
-            </Text>
-          ) : phase === "first-share" ? (
-            <>
-              <Text style={styles.shareModalIntro}>
-                {t("p2pChat.shareAi.firstShareTitle", {
-                  name: expectedName,
-                  defaultValue: "First time sharing with {{name}}",
-                })}
-              </Text>
-              <Text style={styles.shareModalDisclaimer}>
-                {t("p2pChat.shareAi.firstShareBody", {
-                  name: expectedName,
-                  defaultValue:
-                    "Sharing AI lets your friend run prompts against your agent — billed to you, with full access to whatever workspace it's open in. Type the friend's name below to confirm.",
-                })}
-              </Text>
-              <TextInput
-                value={confirmInput}
-                onChangeText={setConfirmInput}
-                placeholder={expectedName}
-                placeholderTextColor={theme.colors.foregroundMuted}
-                style={styles.shareConfirmInput}
-                autoCapitalize="none"
-                autoCorrect={false}
-                testID="ai-share-first-share-confirm-input"
-              />
-            </>
-          ) : phase === "daemon-picker" ? (
-            <>
-              <Text style={styles.shareModalIntro}>
-                {t("p2pChat.shareAi.daemonIntro", {
-                  defaultValue: "You have multiple daemons online. Pick one to share from.",
-                })}
-              </Text>
-              <View style={styles.sharePickerList}>
-                {hosts.map((host) => (
-                  <DaemonPickerRow key={host.serverId} host={host} onPick={handlePickHost} />
-                ))}
-              </View>
-            </>
-          ) : (
-            <>
-              <Text style={styles.shareModalIntro}>
-                {t("p2pChat.shareAi.pickIntro", {
-                  defaultValue:
-                    "Pick a local agent to share. Your friend will get a notification and can accept or decline.",
-                })}
-              </Text>
-              {isLoading ? (
-                <ActivityIndicator size="small" color={theme.colors.foregroundMuted} />
-              ) : hasError ? (
-                <Text style={styles.shareModalError}>
-                  {t("p2pChat.shareAi.loadError", {
-                    defaultValue: "Could not load agent list. Try reopening this modal.",
-                  })}
-                </Text>
-              ) : agents.length === 0 ? (
-                <Text style={styles.shareModalDisclaimer}>
-                  {t("p2pChat.shareAi.empty", {
-                    defaultValue:
-                      "No agents yet on this daemon. Create one from the workspace screen first.",
-                  })}
-                </Text>
-              ) : (
-                <View style={styles.sharePickerList}>
-                  {agents.map((agent) => (
-                    <ShareablePickerRow
-                      key={agent.agentId}
-                      agent={agent}
-                      submitting={submittingAgentId === agent.agentId}
-                      anySubmitting={submittingAgentId !== null}
-                      onPick={handlePickAgent}
-                    />
-                  ))}
-                </View>
-              )}
-            </>
-          )}
+          {phaseContent}
           {error ? <Text style={styles.shareModalError}>{error}</Text> : null}
           <View style={styles.shareModalActions}>
             <Button variant="secondary" onPress={handleClose}>
@@ -1053,6 +1072,10 @@ function ActiveShareBanner({
     [],
   );
 
+  const handleEndPress = useCallback(() => {
+    void handleEnd();
+  }, [handleEnd]);
+
   // Phase 4 v2/c — only the friend side (inbound) gets the "Open"
   // affordance, since the shared-agent compose surface is one-way:
   // friend types prompts, owner's agent runs them. The owner's banner
@@ -1092,7 +1115,7 @@ function ActiveShareBanner({
       ) : null}
       <Pressable
         accessibilityRole="button"
-        onPress={() => void handleEnd()}
+        onPress={handleEndPress}
         style={endButtonStyle}
         disabled={ending}
         testID={`active-share-end-${session.inviteId.slice(0, 8)}`}

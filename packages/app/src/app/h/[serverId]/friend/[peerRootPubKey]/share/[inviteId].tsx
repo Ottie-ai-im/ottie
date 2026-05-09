@@ -404,6 +404,10 @@ export default function FriendShareInvitePage() {
     }
   }, [client, handleBack, inviteId, queryClient, serverId]);
 
+  const handleEndSharePress = useCallback(() => {
+    void handleEndShare();
+  }, [handleEndShare]);
+
   const endButtonStyle = useCallback(
     ({ hovered }: { hovered?: boolean }) => [
       styles.endButton,
@@ -483,7 +487,7 @@ export default function FriendShareInvitePage() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t("p2pChat.activeShareEnd", { defaultValue: "End session" })}
-            onPress={() => void handleEndShare()}
+            onPress={handleEndSharePress}
             disabled={ending}
             style={endButtonStyle}
             testID="ai-share-end-button"
@@ -664,19 +668,14 @@ function promptStatusText(
 
 function FriendShareRow({ row }: { row: MergedRow }) {
   const { t } = useTranslation();
+  const promptMetaErrorStyle = useMemo(() => [styles.promptMeta, styles.promptMetaError], []);
   switch (row.kind) {
     case "local-prompt": {
       const prompt = row.entry;
       return (
         <View style={styles.promptRow}>
           <Text style={styles.promptBody}>{prompt.body}</Text>
-          <Text
-            style={
-              prompt.status === "failed"
-                ? [styles.promptMeta, styles.promptMetaError]
-                : styles.promptMeta
-            }
-          >
+          <Text style={prompt.status === "failed" ? promptMetaErrorStyle : styles.promptMeta}>
             {promptStatusText(prompt, t)}
           </Text>
         </View>

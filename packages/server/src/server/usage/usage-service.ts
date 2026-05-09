@@ -101,6 +101,169 @@ function costForUsage(
   );
 }
 
+interface ClaudeAccumulator {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  costUsd: number;
+  messagesCount: number;
+  firstMs: number | null;
+  lastMs: number | null;
+  weekTokens: number;
+  weekCost: number;
+  blockAnchorMs: number | null;
+  blockTokens: number;
+}
+
+/** Update time-window fields on a ClaudeAccumulator for a known-finite timestamp. */
+function applyClaudeTimestamp(
+  acc: ClaudeAccumulator,
+  ts: number,
+  total: number,
+  cost: number,
+  weekCutoff: number,
+  blockCutoff: number,
+): void {
+  if (acc.firstMs === null || ts < acc.firstMs) acc.firstMs = ts;
+  if (acc.lastMs === null || ts > acc.lastMs) acc.lastMs = ts;
+  if (ts >= weekCutoff) {
+    acc.weekTokens += total;
+    acc.weekCost += cost;
+  }
+  if (ts >= blockCutoff) {
+    if (acc.blockAnchorMs === null || ts < acc.blockAnchorMs) acc.blockAnchorMs = ts;
+    acc.blockTokens += total;
+  }
+}
+
+/** Process one JSONL line from a Claude session file into the accumulator. */
+function processClaudeLine(
+  line: string,
+  weekCutoff: number,
+  blockCutoff: number,
+  acc: ClaudeAccumulator,
+): void {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  let entry: ClaudeUsageEntry;
+  try {
+    entry = JSON.parse(trimmed);
+  } catch {
+    return;
+  }
+  const usage = entry.message?.usage;
+  if (!usage) return;
+  const inT = usage.input_tokens ?? 0;
+  const outT = usage.output_tokens ?? 0;
+  const crT = usage.cache_read_input_tokens ?? 0;
+  const cwT = usage.cache_creation_input_tokens ?? 0;
+  const total = inT + outT + crT + cwT;
+  if (total === 0) return;
+  acc.inputTokens += inT;
+  acc.outputTokens += outT;
+  acc.cacheReadTokens += crT;
+  acc.cacheWriteTokens += cwT;
+  const cost = costForUsage(entry.message?.model, usage);
+  acc.costUsd += cost;
+  acc.messagesCount += 1;
+  const ts = entry.timestamp ? Date.parse(entry.timestamp) : NaN;
+  if (Number.isFinite(ts)) {
+    applyClaudeTimestamp(acc, ts, total, cost, weekCutoff, blockCutoff);
+  }
+}
+
+interface CodexAccumulator {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  messagesCount: number;
+  firstMs: number | null;
+  lastMs: number | null;
+  weekTokens: number;
+  blockAnchorMs: number | null;
+  blockTokens: number;
+}
+
+/**
+ * Scan JSONL lines of a Codex session file and return the last cumulative
+ * token-usage payload together with its timestamp, incrementing the message
+ * counter on `acc` as a side effect.
+ */
+function scanCodexLines(
+  lines: string[],
+  acc: CodexAccumulator,
+): { lastUsage: CodexUsageEntry["payload"]; lastTs: number | null } {
+  let lastUsage: CodexUsageEntry["payload"] = undefined;
+  let lastTs: number | null = null;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let entry: CodexUsageEntry;
+    try {
+      entry = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (entry.payload?.info?.total_token_usage) {
+      lastUsage = entry.payload;
+      const ts = entry.timestamp ? Date.parse(entry.timestamp) : NaN;
+      if (Number.isFinite(ts)) lastTs = ts;
+      acc.messagesCount += 1;
+    }
+  }
+  return { lastUsage, lastTs };
+}
+
+/** Merge final Codex token counts and time-window fields into the accumulator. */
+function applyCodexUsage(
+  acc: CodexAccumulator,
+  u: NonNullable<NonNullable<NonNullable<CodexUsageEntry["payload"]>["info"]>["total_token_usage"]>,
+  lastTs: number | null,
+  weekCutoff: number,
+  blockCutoff: number,
+): void {
+  const inT = u.input_tokens ?? 0;
+  const outT = u.output_tokens ?? 0;
+  const crT = u.cached_input_tokens ?? 0;
+  const total = inT + outT + crT;
+  if (total === 0) return;
+  acc.inputTokens += inT;
+  acc.outputTokens += outT;
+  acc.cacheReadTokens += crT;
+  if (lastTs !== null) {
+    if (acc.firstMs === null || lastTs < acc.firstMs) acc.firstMs = lastTs;
+    if (acc.lastMs === null || lastTs > acc.lastMs) acc.lastMs = lastTs;
+    if (lastTs >= weekCutoff) acc.weekTokens += total;
+    if (lastTs >= blockCutoff) {
+      if (acc.blockAnchorMs === null || lastTs < acc.blockAnchorMs) acc.blockAnchorMs = lastTs;
+      acc.blockTokens += total;
+    }
+  }
+}
+
+/**
+ * Process one Codex session file: reads only the last token_count entry
+ * (cumulative) and merges into the accumulator.
+ */
+async function processCodexFile(
+  file: string,
+  weekCutoff: number,
+  blockCutoff: number,
+  acc: CodexAccumulator,
+): Promise<void> {
+  let content: string;
+  try {
+    content = await fs.readFile(file, "utf8");
+  } catch {
+    return;
+  }
+  const { lastUsage, lastTs } = scanCodexLines(content.split("\n"), acc);
+  const u = lastUsage?.info?.total_token_usage;
+  if (!u) return;
+  applyCodexUsage(acc, u, lastTs, weekCutoff, blockCutoff);
+}
+
 async function listJsonlFiles(rootDir: string): Promise<string[]> {
   const out: string[] = [];
   let stack: string[] = [rootDir];
@@ -166,21 +329,22 @@ async function aggregateClaude(home: string): Promise<ProviderUsage> {
   const weekCutoff = now - WEEK_MS;
   const blockCutoff = now - FIVE_HOURS_MS;
 
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cacheReadTokens = 0;
-  let cacheWriteTokens = 0;
-  let costUsd = 0;
-  let messagesCount = 0;
-  let firstMs: number | null = null;
-  let lastMs: number | null = null;
-  let weekTokens = 0;
-  let weekCost = 0;
-
   // 5-hour block: we want the earliest message timestamp within [now-5h, now]
   // as the block anchor; reset is anchor + 5h.
-  let blockAnchorMs: number | null = null;
-  let blockTokens = 0;
+  const acc: ClaudeAccumulator = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    costUsd: 0,
+    messagesCount: 0,
+    firstMs: null,
+    lastMs: null,
+    weekTokens: 0,
+    weekCost: 0,
+    blockAnchorMs: null,
+    blockTokens: 0,
+  };
 
   for (const file of files) {
     let content: string;
@@ -189,68 +353,33 @@ async function aggregateClaude(home: string): Promise<ProviderUsage> {
     } catch {
       continue;
     }
-    const lines = content.split("\n");
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let entry: ClaudeUsageEntry;
-      try {
-        entry = JSON.parse(trimmed);
-      } catch {
-        continue;
-      }
-      const usage = entry.message?.usage;
-      if (!usage) continue;
-      const inT = usage.input_tokens ?? 0;
-      const outT = usage.output_tokens ?? 0;
-      const crT = usage.cache_read_input_tokens ?? 0;
-      const cwT = usage.cache_creation_input_tokens ?? 0;
-      const total = inT + outT + crT + cwT;
-      if (total === 0) continue;
-      inputTokens += inT;
-      outputTokens += outT;
-      cacheReadTokens += crT;
-      cacheWriteTokens += cwT;
-      const cost = costForUsage(entry.message?.model, usage);
-      costUsd += cost;
-      messagesCount += 1;
-
-      const ts = entry.timestamp ? Date.parse(entry.timestamp) : NaN;
-      if (Number.isFinite(ts)) {
-        if (firstMs === null || ts < firstMs) firstMs = ts;
-        if (lastMs === null || ts > lastMs) lastMs = ts;
-        if (ts >= weekCutoff) {
-          weekTokens += total;
-          weekCost += cost;
-        }
-        if (ts >= blockCutoff) {
-          if (blockAnchorMs === null || ts < blockAnchorMs) blockAnchorMs = ts;
-          blockTokens += total;
-        }
-      }
+    for (const line of content.split("\n")) {
+      processClaudeLine(line, weekCutoff, blockCutoff, acc);
     }
   }
 
-  const totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
+  const totalTokens =
+    acc.inputTokens + acc.outputTokens + acc.cacheReadTokens + acc.cacheWriteTokens;
 
   return {
     provider: "claude-code",
-    inputTokens,
-    outputTokens,
-    cacheReadTokens,
-    cacheWriteTokens,
+    inputTokens: acc.inputTokens,
+    outputTokens: acc.outputTokens,
+    cacheReadTokens: acc.cacheReadTokens,
+    cacheWriteTokens: acc.cacheWriteTokens,
     totalTokens,
-    estimatedCostUsd: costUsd,
+    estimatedCostUsd: acc.costUsd,
     sessionsCount: files.length,
-    messagesCount,
-    firstMessageAt: firstMs !== null ? new Date(firstMs).toISOString() : null,
-    lastMessageAt: lastMs !== null ? new Date(lastMs).toISOString() : null,
-    currentBlockStartedAt: blockAnchorMs !== null ? new Date(blockAnchorMs).toISOString() : null,
+    messagesCount: acc.messagesCount,
+    firstMessageAt: acc.firstMs !== null ? new Date(acc.firstMs).toISOString() : null,
+    lastMessageAt: acc.lastMs !== null ? new Date(acc.lastMs).toISOString() : null,
+    currentBlockStartedAt:
+      acc.blockAnchorMs !== null ? new Date(acc.blockAnchorMs).toISOString() : null,
     currentBlockResetsAt:
-      blockAnchorMs !== null ? new Date(blockAnchorMs + FIVE_HOURS_MS).toISOString() : null,
-    currentBlockTokens: blockTokens,
-    weekTokens,
-    weekCostUsd: weekCost,
+      acc.blockAnchorMs !== null ? new Date(acc.blockAnchorMs + FIVE_HOURS_MS).toISOString() : null,
+    currentBlockTokens: acc.blockTokens,
+    weekTokens: acc.weekTokens,
+    weekCostUsd: acc.weekCost,
     quotaFiveHourUsedPercent: null,
     quotaFiveHourResetsAt: null,
     quotaWeeklyUsedPercent: null,
@@ -315,84 +444,44 @@ async function aggregateCodex(home: string): Promise<ProviderUsage> {
   const weekCutoff = now - WEEK_MS;
   const blockCutoff = now - FIVE_HOURS_MS;
 
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cacheReadTokens = 0;
-  let messagesCount = 0;
-  let firstMs: number | null = null;
-  let lastMs: number | null = null;
-  let weekTokens = 0;
-  let blockAnchorMs: number | null = null;
-  let blockTokens = 0;
-
   // For codex, total_token_usage is cumulative within a session — to avoid
   // double-counting we read the LAST token_count event per file.
+  const acc: CodexAccumulator = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    messagesCount: 0,
+    firstMs: null,
+    lastMs: null,
+    weekTokens: 0,
+    blockAnchorMs: null,
+    blockTokens: 0,
+  };
+
   for (const file of files) {
-    let content: string;
-    try {
-      content = await fs.readFile(file, "utf8");
-    } catch {
-      continue;
-    }
-    const lines = content.split("\n");
-    let lastUsage: CodexUsageEntry["payload"] = undefined;
-    let lastTs: number | null = null;
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let entry: CodexUsageEntry;
-      try {
-        entry = JSON.parse(trimmed);
-      } catch {
-        continue;
-      }
-      if (entry.payload?.info?.total_token_usage) {
-        lastUsage = entry.payload;
-        const ts = entry.timestamp ? Date.parse(entry.timestamp) : NaN;
-        if (Number.isFinite(ts)) lastTs = ts;
-        messagesCount += 1;
-      }
-    }
-    const u = lastUsage?.info?.total_token_usage;
-    if (!u) continue;
-    const inT = u.input_tokens ?? 0;
-    const outT = u.output_tokens ?? 0;
-    const crT = u.cached_input_tokens ?? 0;
-    const total = inT + outT + crT;
-    if (total === 0) continue;
-    inputTokens += inT;
-    outputTokens += outT;
-    cacheReadTokens += crT;
-    if (lastTs !== null) {
-      if (firstMs === null || lastTs < firstMs) firstMs = lastTs;
-      if (lastMs === null || lastTs > lastMs) lastMs = lastTs;
-      if (lastTs >= weekCutoff) weekTokens += total;
-      if (lastTs >= blockCutoff) {
-        if (blockAnchorMs === null || lastTs < blockAnchorMs) blockAnchorMs = lastTs;
-        blockTokens += total;
-      }
-    }
+    await processCodexFile(file, weekCutoff, blockCutoff, acc);
   }
 
-  const totalTokens = inputTokens + outputTokens + cacheReadTokens;
+  const totalTokens = acc.inputTokens + acc.outputTokens + acc.cacheReadTokens;
 
   return {
     provider: "codex",
-    inputTokens,
-    outputTokens,
-    cacheReadTokens,
+    inputTokens: acc.inputTokens,
+    outputTokens: acc.outputTokens,
+    cacheReadTokens: acc.cacheReadTokens,
     cacheWriteTokens: 0,
     totalTokens,
     estimatedCostUsd: null,
     sessionsCount: files.length,
-    messagesCount,
-    firstMessageAt: firstMs !== null ? new Date(firstMs).toISOString() : null,
-    lastMessageAt: lastMs !== null ? new Date(lastMs).toISOString() : null,
-    currentBlockStartedAt: blockAnchorMs !== null ? new Date(blockAnchorMs).toISOString() : null,
+    messagesCount: acc.messagesCount,
+    firstMessageAt: acc.firstMs !== null ? new Date(acc.firstMs).toISOString() : null,
+    lastMessageAt: acc.lastMs !== null ? new Date(acc.lastMs).toISOString() : null,
+    currentBlockStartedAt:
+      acc.blockAnchorMs !== null ? new Date(acc.blockAnchorMs).toISOString() : null,
     currentBlockResetsAt:
-      blockAnchorMs !== null ? new Date(blockAnchorMs + FIVE_HOURS_MS).toISOString() : null,
-    currentBlockTokens: blockTokens,
-    weekTokens,
+      acc.blockAnchorMs !== null ? new Date(acc.blockAnchorMs + FIVE_HOURS_MS).toISOString() : null,
+    currentBlockTokens: acc.blockTokens,
+    weekTokens: acc.weekTokens,
     weekCostUsd: null,
     quotaFiveHourUsedPercent: null,
     quotaFiveHourResetsAt: null,

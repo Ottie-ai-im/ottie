@@ -208,6 +208,11 @@ export function Button({
     [sizeStyle, variantStyle, variantHoverStyle, hovered, disabled, style],
   );
 
+  const combinedButtonStyle = useMemo(
+    () => [pressableStyle, animatedPressStyle],
+    [pressableStyle, animatedPressStyle],
+  );
+
   const resolvedTextStyle = useMemo(
     () => [
       styles.text,
@@ -262,7 +267,7 @@ export function Button({
       onHoverOut={handleHoverOut}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      style={[pressableStyle, animatedPressStyle]}
+      style={combinedButtonStyle}
     >
       {renderIcon()}
       {children != null ? <Text style={resolvedTextStyle}>{children}</Text> : null}

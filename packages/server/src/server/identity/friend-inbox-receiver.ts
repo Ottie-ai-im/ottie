@@ -83,6 +83,59 @@ export interface ProcessInboxOnceResult {
   hitMaxPagesCap: boolean;
 }
 
+/** State threaded through the per-page loop. */
+interface PageLoopState {
+  cursor: InboxCursor;
+  persisted: number;
+  dropped: number;
+  hitMaxPagesCap: boolean;
+  /** Set to true when a page's entry processing should abort the outer loop. */
+  abort: boolean;
+}
+
+/**
+ * Process all entries on a single inbox page. Mutates `state` in place.
+ * Returns false if the caller should bail out immediately (abort path).
+ */
+async function processEntriesOnPage(
+  entries: readonly InboxFetchEntry[],
+  deps: ProcessInboxOnceDeps,
+  now: () => number,
+  log: pino.Logger | undefined,
+  state: PageLoopState,
+): Promise<boolean> {
+  for (const entry of entries) {
+    const outcome = await processSingleEntry(entry, deps, log);
+    if (outcome === "persisted") {
+      state.persisted++;
+    } else if (outcome === "dropped") {
+      state.dropped++;
+    } else if (outcome === "abort") {
+      // Persist failed — don't advance cursor; bail out so the
+      // same page is retried on the next poll.
+      state.abort = true;
+      return false;
+    }
+    state.cursor = advanceInboxCursor(deps.ottieHome, entry.seq, deps.logger);
+    // Best-effort ACK; relay TTL cleans up if this fails.
+    const delOutcome = await deleteInbox({
+      relayEndpoint: deps.relayEndpoint,
+      recipientRootPubKeyB64Url: deps.selfRootSignPublicKeyB64,
+      seq: entry.seq,
+      authSigner: deps.authSigner,
+      nowMs: now(),
+      ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+    });
+    if (!delOutcome.ok) {
+      log?.warn(
+        { status: delOutcome.status, error: delOutcome.error, seq: entry.seq },
+        "inbox_delete_failed",
+      );
+    }
+  }
+  return true;
+}
+
 export async function processInboxOnce(
   deps: ProcessInboxOnceDeps,
 ): Promise<ProcessInboxOnceResult> {
@@ -91,16 +144,19 @@ export async function processInboxOnce(
   const pageLimit = deps.pageLimit ?? INBOX_RECEIVER_DEFAULT_PAGE_LIMIT;
   const maxPages = deps.maxPagesPerCall ?? INBOX_RECEIVER_MAX_PAGES_PER_CALL;
 
-  let cursor = loadInboxCursor(deps.ottieHome, deps.logger);
-  let persisted = 0;
-  let dropped = 0;
-  let hitMaxPagesCap = false;
+  const state: PageLoopState = {
+    cursor: loadInboxCursor(deps.ottieHome, deps.logger),
+    persisted: 0,
+    dropped: 0,
+    hitMaxPagesCap: false,
+    abort: false,
+  };
 
   for (let pageNum = 0; pageNum < maxPages; pageNum++) {
     const fetchOutcome = await getInbox({
       relayEndpoint: deps.relayEndpoint,
       recipientRootPubKeyB64Url: deps.selfRootSignPublicKeyB64,
-      since: cursor.lastSeenSeq,
+      since: state.cursor.lastSeenSeq,
       authSigner: deps.authSigner,
       nowMs: now(),
       ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
@@ -116,43 +172,37 @@ export async function processInboxOnce(
     if (fetchOutcome.entries.length === 0) {
       break;
     }
-    for (const entry of fetchOutcome.entries) {
-      const outcome = await processSingleEntry(entry, deps, log);
-      if (outcome === "persisted") persisted++;
-      else if (outcome === "dropped") dropped++;
-      else if (outcome === "abort") {
-        // Persist failed — don't advance cursor; bail out so the
-        // same page is retried on the next poll.
-        return { persisted, dropped, cursor, hitMaxPagesCap: false };
-      }
-      cursor = advanceInboxCursor(deps.ottieHome, entry.seq, deps.logger);
-      // Best-effort ACK; relay TTL cleans up if this fails.
-      const delOutcome = await deleteInbox({
-        relayEndpoint: deps.relayEndpoint,
-        recipientRootPubKeyB64Url: deps.selfRootSignPublicKeyB64,
-        seq: entry.seq,
-        authSigner: deps.authSigner,
-        nowMs: now(),
-        ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
-      });
-      if (!delOutcome.ok) {
-        log?.warn(
-          { status: delOutcome.status, error: delOutcome.error, seq: entry.seq },
-          "inbox_delete_failed",
-        );
-      }
+    const ok = await processEntriesOnPage(fetchOutcome.entries, deps, now, log, state);
+    if (!ok) {
+      return {
+        persisted: state.persisted,
+        dropped: state.dropped,
+        cursor: state.cursor,
+        hitMaxPagesCap: false,
+      };
     }
     if (!fetchOutcome.hasMore) break;
     if (pageNum + 1 >= maxPages) {
-      hitMaxPagesCap = true;
-      log?.warn({ maxPages, persisted, dropped }, "inbox_processed_max_pages_more_remaining");
+      state.hitMaxPagesCap = true;
+      log?.warn(
+        { maxPages, persisted: state.persisted, dropped: state.dropped },
+        "inbox_processed_max_pages_more_remaining",
+      );
     }
   }
 
-  if (persisted > 0 || dropped > 0) {
-    log?.info({ persisted, dropped, cursor: cursor.lastSeenSeq }, "inbox_processed");
+  if (state.persisted > 0 || state.dropped > 0) {
+    log?.info(
+      { persisted: state.persisted, dropped: state.dropped, cursor: state.cursor.lastSeenSeq },
+      "inbox_processed",
+    );
   }
-  return { persisted, dropped, cursor, hitMaxPagesCap };
+  return {
+    persisted: state.persisted,
+    dropped: state.dropped,
+    cursor: state.cursor,
+    hitMaxPagesCap: state.hitMaxPagesCap,
+  };
 }
 
 type SingleEntryOutcome = "persisted" | "dropped" | "abort";

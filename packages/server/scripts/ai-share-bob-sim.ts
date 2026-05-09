@@ -67,7 +67,9 @@ async function main(): Promise<void> {
 
   step(2, "查 bob 当前 pending inbound invites");
   const inboundList = await bobClient.chatP2pAiShareListInbound();
-  bob(`list-inbound: error=${inboundList.error ?? "null"}, invites=${inboundList.invites?.length ?? 0}`);
+  bob(
+    `list-inbound: error=${inboundList.error ?? "null"}, invites=${inboundList.invites?.length ?? 0}`,
+  );
   if (inboundList.error) failStep(`list-inbound 失败: ${inboundList.error}`);
   if (!inboundList.invites || inboundList.invites.length === 0) {
     failStep("bob daemon 内存里没有 pending invite");

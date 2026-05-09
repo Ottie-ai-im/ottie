@@ -51,17 +51,18 @@ async function runCommand(
     child.stderr?.on("data", (chunk) => {
       stderr += String(chunk);
     });
-    child.on("close", (code) => {
+    let settled = false;
+    function settle(result: CommandResult): void {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
-      resolve({ exitCode: code ?? -1, stdout, stderr });
+      resolve(result);
+    }
+    child.on("close", (code) => {
+      settle({ exitCode: code ?? -1, stdout, stderr });
     });
     child.on("error", (err) => {
-      clearTimeout(timeout);
-      resolve({
-        exitCode: -1,
-        stdout,
-        stderr: stderr + String(err),
-      });
+      settle({ exitCode: -1, stdout, stderr: stderr + String(err) });
     });
   });
 }
