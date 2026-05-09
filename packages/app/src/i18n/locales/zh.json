@@ -1,4 +1,8 @@
 {
+  "projectPicker": {
+    "addingOn": "添加到",
+    "switchDevice": "切换"
+  },
   "common": {
     "send": "发送",
     "cancel": "取消",

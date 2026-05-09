@@ -42,6 +42,10 @@ export interface HostProfile {
   preferredConnectionId: string | null;
   createdAt: string;
   updatedAt: string;
+  // Set when the runtime transitions this host to "online". Used so the
+  // add-project flow can default to the device the user most recently
+  // connected to instead of an arbitrary first-in-list pick.
+  lastUsedAt?: string;
 }
 
 export function defaultLifecycle(): HostLifecycle {
@@ -127,6 +131,7 @@ export function upsertHostConnectionInProfiles(input: {
       preferredConnectionId: input.connection.id,
       createdAt: now,
       updatedAt: now,
+      lastUsedAt: undefined,
     };
     return [...existing, profile];
   }
@@ -175,6 +180,7 @@ export function upsertHostConnectionInProfiles(input: {
     preferredConnectionId: nextPreferredConnectionId,
     createdAt: nextCreatedAt,
     updatedAt: now,
+    lastUsedAt: prev.lastUsedAt,
   };
 
   const firstIndex = matchingIndexes[0]!;
@@ -312,6 +318,7 @@ export function normalizeStoredHostProfile(entry: unknown): HostProfile | null {
     preferredConnectionId,
     createdAt: typeof record.createdAt === "string" ? record.createdAt : now,
     updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : now,
+    lastUsedAt: typeof record.lastUsedAt === "string" ? record.lastUsedAt : undefined,
   };
 }
 

@@ -8,17 +8,19 @@ import {
   View,
   type PressableStateCallbackType,
 } from "react-native";
-import { Folder } from "lucide-react-native";
+import { Check, ChevronDown, Folder, Monitor } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { shortenPath } from "@/utils/shorten-path";
 import { useRecommendedProjectPaths } from "@/stores/session-store-hooks";
-import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { useHostRuntimeClient, useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
 import { useOpenProject } from "@/hooks/use-open-project";
 import { buildWorkingDirectorySuggestions } from "@/utils/working-directory-suggestions";
 import { isNative } from "@/constants/platform";
 import { useActiveServerId } from "@/hooks/use-active-server-id";
+import type { HostProfile } from "@/types/host-connection";
 
 interface PathRowProps {
   path: string;
@@ -58,12 +60,62 @@ function PathRow({ path, active, onSelect }: PathRowProps) {
   );
 }
 
+interface DeviceRowProps {
+  host: HostProfile;
+  selected: boolean;
+  onSelect: (serverId: string) => void;
+}
+
+function DeviceRow({ host, selected, onSelect }: DeviceRowProps) {
+  const { theme } = useUnistyles();
+  const handlePress = useCallback(() => {
+    onSelect(host.serverId);
+  }, [host.serverId, onSelect]);
+  const pressableStyle = useCallback(
+    ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.row,
+      (Boolean(hovered) || pressed) && { backgroundColor: theme.colors.surface1 },
+    ],
+    [theme.colors.surface1],
+  );
+  const rowTextStyle = useMemo(
+    () => [styles.rowText, { color: theme.colors.foreground }],
+    [theme.colors.foreground],
+  );
+  return (
+    <Pressable style={pressableStyle} onPress={handlePress}>
+      <View style={styles.rowContent}>
+        <View style={styles.iconSlot}>
+          <Monitor size={16} strokeWidth={2.2} color={theme.colors.foregroundMuted} />
+        </View>
+        <Text style={rowTextStyle} numberOfLines={1}>
+          {host.label}
+        </Text>
+        {selected ? (
+          <View style={styles.checkSlot}>
+            <Check size={16} strokeWidth={2.2} color={theme.colors.foreground} />
+          </View>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
 export function ProjectPickerModal() {
   const { theme } = useUnistyles();
-  const serverId = useActiveServerId();
+  const { t } = useTranslation();
+  const activeServerId = useActiveServerId();
+  const hosts = useHosts();
 
   const open = useKeyboardShortcutsStore((s) => s.projectPickerOpen);
   const setOpen = useKeyboardShortcutsStore((s) => s.setProjectPickerOpen);
+
+  // Local override so the user can switch the target device from inside
+  // the modal without leaving the current route. Resets to the active host
+  // each time the modal opens.
+  const [overrideServerId, setOverrideServerId] = useState<string | null>(null);
+  const [showDevicePicker, setShowDevicePicker] = useState(false);
+  const serverId = overrideServerId ?? activeServerId;
 
   const client = useHostRuntimeClient(serverId ?? "");
   const isConnected = useHostRuntimeIsConnected(serverId ?? "");
@@ -89,7 +141,7 @@ export function ProjectPickerModal() {
         result.entries?.flatMap((entry) => (entry.kind === "directory" ? [entry.path] : [])) ?? []
       );
     },
-    enabled: Boolean(client) && isConnected && open,
+    enabled: Boolean(client) && isConnected && open && !showDevicePicker,
     staleTime: 15_000,
     retry: false,
   });
@@ -103,6 +155,12 @@ export function ProjectPickerModal() {
       }),
     [query, directorySuggestionsQuery.data, recommendedPaths],
   );
+
+  const activeHost = useMemo(
+    () => hosts.find((host) => host.serverId === serverId) ?? null,
+    [hosts, serverId],
+  );
+  const hasMultipleHosts = hosts.length > 1;
 
   const handleClose = useCallback(() => {
     setOpen(false);
@@ -137,11 +195,27 @@ export function ProjectPickerModal() {
     setActiveIndex(0);
   }, []);
 
+  const handleToggleDevicePicker = useCallback(() => {
+    if (!hasMultipleHosts) return;
+    setShowDevicePicker((prev) => !prev);
+  }, [hasMultipleHosts]);
+
+  const handleSelectDevice = useCallback((nextServerId: string) => {
+    setOverrideServerId(nextServerId);
+    setShowDevicePicker(false);
+    setQuery("");
+    setActiveIndex(0);
+    const id = setTimeout(() => inputRef.current?.focus(), 0);
+    return () => clearTimeout(id);
+  }, []);
+
   // Reset state when opening/closing
   useEffect(() => {
     if (open) {
       setQuery("");
       setActiveIndex(0);
+      setOverrideServerId(null);
+      setShowDevicePicker(false);
       const id = setTimeout(() => inputRef.current?.focus(), 0);
       return () => clearTimeout(id);
     }
@@ -165,9 +239,15 @@ export function ProjectPickerModal() {
 
       if (key === "Escape") {
         event.preventDefault();
+        if (showDevicePicker) {
+          setShowDevicePicker(false);
+          return;
+        }
         setOpen(false);
         return;
       }
+
+      if (showDevicePicker) return;
 
       if (key === "Enter") {
         event.preventDefault();
@@ -194,7 +274,16 @@ export function ProjectPickerModal() {
 
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
-  }, [activeIndex, handleSelectPath, handleSubmitCustom, open, options, query, setOpen]);
+  }, [
+    activeIndex,
+    handleSelectPath,
+    handleSubmitCustom,
+    open,
+    options,
+    query,
+    setOpen,
+    showDevicePicker,
+  ]);
 
   const panelStyle = useMemo(
     () => [
@@ -218,8 +307,22 @@ export function ProjectPickerModal() {
     () => [styles.emptyText, { color: theme.colors.foregroundMuted }],
     [theme.colors.foregroundMuted],
   );
+  const deviceBarTextStyle = useMemo(
+    () => [styles.deviceBarText, { color: theme.colors.foregroundMuted }],
+    [theme.colors.foregroundMuted],
+  );
+  const deviceBarLabelStyle = useMemo(
+    () => [styles.deviceBarLabel, { color: theme.colors.foreground }],
+    [theme.colors.foreground],
+  );
+  const deviceBarStyle = useMemo(
+    () => [styles.deviceBar, { borderBottomColor: theme.colors.border }],
+    [theme.colors.border],
+  );
 
   if (!serverId) return null;
+
+  const deviceLabel = activeHost?.label ?? serverId;
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
@@ -227,44 +330,83 @@ export function ProjectPickerModal() {
         <Pressable style={styles.backdrop} onPress={handleClose} />
 
         <View style={panelStyle}>
-          <View style={headerStyle}>
-            <TextInput
-              ref={inputRef}
-              value={query}
-              onChangeText={handleChangeQuery}
-              placeholder="Type a directory path..."
-              placeholderTextColor={theme.colors.foregroundMuted}
-              style={inputStyle}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-              editable={!isSubmitting}
-            />
-          </View>
-
-          <ScrollView
-            style={styles.results}
-            contentContainerStyle={styles.resultsContent}
-            keyboardShouldPersistTaps="always"
-            showsVerticalScrollIndicator={false}
+          <Pressable
+            onPress={handleToggleDevicePicker}
+            disabled={!hasMultipleHosts}
+            style={deviceBarStyle}
           >
-            {isSubmitting ? <Text style={emptyTextStyle}>Opening project...</Text> : null}
-            {!isSubmitting && options.length === 0 && !query.trim() ? (
-              <Text style={emptyTextStyle}>Start typing a path</Text>
+            <View style={styles.iconSlot}>
+              <Monitor size={14} strokeWidth={2.2} color={theme.colors.foregroundMuted} />
+            </View>
+            <Text style={deviceBarTextStyle} numberOfLines={1}>
+              {t("projectPicker.addingOn")} <Text style={deviceBarLabelStyle}>{deviceLabel}</Text>
+            </Text>
+            {hasMultipleHosts ? (
+              <View style={styles.deviceBarTrailing}>
+                <Text style={deviceBarTextStyle}>{t("projectPicker.switchDevice")}</Text>
+                <ChevronDown size={14} strokeWidth={2.2} color={theme.colors.foregroundMuted} />
+              </View>
             ) : null}
-            {!isSubmitting && !(options.length === 0 && !query.trim()) ? (
-              <>
-                {options.map((path, index) => (
-                  <PathRow
-                    key={path}
-                    path={path}
-                    active={index === activeIndex}
-                    onSelect={handleSelectPath}
-                  />
-                ))}
-              </>
-            ) : null}
-          </ScrollView>
+          </Pressable>
+
+          {showDevicePicker ? (
+            <ScrollView
+              style={styles.results}
+              contentContainerStyle={styles.resultsContent}
+              keyboardShouldPersistTaps="always"
+              showsVerticalScrollIndicator={false}
+            >
+              {hosts.map((host) => (
+                <DeviceRow
+                  key={host.serverId}
+                  host={host}
+                  selected={host.serverId === serverId}
+                  onSelect={handleSelectDevice}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <>
+              <View style={headerStyle}>
+                <TextInput
+                  ref={inputRef}
+                  value={query}
+                  onChangeText={handleChangeQuery}
+                  placeholder="Type a directory path..."
+                  placeholderTextColor={theme.colors.foregroundMuted}
+                  style={inputStyle}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                  editable={!isSubmitting}
+                />
+              </View>
+
+              <ScrollView
+                style={styles.results}
+                contentContainerStyle={styles.resultsContent}
+                keyboardShouldPersistTaps="always"
+                showsVerticalScrollIndicator={false}
+              >
+                {isSubmitting ? <Text style={emptyTextStyle}>Opening project...</Text> : null}
+                {!isSubmitting && options.length === 0 && !query.trim() ? (
+                  <Text style={emptyTextStyle}>Start typing a path</Text>
+                ) : null}
+                {!isSubmitting && !(options.length === 0 && !query.trim()) ? (
+                  <>
+                    {options.map((path, index) => (
+                      <PathRow
+                        key={path}
+                        path={path}
+                        active={index === activeIndex}
+                        onSelect={handleSelectPath}
+                      />
+                    ))}
+                  </>
+                ) : null}
+              </ScrollView>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -292,6 +434,28 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
     ...theme.shadow.glassDeep,
   } as object,
+  deviceBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[2],
+    borderBottomWidth: 1,
+  },
+  deviceBarText: {
+    fontSize: theme.fontSize.sm,
+    flexShrink: 1,
+  },
+  deviceBarLabel: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: "600",
+  },
+  deviceBarTrailing: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
   header: {
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[3],
@@ -318,6 +482,13 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[3],
   },
   iconSlot: {
+    width: 16,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkSlot: {
+    marginLeft: "auto",
     width: 16,
     height: 20,
     alignItems: "center",

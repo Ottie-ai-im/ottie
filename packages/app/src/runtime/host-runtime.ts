@@ -1566,6 +1566,24 @@ export class HostRuntimeStore {
     }
   }
 
+  // Stamp lastUsedAt when a host transitions to online so the add-project
+  // flow can prefer the most recently connected device. We mutate the
+  // profile array in place — no controller resync needed because nothing
+  // downstream subscribes to lastUsedAt for runtime decisions.
+  private markHostUsed(serverId: string): void {
+    const now = new Date().toISOString();
+    let changed = false;
+    const next = this.hosts.map((host) => {
+      if (host.serverId !== serverId) return host;
+      changed = true;
+      return { ...host, lastUsedAt: now };
+    });
+    if (!changed) return;
+    this.hosts = next;
+    this.emitHostList();
+    void this.persistHosts();
+  }
+
   private emitHostList(): void {
     this.hostListVersion += 1;
     for (const listener of this.hostListListeners) {
@@ -1740,6 +1758,7 @@ export class HostRuntimeStore {
       snapshot.connectionStatus === "online" && previousStatus !== "online";
     if (didTransitionOnline) {
       useSessionStore.getState().bumpHistorySyncGeneration(serverId);
+      this.markHostUsed(serverId);
     }
 
     // Runtime owns directory bootstrap policy, including reconnect and delayed
