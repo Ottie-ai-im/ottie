@@ -8,9 +8,4 @@ module.exports = {
   deploymentTarget: "16.1",
   // SwiftUI + ActivityKit + WidgetKit are the only frameworks we need.
   frameworks: ["SwiftUI", "WidgetKit", "ActivityKit"],
-  // Live Activities are gated by an entitlement set on BOTH the host app and
-  // the widget extension. The plugin propagates this to the host app.
-  entitlements: {
-    "com.apple.developer.live-activity": true,
-  },
 };
