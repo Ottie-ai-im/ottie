@@ -20,6 +20,9 @@
       "env": {
         "APP_VARIANT": "production"
       },
+      "ios": {
+        "autoIncrement": "buildNumber"
+      },
       "android": {
         "autoIncrement": "versionCode"
       }
@@ -36,7 +39,7 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "6758887924"
+        "ascAppId": "6764186341"
       },
       "android": {
         "track": "production",
