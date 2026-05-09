@@ -162,6 +162,29 @@ export interface SelfDeviceContext {
 }
 
 /**
+ * Sink for non-agent notifications: friend-pair candidate landed, or an
+ * inbound friend chat message persisted. websocket-server registers one
+ * of these and decides whether to push (per friend-attention-policy) and
+ * which active client gets the in-app banner.
+ */
+export type FriendAttentionEvent =
+  | {
+      kind: "friend_pair_request";
+      peerDisplayName: string;
+      peerRootPubKeyB64: string;
+      pairNonceB64: string;
+    }
+  | {
+      kind: "friend_chat_message";
+      peerDisplayName: string;
+      peerRootPubKeyB64: string;
+      messageBody: string;
+      messageId: string;
+    };
+
+export type FriendAttentionCallback = (event: FriendAttentionEvent) => void;
+
+/**
  * Phase 4 v2/b — picker-friendly view of a local agent. Just enough
  * for the owner's invite modal to render a row + send a real
  * `agentId` / `agentLabel` / `agentProvider` in the invite envelope.
@@ -287,6 +310,7 @@ export class IdentityService {
   private selfDevice: SelfDeviceBundle | null = null;
   private deviceList: StoredDeviceList | null = null;
   private peerList: StoredPeerList | null = null;
+  private friendAttentionCallback: FriendAttentionCallback | null = null;
 
   constructor(options: IdentityServiceOptions) {
     this.ottieHome = options.ottieHome;
@@ -354,6 +378,27 @@ export class IdentityService {
 
   getState(): IdentityState {
     return this.state;
+  }
+
+  /**
+   * Register the sink for friend-attention events (a friend wants to add
+   * you, or an inbound chat message just landed). websocket-server uses
+   * this to broadcast in-app banners + send Expo push to mobile.
+   */
+  setFriendAttentionCallback(callback: FriendAttentionCallback | null): void {
+    this.friendAttentionCallback = callback;
+  }
+
+  /**
+   * Resolve the public-facing display name we should put in the
+   * notification's title. For paired peers we pull `peerDisplayName` off
+   * peers.json (the name at pair time). For unpaired candidates the
+   * caller passes the candidate's claimed displayName, which is the only
+   * thing we have for someone we haven't accepted yet.
+   */
+  private resolvePeerDisplayName(peerRootPubKeyB64: string, fallback: string): string {
+    const peer = this.peerList?.peers.find((p) => p.peerRootSignPublicKeyB64 === peerRootPubKeyB64);
+    return peer?.peerDisplayName ?? fallback;
   }
 
   /**
@@ -522,6 +567,16 @@ export class IdentityService {
     return createFriendPairConnectionHandler({
       pendingOffers: this.pendingFriendPairs,
       pendingCandidates: this.pendingFriendPairCandidates,
+      onCandidateRecorded: (info) => {
+        // Late-bound: websocket-server registers the callback after
+        // IdentityService construction, so we read it lazily here.
+        this.friendAttentionCallback?.({
+          kind: "friend_pair_request",
+          peerDisplayName: info.peerDisplayName,
+          peerRootPubKeyB64: info.peerRootPubKeyB64,
+          pairNonceB64: info.pairNonceB64,
+        });
+      },
     });
   }
 
@@ -1126,6 +1181,20 @@ export class IdentityService {
         },
         "friend_chat_message_received",
       );
+      try {
+        this.friendAttentionCallback?.({
+          kind: "friend_chat_message",
+          peerDisplayName: this.resolvePeerDisplayName(input.peerRootPubKey, "Friend"),
+          peerRootPubKeyB64: input.peerRootPubKey,
+          messageBody: validated.data.message.body,
+          messageId: validated.data.message.id,
+        });
+      } catch (err) {
+        this.logger.warn(
+          { err, peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8) },
+          "friend_chat_attention_callback_failed",
+        );
+      }
     } catch (err) {
       this.logger.error(
         { err, peerRootPubKeyPrefix: input.peerRootPubKey.slice(0, 8) },

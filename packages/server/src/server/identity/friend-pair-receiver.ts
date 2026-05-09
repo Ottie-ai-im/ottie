@@ -48,6 +48,17 @@ export interface FriendPairReceiverDeps {
   pendingCandidates: FriendPairPendingCandidateStore;
   /** Override clock for tests. Defaults to Date.now(). */
   now?: () => number;
+  /**
+   * Fired right after a candidate is parked in `pendingCandidates`.
+   * websocket-server uses this to broadcast in-app + push notifications
+   * so the user knows someone is asking to add them as a friend. Errors
+   * thrown here are caught and logged — never block candidate recording.
+   */
+  onCandidateRecorded?: (info: {
+    peerDisplayName: string;
+    peerRootPubKeyB64: string;
+    pairNonceB64: string;
+  }) => void;
 }
 
 export function createFriendPairConnectionHandler(
@@ -188,6 +199,18 @@ export function createFriendPairConnectionHandler(
           replySocket: socket,
           nowMs: now(),
         });
+
+        if (deps.onCandidateRecorded) {
+          try {
+            deps.onCandidateRecorded({
+              peerDisplayName: candidate.displayName,
+              peerRootPubKeyB64: candidate.rootSignPublicKeyB64,
+              pairNonceB64: redemption.offerNonceB64,
+            });
+          } catch (err) {
+            logger.warn({ err }, "friend_pair_handler_attention_callback_failed");
+          }
+        }
 
         logger.info(
           {

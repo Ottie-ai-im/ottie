@@ -47,10 +47,17 @@ import type { WorkspaceScriptRuntimeStore } from "./workspace-script-runtime-sto
 import type { SpeechReadinessSnapshot, SpeechService } from "./speech/speech-runtime.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "./voice-types.js";
 import { computeNotificationPlan, type ClientPresenceState } from "./agent-attention-policy.js";
+import { computeFriendNotificationPlan } from "./friend-attention-policy.js";
 import {
   buildAgentAttentionNotificationPayload,
   findLatestPermissionRequest,
 } from "../shared/agent-attention-notification.js";
+import {
+  buildFriendChatNotificationPayload,
+  buildFriendPairNotificationPayload,
+  type FriendAttentionNotificationPayload,
+} from "../shared/friend-attention-notification.js";
+import type { FriendAttentionEvent } from "./identity/identity-service.js";
 import { createGitHubService, type GitHubService } from "../services/github-service.js";
 import { type LocalTokenMode, verifyBearerToken } from "./auth/local-token.js";
 import { PluginManager } from "./plugins/plugin-manager.js";
@@ -538,6 +545,14 @@ export class VoiceAssistantWebSocketServer {
       void this.broadcastAgentAttention(params).catch((err) => {
         this.logger.warn({ err, agentId: params.agentId }, "Failed to broadcast agent attention");
       });
+    });
+
+    this.identityService?.setFriendAttentionCallback((event) => {
+      try {
+        this.broadcastFriendAttention(event);
+      } catch (err) {
+        this.logger.warn({ err, kind: event.kind }, "Failed to broadcast friend attention");
+      }
     });
 
     this.wss = this.createWebSocketServer(server, wsConfig);
@@ -1898,6 +1913,53 @@ export class VoiceAssistantWebSocketServer {
       this.sendToClient(ws, message);
     }
   }
+
+  private broadcastFriendAttention(event: FriendAttentionEvent): void {
+    const notification = buildFriendNotification(this.serverId, event);
+    if (!notification) return;
+
+    const allStates: ClientPresenceState[] = [];
+    for (const [, connection] of this.sessions) {
+      allStates.push(this.getClientActivityState(connection.session));
+    }
+
+    const plan = computeFriendNotificationPlan({ allStates, nowMs: Date.now() });
+
+    if (plan.shouldPush) {
+      const tokens = this.pushTokenStore.getAllTokens();
+      this.logger.info(
+        { tokenCount: tokens.length, kind: event.kind },
+        "Sending friend push notification",
+      );
+      if (tokens.length > 0) {
+        void this.pushService.sendPush(tokens, notification);
+      }
+    }
+  }
+}
+
+function buildFriendNotification(
+  serverId: string,
+  event: FriendAttentionEvent,
+): FriendAttentionNotificationPayload | null {
+  if (event.kind === "friend_pair_request") {
+    return buildFriendPairNotificationPayload({
+      serverId,
+      peerDisplayName: event.peerDisplayName,
+      peerRootPubKeyB64: event.peerRootPubKeyB64,
+      pairNonceB64: event.pairNonceB64,
+    });
+  }
+  if (event.kind === "friend_chat_message") {
+    return buildFriendChatNotificationPayload({
+      serverId,
+      peerDisplayName: event.peerDisplayName,
+      peerRootPubKeyB64: event.peerRootPubKeyB64,
+      messageBody: event.messageBody,
+      messageId: event.messageId,
+    });
+  }
+  return null;
 }
 
 interface SocketRequestMetadata {

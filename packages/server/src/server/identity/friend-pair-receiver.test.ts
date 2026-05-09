@@ -139,6 +139,60 @@ describe("createFriendPairConnectionHandler", () => {
     expect(pendingOffers.redeem(pending.offer.nonceB64)).toBeNull();
   });
 
+  test("fires onCandidateRecorded with the candidate's display name + pubkey + nonce", async () => {
+    const alice = mintRootKeys();
+    const bob = mintRootKeys();
+    const pendingOffers = new FriendPairPendingStore();
+    const pendingCandidates = new FriendPairPendingCandidateStore();
+    const events: Array<{
+      peerDisplayName: string;
+      peerRootPubKeyB64: string;
+      pairNonceB64: string;
+    }> = [];
+    const handler = createFriendPairConnectionHandler({
+      pendingOffers,
+      pendingCandidates,
+      onCandidateRecorded: (info) => events.push(info),
+    });
+
+    const { pending } = pendingOffers.create(makeOfferFixture(alice));
+    const built = buildFriendPairRedemption({
+      offer: pending.offer,
+      selfRootSignPublicKeyB64: bob.signPublicKeyB64,
+      selfRootSignPrivateKey: bob.signPrivateKey,
+      selfDisplayName: "Bob",
+    });
+
+    const fake = makeFakeSocket();
+    await runHandler(handler, `friend-pair:${pending.offer.nonceB64}`, fake);
+    fake.deliverMessage(JSON.stringify(built.redemption));
+
+    expect(events).toEqual([
+      {
+        peerDisplayName: "Bob",
+        peerRootPubKeyB64: bob.signPublicKeyB64,
+        pairNonceB64: pending.offer.nonceB64,
+      },
+    ]);
+  });
+
+  test("does NOT fire onCandidateRecorded when validation fails", async () => {
+    const alice = mintRootKeys();
+    const events: unknown[] = [];
+    const handler = createFriendPairConnectionHandler({
+      pendingOffers: new FriendPairPendingStore(),
+      pendingCandidates: new FriendPairPendingCandidateStore(),
+      onCandidateRecorded: (info) => events.push(info),
+    });
+
+    void alice;
+    const fake = makeFakeSocket();
+    await runHandler(handler, "friend-pair:nonexistent-nonce", fake);
+    fake.deliverMessage("{not valid json");
+
+    expect(events).toEqual([]);
+  });
+
   test("rejects an empty connectionId nonce", async () => {
     const handler = createFriendPairConnectionHandler({
       pendingOffers: new FriendPairPendingStore(),
