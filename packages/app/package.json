@@ -6,7 +6,7 @@
   "scripts": {
     "start": "APP_VARIANT=development expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "build:workspace-deps": "pnpm --filter @ottie/highlight build && pnpm --filter @ottie/expo-two-way-audio build",
+    "build:workspace-deps": "pnpm --filter @ottie/highlight build && pnpm --filter @ottie/expo-two-way-audio build && pnpm --filter @ottie/expo-live-activity build",
     "eas-build-post-install": "pnpm run build:workspace-deps",
     "android": "pnpm run android:development",
     "android:development": "APP_VARIANT=development expo prebuild --platform android --non-interactive && APP_VARIANT=development expo run:android --variant=debug",
@@ -33,6 +33,7 @@
     "@floating-ui/react-native": "^0.10.7",
     "@gorhom/bottom-sheet": "^5.2.6",
     "@gorhom/portal": "^1.0.14",
+    "@ottie/expo-live-activity": "1.11.0-beta.1",
     "@ottie/expo-two-way-audio": "1.11.0-beta.1",
     "@ottie/highlight": "1.11.0-beta.1",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -114,6 +115,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@bacons/apple-targets": "4.0.6",
     "@playwright/test": "^1.56.1",
     "@testing-library/react": "^16.3.2",
     "@types/qrcode": "^1.5.6",

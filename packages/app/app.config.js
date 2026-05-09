@@ -79,6 +79,9 @@ export default {
         NSPhotoLibraryUsageDescription:
           "Ottie reads your photo library when you tap 'Add image' to attach images to messages.",
         ITSAppUsesNonExemptEncryption: false,
+        // Live Activities + Dynamic Island. iOS 16.1+ shows the lock-screen
+        // widget; iOS 16.2+ on iPhone 14 Pro+ surfaces the Dynamic Island.
+        NSSupportsLiveActivities: true,
       },
       bundleIdentifier: variant.packageId,
       ...(variant.googleServiceInfoPlist
@@ -156,12 +159,26 @@ export default {
       [
         "expo-build-properties",
         {
+          ios: {
+            // Live Activities require iOS 16.1+. The Widget Extension target
+            // also needs ≥16.1 (set in targets/OttieLiveActivity/expo-target.config.js).
+            deploymentTarget: "16.1",
+          },
           android: {
             minSdkVersion: 29,
             kotlinVersion: "2.1.20",
             // Allow HTTP connections for local network hosts in release builds
             usesCleartextTraffic: true,
           },
+        },
+      ],
+      // @bacons/apple-targets generates the Widget Extension target from the
+      // sibling `targets/OttieLiveActivity/` folder during `expo prebuild -p ios`.
+      // The team ID is required so the Widget Extension can be code-signed.
+      [
+        "@bacons/apple-targets",
+        {
+          appleTeamId: "NYJ9G8WDLK",
         },
       ],
     ],

@@ -1,0 +1,18 @@
+{
+  "name": "@ottie/expo-live-activity",
+  "version": "1.11.0-beta.1",
+  "private": true,
+  "description": "iOS Live Activity / Dynamic Island bridge for Ottie agents",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "build": "tsgo",
+    "typecheck": "tsgo --noEmit"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "expo-modules-core": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}
