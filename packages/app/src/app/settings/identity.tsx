@@ -4,9 +4,10 @@ import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, Plus, Trash2 } from "lucide-react-native";
+import { ChevronLeft, Download, Plus, Trash2 } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
+import { saveIdentityFile } from "@/utils/identity-file-io";
 import type { DaemonClient } from "@server/client/daemon-client";
 import type {
   IdentityStateOnWire,
@@ -394,6 +395,88 @@ function LoadedBody({
         </Button>
       </View>
       <PendingFriendRequestsSection serverId={fetchState.serverId} t={t} />
+
+      <BackupSection
+        serverId={fetchState.serverId}
+        displayName={state.kind === "loaded" ? state.identity.displayName : ""}
+        t={t}
+      />
+    </View>
+  );
+}
+
+function BackupSection({
+  serverId,
+  displayName,
+  t,
+}: {
+  serverId: string;
+  displayName: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const { theme } = useUnistyles();
+  const client = useHostRuntimeClient(serverId);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = useCallback(() => {
+    if (!client) return;
+    Alert.alert(
+      t("identitySettings.backup.confirmTitle"),
+      t("identitySettings.backup.confirmBody"),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("identitySettings.backup.confirmAction"),
+          style: "destructive",
+          onPress: async () => {
+            setIsExporting(true);
+            try {
+              const response = await client.identityExport();
+              if (response.error || !response.bundle) {
+                Alert.alert(
+                  t("identitySettings.backup.errorTitle"),
+                  response.error ?? t("identitySettings.backup.errorBody"),
+                );
+                return;
+              }
+              const json = `${JSON.stringify(response.bundle, null, 2)}\n`;
+              await saveIdentityFile({ baseName: displayName, jsonContent: json });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              Alert.alert(t("identitySettings.backup.errorTitle"), message);
+            } finally {
+              setIsExporting(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [client, displayName, t]);
+
+  const downloadIcon = useMemo(
+    () => <Download size={16} color={theme.colors.palette.white} />,
+    [theme.colors.palette.white],
+  );
+
+  return (
+    <View>
+      <Text style={styles.sectionTitleSpaced}>{t("identitySettings.backup.section")}</Text>
+      <View style={styles.cardSpaced}>
+        <Text style={styles.helper}>{t("identitySettings.backup.description")}</Text>
+        <Text style={styles.warningText}>{t("identitySettings.backup.warning")}</Text>
+        <View style={styles.addDeviceButtonRow}>
+          <Button
+            variant="default"
+            onPress={handleExport}
+            leftIcon={downloadIcon}
+            disabled={!client || isExporting}
+          >
+            {isExporting
+              ? t("identitySettings.backup.exporting")
+              : t("identitySettings.backup.exportAction")}
+          </Button>
+        </View>
+      </View>
     </View>
   );
 }

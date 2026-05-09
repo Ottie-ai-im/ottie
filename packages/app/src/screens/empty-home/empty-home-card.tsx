@@ -6,7 +6,6 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { otterAssets } from "@/assets/otter";
 import { PairLinkModal } from "@/components/pair-link-modal";
-import { getIsElectronRuntime } from "@/constants/layout";
 import { resolveAppVersion } from "@/utils/app-version";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
 import { buildHostRootRoute } from "@/utils/host-routes";
@@ -15,6 +14,7 @@ import type { HostProfile } from "@/types/host-connection";
 import { WelcomeCta } from "./states/welcome-cta";
 import { NameInput } from "./states/name-input";
 import { ComingSoon } from "./states/coming-soon";
+import { RestoreFromBackup } from "./states/restore-from-backup";
 
 // Empty-home is the unified replacement for the old WelcomeScreen. It is a
 // state machine that morphs in place rather than navigating between routes,
@@ -33,6 +33,7 @@ import { ComingSoon } from "./states/coming-soon";
 type EmptyHomeState =
   | { kind: "welcome" }
   | { kind: "name-input" }
+  | { kind: "restore" }
   | { kind: "advanced"; reason: "old-user" | "device-link" };
 
 interface EmptyHomeCardProps {
@@ -130,18 +131,11 @@ export function EmptyHomeCard({ onHostAdded }: EmptyHomeCardProps) {
   const handleOpenPairLink = useCallback(() => setIsPairLinkOpen(true), []);
   const handleClosePairLink = useCallback(() => setIsPairLinkOpen(false), []);
 
-  // "登录" (old user) means different things per platform:
-  //   - desktop (Tauri): pick an existing OTTIE_HOME folder. Folder picker
-  //     UI lives in Phase 1/2; for now we surface a coming-soon panel.
-  //   - web/mobile: there's no folder concept — "logging in" is pairing
-  //     to an already-initialized daemon. Open the pair modal directly.
-  const handlePickOldUser = useCallback(() => {
-    if (getIsElectronRuntime()) {
-      setState({ kind: "advanced", reason: "old-user" });
-      return;
-    }
-    setIsPairLinkOpen(true);
-  }, []);
+  // "登录" (old user): on every platform, this opens the restore-from-backup
+  // panel — the user picks a previously-exported identity file and we hand it
+  // to the daemon's identity/import RPC. The "no daemon paired yet" branch
+  // inside RestoreFromBackup falls back to the pair flow when needed.
+  const handlePickOldUser = useCallback(() => setState({ kind: "restore" }), []);
 
   const handleHostSaved = useCallback(
     ({ profile, serverId }: { profile: HostProfile; serverId: string }) => {
@@ -199,6 +193,15 @@ export function EmptyHomeCard({ onHostAdded }: EmptyHomeCardProps) {
               onlineServerId={onlineServerId}
               onPair={handleOpenPairLink}
               onBack={goWelcome}
+              onCompleted={handleNameSubmitted}
+            />
+          ) : null}
+
+          {state.kind === "restore" ? (
+            <RestoreFromBackup
+              serverId={onlineServerId}
+              onBack={goWelcome}
+              onPair={handleOpenPairLink}
               onCompleted={handleNameSubmitted}
             />
           ) : null}

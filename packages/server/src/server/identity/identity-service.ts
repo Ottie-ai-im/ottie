@@ -2751,6 +2751,81 @@ export class IdentityService {
   }
 
   /**
+   * Adopt an identity from a user-supplied export bundle (the "I've used
+   * Ottie before — restore my account from a saved file" path). Mirrors
+   * `adoptIdentityFromLink` but skips the relay handshake: every record
+   * comes from the bundle the user picked off disk. The new daemon ends
+   * up bit-identical to the daemon that produced the bundle (root key,
+   * self-device key, devices snapshot, peers snapshot) — friends keep
+   * their pairing because the root pubkey is unchanged.
+   *
+   * Refuses to overwrite an existing identity. Callers are expected to
+   * gate on `getState().kind === "uninitialized"` first; the inner
+   * `writeImported*` calls also re-check before touching disk.
+   */
+  adoptIdentityFromImportBundle(input: {
+    rootIdentity: import("./identity-types.js").StoredRootIdentity;
+    selfDevice: import("./device-types.js").StoredSelfDevice | null;
+    devices: StoredDeviceList | null;
+    peers: StoredPeerList | null;
+  }): void {
+    if (this.state.kind !== "uninitialized") {
+      throw new Error(
+        `Cannot import identity: current state is "${this.state.kind}". ` +
+          "Importing only runs on a fresh daemon with no existing root identity.",
+      );
+    }
+
+    // 1. Root identity (with private signing keys + display name).
+    const rootBundle = writeImportedRootIdentity(this.ottieHome, input.rootIdentity, this.logger);
+
+    // 2. Self-device — only when the bundle carried one. Bundles produced
+    // by daemons without a `selfDeviceContext` (rare; mostly tests) won't
+    // have one; in that case the next `ensureSelfDevice` will mint a
+    // fresh device under the imported root.
+    let selfBundle: SelfDeviceBundle | null = null;
+    if (input.selfDevice) {
+      selfBundle = writeImportedSelfDevice(this.ottieHome, input.selfDevice, this.logger);
+    }
+
+    // 3. Devices + peers snapshots, when present.
+    if (input.devices) {
+      saveDeviceList(this.ottieHome, input.devices, this.logger);
+    }
+    if (input.peers) {
+      savePeerList(this.ottieHome, input.peers, this.logger);
+    }
+
+    // 4. Sync in-memory state so subsequent RPCs see "loaded" without a
+    // restart. Same shape as adoptIdentityFromLink.
+    this.state = { kind: "loaded", bundle: rootBundle };
+    this.deviceList = input.devices ?? null;
+    this.selfDevice = selfBundle;
+    this.peerList = input.peers ?? { v: 1, peers: [] };
+
+    // If self-device is still missing (bundle had none) and we have a
+    // selfDeviceContext, mint one now under the imported root so this
+    // daemon can sign messages immediately.
+    if (!this.selfDevice && this.selfDeviceContext) {
+      this.ensureSelfDevice(rootBundle);
+    }
+
+    this.logger.info(
+      {
+        displayName: input.rootIdentity.displayName,
+        rootSignPublicKeyB64Prefix: input.rootIdentity.signPublicKeyB64.slice(0, 8),
+        deviceCount: input.devices?.devices.length ?? 0,
+        peerCount: input.peers?.peers.length ?? 0,
+      },
+      "Adopted identity from import bundle",
+    );
+
+    this.startPeerSync();
+    this.startFriendSync();
+    this.startInboxReceiver();
+  }
+
+  /**
    * Phase 2.e: list candidates the OLD device's UI should surface in the
    * "Approve a new device?" prompt. Each entry has just enough metadata
    * for the UI; secrets stay daemon-side.

@@ -1483,6 +1483,43 @@ export class DaemonClient {
     });
   }
 
+  async identityExport(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    bundle: import("../server/identity/identity-rpc-schemas.js").IdentityExportBundle | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "identity/export", requestId },
+      timeout: params?.timeoutMs ?? 5000,
+      select: (msg) => {
+        if (msg.type !== "identity/export/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { bundle: msg.payload.bundle, error: msg.payload.error };
+      },
+    });
+  }
+
+  async identityImport(
+    bundle: import("../server/identity/identity-rpc-schemas.js").IdentityExportBundle,
+    params?: { requestId?: string; timeoutMs?: number },
+  ): Promise<{
+    identity: import("../server/identity/identity-rpc-schemas.js").PublicRootIdentity | null;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "identity/import", requestId, bundle },
+      timeout: params?.timeoutMs ?? 10000,
+      select: (msg) => {
+        if (msg.type !== "identity/import/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { identity: msg.payload.identity, error: msg.payload.error };
+      },
+    });
+  }
+
   async devicesList(params?: { requestId?: string; timeoutMs?: number }): Promise<{
     devices: import("../server/identity/identity-rpc-schemas.js").PublicDevice[] | null;
     error: string | null;

@@ -78,7 +78,19 @@
     "friendOpenChat": "打开聊天",
     "pendingFriendsSection": "待处理好友请求",
     "pendingFriendsHelper": "有人想加你为好友。批准后建立好友关系,拒绝则取消。",
-    "pendingFriendsRefreshFailed": "无法加载待处理好友请求。"
+    "pendingFriendsRefreshFailed": "无法加载待处理好友请求。",
+    "backup": {
+      "section": "账号备份",
+      "description": "把你的身份、好友列表和设备列表导出为一个文件。如果设备丢失，可在新装的 Ottie 上导入这个文件来恢复账号。",
+      "warning": "此文件等同于账号密码——任何人拿到它都能冒充你。请存到密码管理器或加密硬盘，不要发邮件。",
+      "exportAction": "导出身份文件",
+      "exporting": "正在准备文件…",
+      "confirmTitle": "导出身份文件？",
+      "confirmBody": "导出的文件包含明文私钥，请只保存到加密的位置。",
+      "confirmAction": "导出",
+      "errorTitle": "导出失败",
+      "errorBody": "无法导出身份。请稍后再试。"
+    }
   },
   "addDevice": {
     "title": "添加设备",
@@ -239,6 +251,26 @@
       "deviceLink": {
         "title": "设备链接即将上线",
         "body": "通过 relay 把这台机器链接到已有的 Ottie 身份——协议层已经就位，只差 UI。会和桌面版的文件夹恢复一起上。"
+      }
+    },
+    "restore": {
+      "title": "用备份文件登录",
+      "body": "选择你之前从其他 Ottie 导出的身份文件，我们会把身份、好友列表和设备列表导入到这台设备。",
+      "needsHost": "请先配对一台未登记的设备，然后回到这里导入身份文件。",
+      "pairButton": "去配对",
+      "targetHint": "将导入到当前已连接的设备。",
+      "pickAction": "选择身份文件",
+      "previewTitle": "确认导入",
+      "previewIdentity": "你将以 {{name}} ({{fingerprint}}) 的身份登录。",
+      "previewCounts": "包含 {{friends}} 位好友、{{devices}} 台已登记设备。",
+      "previewSourceFile": "来源文件：{{fileName}}",
+      "confirmAction": "确认导入",
+      "importing": "正在导入…",
+      "importingHint": "正在写入身份文件，通常一秒内完成。",
+      "errors": {
+        "invalidJson": "这个文件不是有效的 JSON。请确认你选了从 Ottie 导出的文件。",
+        "invalidBundle": "这看起来不是 Ottie 的身份导出文件，请重新选择。",
+        "importFailed": "daemon 拒绝了导入。请重试，或确认这台设备还没登记过身份。"
       }
     }
   },

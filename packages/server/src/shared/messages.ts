@@ -92,6 +92,10 @@ import {
   IdentityGetResponseSchema,
   IdentityInitializeRequestSchema,
   IdentityInitializeResponseSchema,
+  IdentityExportRequestSchema,
+  IdentityExportResponseSchema,
+  IdentityImportRequestSchema,
+  IdentityImportResponseSchema,
 } from "../server/identity/identity-rpc-schemas.js";
 import {
   ScheduleCreateRequestSchema,
@@ -2126,6 +2130,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ChatAckRequestSchema,
   IdentityGetRequestSchema,
   IdentityInitializeRequestSchema,
+  IdentityExportRequestSchema,
+  IdentityImportRequestSchema,
   DevicesListRequestSchema,
   DeviceLinkGenerateRequestSchema,
   DeviceLinkCancelRequestSchema,
@@ -3778,6 +3784,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ChatStatusEventSchema,
   IdentityGetResponseSchema,
   IdentityInitializeResponseSchema,
+  IdentityExportResponseSchema,
+  IdentityImportResponseSchema,
   DevicesListResponseSchema,
   DeviceLinkGenerateResponseSchema,
   DeviceLinkCancelResponseSchema,

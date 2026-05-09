@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 import { DeviceLinkOfferSchema } from "./device-link-types.js";
-import { DeviceSchema } from "./device-types.js";
+import { DeviceListSchema, DeviceSchema, SelfDeviceSchema } from "./device-types.js";
 import { FriendPairOfferSchema } from "./friend-pair-types.js";
-import { type StoredRootIdentity } from "./identity-types.js";
-import { PeerSchema } from "./peer-types.js";
+import { RootIdentitySchema, type StoredRootIdentity } from "./identity-types.js";
+import { PeerListSchema, PeerSchema } from "./peer-types.js";
 
 // Pure-zod schemas (no node:fs / node:crypto imports) so this module — and the
 // shared messages.ts that re-exports it — can be bundled by Metro for the
@@ -66,6 +66,55 @@ export const IdentityInitializeRequestSchema = z.object({
 
 export const IdentityInitializeResponseSchema = z.object({
   type: z.literal("identity/initialize/response"),
+  payload: z.object({
+    requestId: z.string(),
+    identity: PublicRootIdentitySchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+// ----- identity/export, identity/import -----------------------------------
+// Lets a user back up their root identity (and the associated peers + devices
+// snapshots) to a single JSON file, then restore it onto a fresh daemon. The
+// bundle contains private signing keys — the wire shape and the on-disk file
+// the user saves are the same thing. Treat exported files as account-password
+// equivalent; UI must surface that to the user.
+
+export const IdentityExportBundleSchema = z.object({
+  v: z.literal(1),
+  type: z.literal("ottie-identity-export"),
+  exportedAt: z.string(),
+  appVersion: z.string().optional(),
+  rootIdentity: RootIdentitySchema,
+  selfDevice: SelfDeviceSchema.nullable(),
+  devices: DeviceListSchema.nullable(),
+  peers: PeerListSchema.nullable(),
+});
+
+export type IdentityExportBundle = z.infer<typeof IdentityExportBundleSchema>;
+
+export const IdentityExportRequestSchema = z.object({
+  type: z.literal("identity/export"),
+  requestId: z.string(),
+});
+
+export const IdentityExportResponseSchema = z.object({
+  type: z.literal("identity/export/response"),
+  payload: z.object({
+    requestId: z.string(),
+    bundle: IdentityExportBundleSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const IdentityImportRequestSchema = z.object({
+  type: z.literal("identity/import"),
+  requestId: z.string(),
+  bundle: IdentityExportBundleSchema,
+});
+
+export const IdentityImportResponseSchema = z.object({
+  type: z.literal("identity/import/response"),
   payload: z.object({
     requestId: z.string(),
     identity: PublicRootIdentitySchema.nullable(),

@@ -78,7 +78,19 @@
     "friendOpenChat": "Open chat",
     "pendingFriendsSection": "Pending friend requests",
     "pendingFriendsHelper": "Someone is asking to add you as a friend. Approve to add them, or reject to refuse.",
-    "pendingFriendsRefreshFailed": "Couldn't load pending friend requests."
+    "pendingFriendsRefreshFailed": "Couldn't load pending friend requests.",
+    "backup": {
+      "section": "Account backup",
+      "description": "Save your identity, friend list, and device list to a file. If you lose this device, import the file on a new install to recover your account.",
+      "warning": "This file is equivalent to your account password — anyone who has it can act as you. Keep it in a password manager or encrypted drive. Do not email it.",
+      "exportAction": "Export identity file",
+      "exporting": "Preparing file…",
+      "confirmTitle": "Export identity file?",
+      "confirmBody": "The exported file contains your private signing key in plaintext. Save it to an encrypted location only.",
+      "confirmAction": "Export",
+      "errorTitle": "Export failed",
+      "errorBody": "Could not export your identity. Please try again."
+    }
   },
   "addDevice": {
     "title": "Add device",
@@ -239,6 +251,26 @@
       "deviceLink": {
         "title": "Device link is coming soon",
         "body": "Linking this machine to an existing Ottie identity over the relay will land alongside the desktop folder restore. The protocol is already in place — only the UI is missing."
+      }
+    },
+    "restore": {
+      "title": "Restore from a backup file",
+      "body": "Pick the identity file you exported from another install. We'll import your identity, friend list, and device list onto this device.",
+      "needsHost": "Pair an uninitialized device first, then come back here to import your identity.",
+      "pairButton": "Pair a device",
+      "targetHint": "Will import into the currently connected device.",
+      "pickAction": "Pick identity file",
+      "previewTitle": "Confirm import",
+      "previewIdentity": "You will sign in as {{name}} ({{fingerprint}}).",
+      "previewCounts": "Includes {{friends}} friend(s) and {{devices}} registered device(s).",
+      "previewSourceFile": "From file: {{fileName}}",
+      "confirmAction": "Confirm import",
+      "importing": "Importing…",
+      "importingHint": "Writing identity files. This usually takes less than a second.",
+      "errors": {
+        "invalidJson": "That file isn't valid JSON. Make sure you picked the file you exported from Ottie.",
+        "invalidBundle": "This doesn't look like an Ottie identity export. Pick a different file.",
+        "importFailed": "The daemon refused the import. Try again, or check that this device hasn't already been signed in."
       }
     }
   },

@@ -199,6 +199,7 @@ import type pino from "pino";
 import { resolveClientMessageId } from "./client-message-id.js";
 import { ChatServiceError, FileBackedChatService } from "./chat/chat-service.js";
 import { IdentityService } from "./identity/identity-service.js";
+import { readIdentityExportBundle } from "./identity/identity-bundle.js";
 import { toPublicRootIdentity as toPublicIdentity } from "./identity/identity-rpc-schemas.js";
 import { notifyChatMentions } from "./chat/chat-mentions.js";
 import type { ChatSubscriptionManager } from "./chat/chat-subscription-manager.js";
@@ -2354,6 +2355,10 @@ export class Session {
         return this.handleIdentityGetRequest(msg);
       case "identity/initialize":
         return this.handleIdentityInitializeRequest(msg);
+      case "identity/export":
+        return this.handleIdentityExportRequest(msg);
+      case "identity/import":
+        return this.handleIdentityImportRequest(msg);
       default:
         return this.dispatchDeviceFriendMessage(msg) ?? this.dispatchChatP2pMessage(msg);
     }
@@ -3396,6 +3401,118 @@ export class Session {
           identity: null,
           error: message,
         },
+      });
+    }
+  }
+
+  private async handleIdentityExportRequest(
+    request: Extract<SessionInboundMessage, { type: "identity/export" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "identity/export/response",
+        payload: {
+          requestId: request.requestId,
+          bundle: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+
+    if (this.identityService.getState().kind !== "loaded") {
+      this.emit({
+        type: "identity/export/response",
+        payload: {
+          requestId: request.requestId,
+          bundle: null,
+          error: "No identity to export — initialize an identity first",
+        },
+      });
+      return;
+    }
+
+    try {
+      const bundle = readIdentityExportBundle(this.ottieHome, { logger: this.sessionLogger });
+      if (!bundle) {
+        this.emit({
+          type: "identity/export/response",
+          payload: {
+            requestId: request.requestId,
+            bundle: null,
+            error: "Identity files not found on disk",
+          },
+        });
+        return;
+      }
+      this.emit({
+        type: "identity/export/response",
+        payload: { requestId: request.requestId, bundle, error: null },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit({
+        type: "identity/export/response",
+        payload: { requestId: request.requestId, bundle: null, error: message },
+      });
+    }
+  }
+
+  private async handleIdentityImportRequest(
+    request: Extract<SessionInboundMessage, { type: "identity/import" }>,
+  ): Promise<void> {
+    if (!this.identityService) {
+      this.emit({
+        type: "identity/import/response",
+        payload: {
+          requestId: request.requestId,
+          identity: null,
+          error: "Identity service is not available on this daemon",
+        },
+      });
+      return;
+    }
+
+    const currentState = this.identityService.getState().kind;
+    if (currentState !== "uninitialized") {
+      // Refuse to overwrite. The mobile UI surfaces this as
+      // "this device is already signed in — pair another device to add a
+      // second account" rather than offering a destructive overwrite.
+      this.emit({
+        type: "identity/import/response",
+        payload: {
+          requestId: request.requestId,
+          identity: null,
+          error:
+            currentState === "loaded"
+              ? "This device already has an identity. Pair an uninitialized device to import there."
+              : `Cannot import: identity state is "${currentState}".`,
+        },
+      });
+      return;
+    }
+
+    try {
+      this.identityService.adoptIdentityFromImportBundle({
+        rootIdentity: request.bundle.rootIdentity,
+        selfDevice: request.bundle.selfDevice,
+        devices: request.bundle.devices,
+        peers: request.bundle.peers,
+      });
+      const bundle = this.identityService.requireBundle();
+      this.emit({
+        type: "identity/import/response",
+        payload: {
+          requestId: request.requestId,
+          identity: toPublicIdentity(bundle.stored),
+          error: null,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit({
+        type: "identity/import/response",
+        payload: { requestId: request.requestId, identity: null, error: message },
       });
     }
   }
