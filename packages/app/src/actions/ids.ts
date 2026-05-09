@@ -36,6 +36,8 @@ export type ActionId =
   | "chat.add.addFriend"
   | "chat.add.linkToExisting"
   | "chat.add.redeemFriendLink"
+  | "chat.add.newAiAgent"
+  | "chat.add.addLocalService"
   // Settings deep-link buckets (D-09 / SET-03 — registered by Plan 02d)
   | "settings.open.account"
   | "settings.open.agents"
@@ -72,6 +74,8 @@ export const ALL_ACTION_IDS: readonly ActionId[] = [
   "chat.add.createWorkspace",
   "chat.add.addDevice",
   "chat.add.linkToExisting",
+  "chat.add.newAiAgent",
+  "chat.add.addLocalService",
   "settings.open.account",
   "settings.open.agents",
   "settings.open.voice",

@@ -1,50 +1,12 @@
-import { useSyncExternalStore } from "react";
-import { Redirect } from "expo-router";
-import { WelcomeScreen } from "@/components/welcome-screen";
-import { useOnboardingStateStore } from "@/stores/onboarding-state-store";
-import { getHostRuntimeStore, isHostRuntimeConnected, useHosts } from "@/runtime/host-runtime";
+import { EmptyHomeCard } from "@/screens/empty-home/empty-home-card";
 
-// Per D-21: once the user has either tapped "Skip for power users" or ticked
-// "Don't show this again" on the Welcome screen, subsequent cold opens skip
-// Welcome entirely. We redirect to "/" (index.tsx) rather than directly to
-// the sessions route so app/index.tsx can run its identity check first —
-// fresh installs (no root identity yet) need to be funneled through
-// /onboarding/identity before reaching the workspace, and only index.tsx
-// owns that policy. If identity is already loaded, index.tsx routes onward
-// to the most recent workspace exactly as before; the extra hop is a brief
-// splash, not a visible bounce.
-function useFirstOnlineServerId(serverIds: string[]): string | null {
-  const runtime = getHostRuntimeStore();
-  return useSyncExternalStore(
-    (onStoreChange) => runtime.subscribeAll(onStoreChange),
-    () => {
-      let firstOnlineServerId: string | null = null;
-      let firstOnlineAt: string | null = null;
-      for (const serverId of serverIds) {
-        const snapshot = runtime.getSnapshot(serverId);
-        const lastOnlineAt = snapshot?.lastOnlineAt ?? null;
-        if (!isHostRuntimeConnected(snapshot) || !lastOnlineAt) {
-          continue;
-        }
-        if (!firstOnlineAt || lastOnlineAt < firstOnlineAt) {
-          firstOnlineAt = lastOnlineAt;
-          firstOnlineServerId = serverId;
-        }
-      }
-      return firstOnlineServerId;
-    },
-    () => null,
-  );
-}
+// Empty-home is the unified entry point. It renders the morphing CTA card
+// (new user / old user / pair / advanced) and never auto-redirects — once
+// the user picks a path and completes it, the inner state machine routes
+// to the appropriate place itself. The previous "welcomeShown && online →
+// /" gate is gone because it produced the Skip loop where Skip with no
+// host bounced back to the same screen.
 
 export default function WelcomeRoute() {
-  const welcomeShown = useOnboardingStateStore((s) => s.welcomeShown);
-  const hosts = useHosts();
-  const anyOnlineServerId = useFirstOnlineServerId(hosts.map((h) => h.serverId));
-
-  if (welcomeShown && anyOnlineServerId) {
-    return <Redirect href="/" />;
-  }
-
-  return <WelcomeScreen />;
+  return <EmptyHomeCard />;
 }

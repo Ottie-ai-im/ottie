@@ -2127,7 +2127,7 @@ export class Session {
     }
   }
 
-  private dispatchChatScheduleLoopMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+  private dispatchChatMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     switch (msg.type) {
       case "chat/create":
         return this.handleChatCreateRequest(msg);
@@ -2149,6 +2149,13 @@ export class Session {
         return this.handleChatUnsubscribeRequest(msg);
       case "chat/ack":
         return this.handleChatAckRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchScheduleLoopMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
       case "schedule/create":
         return this.handleScheduleCreateRequest(msg);
       case "schedule/list":
@@ -2161,16 +2168,6 @@ export class Session {
         return this.handleSchedulePauseRequest(msg);
       case "schedule/resume":
         return this.handleScheduleResumeRequest(msg);
-      case "usage/list":
-        return this.handleUsageListRequest(msg);
-      case "local-services/list":
-        return this.handleLocalServicesListRequest(msg);
-      case "local-services/install":
-        return this.handleLocalServicesInstallRequest(msg);
-      case "openclaw/agents/list":
-        return this.handleOpenclawListAgentsRequest(msg);
-      case "openclaw/chat/send":
-        return this.handleOpenclawSendMessageRequest(msg);
       case "schedule/delete":
         return this.handleScheduleDeleteRequest(msg);
       case "loop/run":
@@ -2183,9 +2180,23 @@ export class Session {
         return this.handleLoopLogsRequest(msg);
       case "loop/stop":
         return this.handleLoopStopRequest(msg);
+      case "usage/list":
+        return this.handleUsageListRequest(msg);
+      case "local-services/list":
+        return this.handleLocalServicesListRequest(msg);
+      case "local-services/install":
+        return this.handleLocalServicesInstallRequest(msg);
+      case "openclaw/agents/list":
+        return this.handleOpenclawListAgentsRequest(msg);
+      case "openclaw/chat/send":
+        return this.handleOpenclawSendMessageRequest(msg);
       default:
         return undefined;
     }
+  }
+
+  private dispatchChatScheduleLoopMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    return this.dispatchChatMessage(msg) ?? this.dispatchScheduleLoopMessage(msg);
   }
 
   private async dispatchMiscMessage(msg: SessionInboundMessage): Promise<void> {
@@ -2259,16 +2270,8 @@ export class Session {
     }
   }
 
-  // Phase 1.g — root identity RPCs. Kept in their own dispatcher (rather
-  // than folded into the chat/schedule one) so the cyclomatic complexity
-  // cap in dispatchChatScheduleLoopMessage isn't exceeded as we add more
-  // identity-shaped methods (devices, peers, …) in later phases.
-  private dispatchIdentityMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+  private dispatchDeviceFriendMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     switch (msg.type) {
-      case "identity/get":
-        return this.handleIdentityGetRequest(msg);
-      case "identity/initialize":
-        return this.handleIdentityInitializeRequest(msg);
       case "device/list":
         return this.handleDeviceListRequest(msg);
       case "device/link/generate":
@@ -2299,6 +2302,13 @@ export class Session {
         return this.handleFriendPairRejectRequest(msg);
       case "friend/list":
         return this.handleFriendListRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchChatP2pMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
       case "chat/p2p/send":
         return this.handleChatP2pSendRequest(msg);
       case "chat/p2p/list":
@@ -2331,6 +2341,21 @@ export class Session {
         return this.handleChatP2pAiShareListPendingIntentsRequest(msg);
       default:
         return undefined;
+    }
+  }
+
+  // Phase 1.g — root identity RPCs. Kept in their own dispatcher (rather
+  // than folded into the chat/schedule one) so the cyclomatic complexity
+  // cap in dispatchChatScheduleLoopMessage isn't exceeded as we add more
+  // identity-shaped methods (devices, peers, …) in later phases.
+  private dispatchIdentityMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "identity/get":
+        return this.handleIdentityGetRequest(msg);
+      case "identity/initialize":
+        return this.handleIdentityInitializeRequest(msg);
+      default:
+        return this.dispatchDeviceFriendMessage(msg) ?? this.dispatchChatP2pMessage(msg);
     }
   }
 
@@ -2643,7 +2668,7 @@ export class Session {
           generatedAt: i.receivedAt,
           expiresAt: i.expiresAt,
           state: "pending" as const,
-          ...(i.limits ? { limits: i.limits } : {}),
+          limits: i.limits,
         })),
         error: null,
       },

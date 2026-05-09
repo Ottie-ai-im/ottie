@@ -29,12 +29,10 @@ import {
   Info,
   Shield,
   Puzzle,
-  Plus,
   FlaskConical,
   Lock,
   Blocks,
 } from "lucide-react-native";
-import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
 import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
@@ -81,7 +79,6 @@ import { THINKING_TONE_NATIVE_PCM_BASE64 } from "@/utils/thinking-tone.native-pc
 import { useVoiceAudioEngineOptional } from "@/contexts/voice-context";
 import { HostPage, HostRenameButton } from "@/screens/settings/host-page";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import {
   buildHostOpenProjectRoute,
   buildHostWorkspaceRoute,
@@ -745,81 +742,10 @@ function SidebarSectionButton({
   );
 }
 
-interface SidebarHostItemProps {
-  serverId: string;
-  label: string;
-  isSelected: boolean;
-  isLocal: boolean;
-  onSelect: (serverId: string) => void;
-  layout: "desktop" | "mobile";
-}
-
-function SidebarHostItem({
-  serverId,
-  label,
-  isSelected,
-  isLocal,
-  onSelect,
-  layout,
-}: SidebarHostItemProps) {
-  const { theme } = useUnistyles();
-  const { t } = useTranslation();
-  const handlePress = useCallback(() => {
-    onSelect(serverId);
-  }, [onSelect, serverId]);
-  const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
-  const labelStyle = useMemo(
-    () =>
-      layout === "mobile"
-        ? sidebarStyles.mobileLabel
-        : [sidebarStyles.label, isSelected && { color: theme.colors.foreground }],
-    [isSelected, layout, theme.colors.foreground],
-  );
-  if (layout === "mobile") {
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={accessibilityState}
-        onPress={handlePress}
-        testID={`settings-host-entry-${serverId}`}
-        style={mobileSidebarItemStyle}
-      >
-        <Server size={theme.iconSize.md} color={theme.colors.foreground} />
-        <Text style={labelStyle} numberOfLines={1}>
-          {label}
-        </Text>
-        {isLocal ? (
-          <Text style={sidebarStyles.localMarker} testID="settings-host-local-marker">
-            {t("settings.local")}
-          </Text>
-        ) : null}
-        <ChevronRight size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-      </Pressable>
-    );
-  }
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={accessibilityState}
-      onPress={handlePress}
-      testID={`settings-host-entry-${serverId}`}
-      style={isSelected ? selectedSidebarItemStyle : sidebarItemStyle}
-    >
-      <Server
-        size={theme.iconSize.md}
-        color={isSelected ? theme.colors.foreground : theme.colors.foregroundMuted}
-      />
-      <Text style={labelStyle} numberOfLines={1}>
-        {label}
-      </Text>
-      {isLocal ? (
-        <Text style={sidebarStyles.localMarker} testID="settings-host-local-marker">
-          {t("settings.local")}
-        </Text>
-      ) : null}
-    </Pressable>
-  );
-}
+// SidebarHostItem (the per-host row that used to live at the bottom of
+// the settings sidebar) was removed when host management migrated to
+// the devices page. Host detail is reached by tapping a row on the
+// devices screen, which navigates to /settings/hosts/[serverId].
 
 interface SettingsSidebarProps {
   view: SettingsView;
@@ -840,29 +766,13 @@ interface SettingsSidebarProps {
 function SettingsSidebar({
   view,
   onSelectSection,
-  onSelectHost,
-  onAddHost,
+  onSelectHost: _onSelectHost,
+  onAddHost: _onAddHost,
   onBackToWorkspace: _onBackToWorkspace,
   layout,
   hideSections = false,
 }: SettingsSidebarProps) {
-  const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const hosts = useHosts();
-  const localServerId = useLocalDaemonServerId();
-  const sortedHosts = useMemo(() => {
-    if (!localServerId) {
-      return hosts;
-    }
-    const localIndex = hosts.findIndex((host) => host.serverId === localServerId);
-    if (localIndex <= 0) {
-      return hosts;
-    }
-    const next = hosts.slice();
-    const [local] = next.splice(localIndex, 1);
-    next.unshift(local);
-    return next;
-  }, [hosts, localServerId]);
   const isDesktopApp = isElectronRuntime();
   const items = SIDEBAR_SECTION_ITEMS.filter((item) => !item.desktopOnly || isDesktopApp);
   const padding = useWindowControlsPadding("sidebar");
@@ -870,7 +780,6 @@ function SettingsSidebar({
   const containerStyle = isDesktop ? sidebarStyles.desktopContainer : sidebarStyles.mobileContainer;
   const groupStyle = isDesktop ? sidebarStyles.list : sidebarStyles.mobileGroup;
   const selectedSectionId = view.kind === "section" ? view.section : null;
-  const selectedServerId = view.kind === "host" ? view.serverId : null;
   const paddingTopStyle = useMemo(() => ({ height: padding.top }), [padding.top]);
 
   return (
@@ -898,43 +807,14 @@ function SettingsSidebar({
           ))}
         </View>
       )}
-      {isDesktop && !hideSections ? <SidebarSeparator /> : null}
-      <View style={groupStyle}>
-        {sortedHosts.map((host, index) => (
-          <View key={host.serverId}>
-            {!isDesktop && index > 0 ? <View style={sidebarStyles.mobileItemDivider} /> : null}
-            <SidebarHostItem
-              serverId={host.serverId}
-              label={host.label}
-              isSelected={selectedServerId === host.serverId}
-              isLocal={localServerId !== null && host.serverId === localServerId}
-              onSelect={onSelectHost}
-              layout={layout}
-            />
-          </View>
-        ))}
-        {!isDesktop && sortedHosts.length > 0 ? (
-          <View style={sidebarStyles.mobileItemDivider} />
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("settings.addHost")}
-          onPress={onAddHost}
-          testID="settings-add-host"
-          style={isDesktop ? sidebarItemStyle : mobileSidebarItemStyle}
-        >
-          <Plus
-            size={theme.iconSize.md}
-            color={isDesktop ? theme.colors.foregroundMuted : theme.colors.accent}
-          />
-          <Text
-            style={isDesktop ? sidebarStyles.label : sidebarStyles.mobileLabelAccent}
-            numberOfLines={1}
-          >
-            {t("settings.addHost")}
-          </Text>
-        </Pressable>
-      </View>
+      {/*
+       * The host list ("123456deMac-mini.local … + 添加主机") used to live
+       * here as a second sidebar group. It duplicated the devices page
+       * (which already lists paired daemons + add-host / scan-pair cards)
+       * so we removed it. Host detail (connections, daemon controls,
+       * providers, remove) is reached by clicking a row on the devices
+       * page, which navigates to /settings/hosts/[serverId].
+       */}
     </View>
   );
 }

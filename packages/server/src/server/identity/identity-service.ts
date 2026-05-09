@@ -1412,6 +1412,7 @@ export class IdentityService {
           { inviteId: envelope.inviteId, agentId, promptId: envelope.promptId },
           "ai_share_prompt_routed",
         );
+        return undefined;
       })
       .catch((err: unknown) => {
         this.logger.error(
@@ -2383,7 +2384,7 @@ export class IdentityService {
       agentProvider: entry.invite.agentProvider,
       receivedAt: new Date(entry.receivedAtMs).toISOString(),
       expiresAt: entry.invite.expiresAt,
-      ...(entry.invite.limits ? { limits: entry.invite.limits } : {}),
+      limits: entry.invite.limits,
     }));
   }
 
@@ -2422,7 +2423,12 @@ export class IdentityService {
     peerOnline: boolean;
   }> {
     return this.aiShareInvites.listActive().map((entry) => ({
-      ...entry,
+      inviteId: entry.inviteId,
+      side: entry.side,
+      peerRootPubKeyB64: entry.peerRootPubKeyB64,
+      agentLabel: entry.agentLabel,
+      agentProvider: entry.agentProvider,
+      acceptedAt: entry.acceptedAt,
       peerOnline: this.friendSessions.get(entry.peerRootPubKeyB64) !== undefined,
     }));
   }

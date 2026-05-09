@@ -23,20 +23,20 @@ interface KnownDashboard {
 
 const KNOWN_DASHBOARDS: KnownDashboard[] = [
   {
-    id: "open-webui",
-    labelKey: "assistants.openWebUi.label",
-    descriptionKey: "assistants.openWebUi.description",
-    defaultUrl: "http://localhost:3000",
-    installHintKey: "assistants.openWebUi.installHint",
-    installCommand: "pip install open-webui && open-webui serve",
-  },
-  {
     id: "openclaw",
     labelKey: "assistants.openclaw.label",
     descriptionKey: "assistants.openclaw.description",
     defaultUrl: "http://localhost:18789",
     installHintKey: "assistants.openclaw.installHint",
     installCommand: "npm install -g openclaw && openclaw onboard --install-daemon",
+  },
+  {
+    id: "open-webui",
+    labelKey: "assistants.openWebUi.label",
+    descriptionKey: "assistants.openWebUi.description",
+    defaultUrl: "http://localhost:3000",
+    installHintKey: "assistants.openWebUi.installHint",
+    installCommand: "pip install open-webui && open-webui serve",
   },
   {
     id: "hermes",
@@ -61,11 +61,11 @@ export function AssistantsScreen() {
   const runningServices = services.filter((s) => s.running && s.url);
   const anyRunning = runningServices.length > 0;
 
-  // Default selection: prefer Open WebUI (richest UI), fall back to first
-  // running service. If user manually picks something else via the chip
-  // selector we honor that choice for the lifetime of this mount.
+  // Default selection: prefer OpenClaw, fall back to first running service.
+  // If user manually picks something else via the chip selector we honor that
+  // choice for the lifetime of this mount.
   const defaultSelection =
-    runningServices.find((s) => s.id === "open-webui")?.id ?? runningServices[0]?.id ?? null;
+    runningServices.find((s) => s.id === "openclaw")?.id ?? runningServices[0]?.id ?? null;
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const activeServiceId = selectedServiceId ?? defaultSelection;
   const activeService = runningServices.find((s) => s.id === activeServiceId);

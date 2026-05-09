@@ -50,7 +50,7 @@ export default {
   expo: {
     name: variant.name,
     slug: "voice-mobile",
-    version: pkg.version,
+    version: pkg.version.replace(/-.*$/, ""),
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "ottie",

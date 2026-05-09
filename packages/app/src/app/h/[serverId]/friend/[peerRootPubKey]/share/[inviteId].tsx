@@ -334,10 +334,7 @@ export default function FriendShareInvitePage() {
     if (body.length === 0 || !client || !inviteId) return;
     const localId = makeLocalId();
     const sentAtTimelineSize = timelineRecords.length;
-    setLocalPrompts((prev) => [
-      ...prev,
-      { localId, body, status: "sending", sentAtTimelineSize },
-    ]);
+    setLocalPrompts((prev) => [...prev, { localId, body, status: "sending", sentAtTimelineSize }]);
     setSubmitting(true);
     setComposerError(null);
     try {
@@ -367,7 +364,7 @@ export default function FriendShareInvitePage() {
     } finally {
       setSubmitting(false);
     }
-  }, [client, draft, inviteId, t]);
+  }, [client, draft, inviteId, t, timelineRecords.length]);
 
   const handleSendPress = useCallback(() => {
     void handleSendPrompt();
@@ -445,17 +442,20 @@ export default function FriendShareInvitePage() {
         defaultValue: "Sharing {{label}}",
       })
     : t("aiShare.endedTitle", { defaultValue: "AI share ended" });
-  const subtitle = session
-    ? session.peerOnline === false
-      ? t("aiShare.headerSubtitleOffline", {
-          peer: peerRootPubKey.slice(0, 8),
-          defaultValue: "with {{peer}} · peer offline",
-        })
-      : t("aiShare.headerSubtitle", {
-          peer: peerRootPubKey.slice(0, 8),
-          defaultValue: "with {{peer}}",
-        })
-    : "";
+  let subtitle = "";
+  if (session) {
+    if (session.peerOnline === false) {
+      subtitle = t("aiShare.headerSubtitleOffline", {
+        peer: peerRootPubKey.slice(0, 8),
+        defaultValue: "with {{peer}} · peer offline",
+      });
+    } else {
+      subtitle = t("aiShare.headerSubtitle", {
+        peer: peerRootPubKey.slice(0, 8),
+        defaultValue: "with {{peer}}",
+      });
+    }
+  }
 
   return (
     <View style={rootStyle}>
@@ -636,10 +636,7 @@ function mergeFriendShareTranscript(
   }
 
   for (let i = 0; i < timeline.length; i += 1) {
-    while (
-      promptIdx < sortedPrompts.length &&
-      sortedPrompts[promptIdx]!.sentAtTimelineSize <= i
-    ) {
+    while (promptIdx < sortedPrompts.length && sortedPrompts[promptIdx]!.sentAtTimelineSize <= i) {
       pushLocalPrompt(sortedPrompts[promptIdx]!);
       promptIdx += 1;
     }
@@ -651,6 +648,18 @@ function mergeFriendShareTranscript(
   }
 
   return out;
+}
+
+function promptStatusText(
+  prompt: LocalPromptEntry,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  if (prompt.status === "sending") return t("aiShare.statusSending", { defaultValue: "sending…" });
+  if (prompt.status === "sent") return t("aiShare.statusSent", { defaultValue: "sent" });
+  return t("aiShare.statusFailed", {
+    error: prompt.error ?? "",
+    defaultValue: "failed: {{error}}",
+  });
 }
 
 function FriendShareRow({ row }: { row: MergedRow }) {
@@ -668,14 +677,7 @@ function FriendShareRow({ row }: { row: MergedRow }) {
                 : styles.promptMeta
             }
           >
-            {prompt.status === "sending"
-              ? t("aiShare.statusSending", { defaultValue: "sending…" })
-              : prompt.status === "sent"
-                ? t("aiShare.statusSent", { defaultValue: "sent" })
-                : t("aiShare.statusFailed", {
-                    error: prompt.error ?? "",
-                    defaultValue: "failed: {{error}}",
-                  })}
+            {promptStatusText(prompt, t)}
           </Text>
         </View>
       );

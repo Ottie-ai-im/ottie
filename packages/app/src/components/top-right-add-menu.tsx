@@ -1,11 +1,13 @@
-// Top-right "+" menu rendered in the Chats tab header.
+// Top-right "+" menu rendered in the Chats tab header (and now also next
+// to the per-section headers introduced by the sidebar three-section
+// redesign).
 //
-// 5 items: chat.add.newChat / chat.add.scanToPair / chat.add.joinHost /
-// chat.add.createWorkspace / chat.add.addDevice. Each dispatches via
+// Originally a single global menu with 8 items; the redesign splits those
+// items across three section-scoped menus (workspaces / humans / AI Agent)
+// while keeping this component as the shared trigger + popover renderer.
+// Callers pass an `items` array; the component dispatches via
 // `actionRegistry` so cmdk / voice / menu surfaces converge on the same
-// handlers. addDevice was added in Phase 2.c-ui to surface the Add-device
-// QR flow from the primary discovery point (the Chats tab) rather than
-// only from settings/identity.
+// handlers.
 //
 // Cross-platform Modal + GlassSurface stack (mirrors the web variant of the
 // chat-row context menu — the native variant of the `+` menu intentionally
@@ -13,8 +15,17 @@
 // the header at a stable position and a tiny anchored menu reads better
 // than a large sliding sheet for a 4-item action list).
 
-import { useCallback, useMemo, useState } from "react";
-import { Modal, Pressable, Text, View, type TextStyle } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  Dimensions,
+  Modal,
+  Pressable,
+  Text,
+  View,
+  type TextStyle,
+  type View as RNView,
+  type ViewStyle,
+} from "react-native";
 import { Plus } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -22,17 +33,26 @@ import { GlassSurface } from "@/components/ui/glass-surface";
 import { actionRegistry } from "@/actions/registry";
 import type { ActionId } from "@/actions/ids";
 
-export interface TopRightAddMenuProps {
-  serverId?: string;
-  testID?: string;
-}
-
-interface AddMenuItem {
+export interface AddMenuItem {
   id: ActionId;
   labelKey: string;
 }
 
-const ITEMS: ReadonlyArray<AddMenuItem> = [
+export interface TopRightAddMenuProps {
+  serverId?: string;
+  testID?: string;
+  /**
+   * Optional override of the action list. Defaults to the legacy 8-item
+   * global menu so callers that haven't migrated still work.
+   */
+  items?: ReadonlyArray<AddMenuItem>;
+  /** Optional aria/label override for the trigger. */
+  triggerLabelKey?: string;
+  /** Visual size of the trigger — "sm" used by per-section headers. */
+  size?: "default" | "sm";
+}
+
+const DEFAULT_ITEMS: ReadonlyArray<AddMenuItem> = [
   { id: "chat.add.newChat", labelKey: "chat.add.newChat" },
   { id: "chat.add.scanToPair", labelKey: "chat.add.scanToPair" },
   { id: "chat.add.joinHost", labelKey: "chat.add.joinHost" },
@@ -43,13 +63,56 @@ const ITEMS: ReadonlyArray<AddMenuItem> = [
   { id: "chat.add.redeemFriendLink", labelKey: "chat.add.redeemFriendLink" },
 ];
 
-export function TopRightAddMenu({ serverId, testID }: TopRightAddMenuProps) {
+const MENU_WIDTH = 220;
+const MENU_OFFSET_Y = 6;
+// Per-row + container padding. Used to pre-compute menu height so we can
+// flip the popover above the trigger when there isn't enough room below.
+const MENU_ROW_HEIGHT = 44;
+const MENU_VERTICAL_PADDING = 16;
+const MENU_VIEWPORT_MARGIN = 8;
+
+interface AnchorRect {
+  top: number;
+  left: number;
+  right: number;
+  bottom: number;
+  width: number;
+}
+
+export function TopRightAddMenu({
+  serverId,
+  testID,
+  items = DEFAULT_ITEMS,
+  triggerLabelKey,
+  size = "default",
+}: TopRightAddMenuProps) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<AnchorRect | null>(null);
+  const triggerRef = useRef<RNView | null>(null);
 
+  // Measure the trigger's screen-space rect on open so the popover can
+  // anchor to it. Without this the menu was hard-pinned to the top-right
+  // corner of the window — fine for the original single-+ at the sidebar
+  // header, surprising when triggered from a section header further down.
   const handleOpen = useCallback(() => {
-    setOpen(true);
+    const node = triggerRef.current;
+    if (!node) {
+      setAnchor(null);
+      setOpen(true);
+      return;
+    }
+    node.measureInWindow((x, y, width, height) => {
+      setAnchor({
+        top: y,
+        left: x,
+        right: x + width,
+        bottom: y + height,
+        width,
+      });
+      setOpen(true);
+    });
   }, []);
 
   const handleClose = useCallback(() => {
@@ -64,22 +127,51 @@ export function TopRightAddMenu({ serverId, testID }: TopRightAddMenuProps) {
     [serverId],
   );
 
-  const triggerLabel = t("chat.add.newChat");
+  const triggerLabel = t(triggerLabelKey ?? "chat.add.newChat");
   const itemLabelStyle = useMemo<TextStyle[]>(
     () => [styles.itemLabel, { color: theme.colors.foreground }],
     [theme.colors.foreground],
+  );
+  const triggerStyle = size === "sm" ? styles.triggerSm : styles.trigger;
+  const triggerIconSize = size === "sm" ? 16 : 22;
+
+  // Anchor the popover near the trigger. Default placement is below the
+  // trigger right-aligned to it; if that overflows the viewport bottom
+  // (which happens when the trigger lives in a lower-screen section like
+  // the AI Agent header at the bottom of the sidebar) we flip and open
+  // above the trigger instead.
+  const menuPositionStyle = useMemo<ViewStyle>(() => {
+    if (!anchor) {
+      return { top: 60, right: theme.spacing[4] };
+    }
+    const estimatedHeight = items.length * MENU_ROW_HEIGHT + MENU_VERTICAL_PADDING;
+    const windowHeight = Dimensions.get("window").height;
+    const belowTop = anchor.bottom + MENU_OFFSET_Y;
+    const belowFits = belowTop + estimatedHeight <= windowHeight - MENU_VIEWPORT_MARGIN;
+    const top = belowFits
+      ? belowTop
+      : Math.max(MENU_VIEWPORT_MARGIN, anchor.top - estimatedHeight - MENU_OFFSET_Y);
+    const minLeft = MENU_VIEWPORT_MARGIN;
+    const desiredLeft = Math.max(minLeft, anchor.right - MENU_WIDTH);
+    return { top, left: desiredLeft };
+  }, [anchor, items.length, theme.spacing]);
+
+  const menuContainerStyle = useMemo(
+    () => [styles.menuContainer, menuPositionStyle],
+    [menuPositionStyle],
   );
 
   return (
     <>
       <Pressable
+        ref={triggerRef}
         testID={testID ?? "top-right-add-trigger"}
         accessibilityLabel={triggerLabel}
         accessibilityRole="button"
         onPress={handleOpen}
-        style={styles.trigger}
+        style={triggerStyle}
       >
-        <Plus size={22} color={theme.colors.foreground} />
+        <Plus size={triggerIconSize} color={theme.colors.foreground} />
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
         <Pressable
@@ -87,10 +179,10 @@ export function TopRightAddMenu({ serverId, testID }: TopRightAddMenuProps) {
           onPress={handleClose}
           testID="top-right-add-menu-backdrop"
         />
-        <View style={styles.menuContainer}>
+        <View style={menuContainerStyle}>
           <GlassSurface radius="sheet">
             <View style={styles.menuList}>
-              {ITEMS.map((item) => (
+              {items.map((item) => (
                 <AddMenuItemButton
                   key={item.id}
                   item={item}
@@ -141,13 +233,20 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
+  triggerSm: {
+    padding: theme.spacing[1],
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.sm,
+  },
   backdrop: {
     flex: 1,
   },
   menuContainer: {
     position: "absolute",
-    top: 60,
-    right: theme.spacing[4],
+    width: MENU_WIDTH,
   },
   menuList: {
     paddingVertical: theme.spacing[2],

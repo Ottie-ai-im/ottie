@@ -9,9 +9,9 @@ import {
 } from "@server/client/daemon-client";
 import {
   connectionFromListen,
+  hostHasConnection,
   normalizeStoredHostProfile,
   upsertHostConnectionInProfiles,
-  registryHasConnection,
   type HostConnection,
   type HostProfile,
 } from "@/types/host-connection";
@@ -1325,44 +1325,51 @@ export class HostRuntimeStore {
     }
   }
   private async bootstrapLocalhost(): Promise<void> {
-    try {
-      const connection = connectionFromListen(DEFAULT_LOCALHOST_ENDPOINT);
-      if (!connection || registryHasConnection(this.hosts, connection)) {
-        return;
-      }
+    await this.connectToLocalhost({ timeoutMs: DEFAULT_LOCALHOST_BOOTSTRAP_TIMEOUT_MS });
+  }
 
-      let localToken: string | null = null;
-      if (shouldUseDesktopDaemon()) {
-        try {
-          const status = await getDesktopDaemonStatus();
-          localToken = status.token;
-        } catch {
-          // ignore
-        }
-      }
+  // Public on-demand variant of `bootstrapLocalhost`. Used by the empty-home
+  // "Sign up" flow to opportunistically connect to the dev daemon when the
+  // user clicks Next instead of forcing them through a pair modal. Safe to
+  // call repeatedly: returns the existing profile if the localhost endpoint
+  // is already registered. Returns null on connection failure (user gets
+  // routed to the pair fallback).
+  async connectToLocalhost(options?: { timeoutMs?: number }): Promise<HostProfile | null> {
+    const connection = connectionFromListen(DEFAULT_LOCALHOST_ENDPOINT);
+    if (!connection) return null;
 
+    const existing = this.hosts.find((host) => hostHasConnection(host, connection));
+    if (existing) return existing;
+
+    let localToken: string | null = null;
+    if (shouldUseDesktopDaemon()) {
       try {
-        const { client, serverId, hostname } = await connectToDaemon(connection, {
-          timeoutMs: DEFAULT_LOCALHOST_BOOTSTRAP_TIMEOUT_MS,
-          localToken,
-        });
-
-        // If we have a token, attach it to the connection object so it gets persisted
-        if (connection.type === "directTcp" && localToken) {
-          connection.localToken = localToken;
-        }
-
-        await this.upsertHostConnection({
-          serverId,
-          label: hostname ?? undefined,
-          connection,
-          existingClient: client,
-        });
+        const status = await getDesktopDaemonStatus();
+        localToken = status.token;
       } catch {
-        // Best-effort bootstrap only
+        // ignore
       }
+    }
+
+    try {
+      const { client, serverId, hostname } = await connectToDaemon(connection, {
+        timeoutMs: options?.timeoutMs ?? DEFAULT_LOCALHOST_BOOTSTRAP_TIMEOUT_MS,
+        localToken,
+      });
+
+      if (connection.type === "directTcp" && localToken) {
+        connection.localToken = localToken;
+      }
+
+      return await this.upsertHostConnection({
+        serverId,
+        label: hostname ?? undefined,
+        connection,
+        existingClient: client,
+      });
     } catch (error) {
-      console.warn("[HostRuntime] Failed to bootstrap host connections", error);
+      console.warn("[HostRuntime] connectToLocalhost failed", error);
+      return null;
     }
   }
 

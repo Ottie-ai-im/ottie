@@ -12,7 +12,6 @@ import {
   MessagesSquare,
   Server,
   Settings,
-  Sparkles,
   User,
 } from "lucide-react-native";
 
@@ -21,7 +20,6 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { NotificationCenterPanel } from "./notification-center-panel";
 import { useWindowControlsPadding } from "@/utils/desktop-window";
 import {
-  buildHostAssistantsRoute,
   buildHostCommunityRoute,
   buildHostDevicesRoute,
   buildHostSessionsRoute,
@@ -37,17 +35,16 @@ import { isWeb } from "@/constants/platform";
 // horizontal padding.
 const RAIL_WIDTH = 88;
 
-type RailTabId = "chats" | "devices" | "extensions" | "assistants" | "usage" | "settings";
+// Note: the "assistants" rail tab was removed once the AI Agent surface
+// moved into the left sidebar's three-section layout. The /h/{id}/assistants
+// route still exists (it's how the sidebar's AI Agent + → "Add local
+// service" reaches the OpenClaw / OpenWebUI install flow), it just no
+// longer has a top-level rail icon since the entry point is the sidebar.
+type RailTabId = "chats" | "devices" | "extensions" | "usage" | "settings";
 
 interface RailTabSpec {
   id: RailTabId;
-  labelKey:
-    | "tabs.chats"
-    | "tabs.devices"
-    | "tabs.extensions"
-    | "tabs.assistants"
-    | "tabs.usage"
-    | "tabs.settings";
+  labelKey: "tabs.chats" | "tabs.devices" | "tabs.extensions" | "tabs.usage" | "tabs.settings";
   icon: ComponentType<{ size?: number; color?: string }>;
 }
 
@@ -55,7 +52,6 @@ const PRIMARY_TABS: readonly RailTabSpec[] = [
   { id: "chats", labelKey: "tabs.chats", icon: MessagesSquare },
   { id: "devices", labelKey: "tabs.devices", icon: Server },
   { id: "extensions", labelKey: "tabs.extensions", icon: Blocks },
-  { id: "assistants", labelKey: "tabs.assistants", icon: Sparkles },
   { id: "usage", labelKey: "tabs.usage", icon: Activity },
   { id: "settings", labelKey: "tabs.settings", icon: Settings },
 ];
@@ -64,7 +60,6 @@ function deriveActiveTab(pathname: string): RailTabId {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/devices")) return "devices";
   if (pathname.includes("/community")) return "extensions";
-  if (pathname.includes("/assistants")) return "assistants";
   if (pathname.includes("/usage")) return "usage";
   return "chats";
 }
@@ -131,11 +126,6 @@ export function DesktopNavRail() {
             router.replace(buildHostCommunityRoute(activeServerId));
           }
           break;
-        case "assistants":
-          if (activeServerId) {
-            router.replace(buildHostAssistantsRoute(activeServerId));
-          }
-          return;
         case "usage":
           if (activeServerId) {
             router.replace(buildHostUsageRoute(activeServerId));

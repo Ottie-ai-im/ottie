@@ -16,7 +16,12 @@ import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { useSessionStore } from "@/stores/session-store";
 
 const WELCOME_ROUTE = "/welcome";
-const IDENTITY_SETUP_ROUTE = "/onboarding/identity";
+// Identity setup is now hosted inline inside the welcome card's state
+// machine ("我是新用户" → name-input). We funnel uninitialized daemons
+// through the same /welcome route instead of the standalone onboarding
+// page so the user sees one unified empty-home, not two near-identical
+// gates depending on connection timing.
+const IDENTITY_SETUP_ROUTE = "/welcome";
 
 // Phase 1.e — discriminated union for identity-fetch lifecycle. Boot routing
 // must wait for the resolution before deciding between onboarding and the

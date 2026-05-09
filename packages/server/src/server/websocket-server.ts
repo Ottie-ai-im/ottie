@@ -604,6 +604,23 @@ export class VoiceAssistantWebSocketServer {
     (runtimeMetricsInterval as unknown as { unref?: () => void }).unref?.();
   }
 
+  private extractBearerToken(req: IncomingMessage): string | undefined {
+    const authHeader = req.headers["authorization"];
+    if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
+      return authHeader.slice("Bearer ".length).trim();
+    }
+    if (req.url) {
+      try {
+        const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+        const queryToken = url.searchParams.get("token");
+        if (queryToken) return queryToken;
+      } catch {
+        // ignore URL parse errors
+      }
+    }
+    return undefined;
+  }
+
   private verifyWsClient(
     req: IncomingMessage,
     allowedOrigins: Set<string>,
@@ -626,23 +643,7 @@ export class VoiceAssistantWebSocketServer {
       const isDesktopShell = origin === "tauri://localhost" || origin === "http://tauri.localhost";
 
       if (!isDesktopShell) {
-        const authHeader = req.headers["authorization"];
-        let provided =
-          typeof authHeader === "string" && authHeader.startsWith("Bearer ")
-            ? authHeader.slice("Bearer ".length).trim()
-            : undefined;
-
-        if (!provided && req.url) {
-          try {
-            const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
-            const queryToken = url.searchParams.get("token");
-            if (queryToken) {
-              provided = queryToken;
-            }
-          } catch {
-            // ignore URL parse errors
-          }
-        }
+        const provided = this.extractBearerToken(req);
 
         if (!verifyBearerToken(provided, this.localTokenMode)) {
           this.incrementRuntimeCounter("authRejected");

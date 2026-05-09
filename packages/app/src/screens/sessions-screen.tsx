@@ -1,7 +1,7 @@
 // SessionsScreen — the WeChat-style "Chats" tab.
 //
 // Layout:
-//   - MenuHeader ("Chats" + TopRightAddMenu)
+//   - MenuHeader ("Chats")
 //   - SearchInput (filters by title / cwd / serverLabel)
 //   - FlatList of mixed items: ONLINE / OFFLINE section headers + ChatRows
 //
@@ -31,7 +31,6 @@ import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/combobox";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ChatRow } from "@/components/chat-row";
-import { TopRightAddMenu } from "@/components/top-right-add-menu";
 import { MathCurveLoader } from "@/components/math-curve-loader";
 import { otterAssets } from "@/assets/otter";
 import { useAgentHistory } from "@/hooks/use-agent-history";
@@ -228,8 +227,6 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
     [isManualRefresh, isRevalidating, handleRefresh, theme.colors.foregroundMuted, refreshColors],
   );
 
-  const headerRight = useMemo(() => <TopRightAddMenu serverId={serverId} />, [serverId]);
-
   const showInitialEmpty = !isInitialLoad && totalAgents === 0;
   const showSearchEmpty = !isInitialLoad && totalAgents > 0 && listItems.length === 0;
 
@@ -285,7 +282,7 @@ function SessionsScreenContent({ serverId }: { serverId: string }) {
 
   return (
     <View style={styles.container}>
-      <MenuHeader title={t("chat.title")} rightContent={headerRight} />
+      <MenuHeader title={t("chat.title")} />
       <View style={styles.searchBar}>
         <SearchInput
           placeholder={t("chat.searchPlaceholder", { defaultValue: "Search..." })}

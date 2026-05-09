@@ -1,7 +1,14 @@
 import { router, usePathname, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { MobileTabBar, type MobileTab } from "@/components/mobile-tab-bar";
-import { TopRightAddMenu } from "@/components/top-right-add-menu";
+import { TopRightAddMenu, type AddMenuItem } from "@/components/top-right-add-menu";
+import { SidebarSectionHeader } from "@/components/sidebar/sidebar-section-header";
+import { SidebarHumansList, useSidebarHumans } from "@/components/sidebar/sidebar-humans-list";
+import {
+  SidebarAiAgentsList,
+  useSidebarAiAgents,
+} from "@/components/sidebar/sidebar-ai-agents-list";
+import { Bot, Folder, Users } from "lucide-react-native";
 import { buildHostCommunityRoute, buildHostDevicesRoute } from "@/utils/host-routes";
 import { MessagesSquare } from "lucide-react-native";
 import {
@@ -16,12 +23,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Platform,
-  StyleSheet as RNStyleSheet,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Platform, StyleSheet as RNStyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Extrapolation,
@@ -63,7 +65,6 @@ import {
   buildSettingsRoute,
   mapPathnameToServer,
 } from "@/utils/host-routes";
-import { useSessionStore } from "@/stores/session-store";
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
 import { SidebarWorkspaceList } from "./sidebar-workspace-list";
@@ -75,6 +76,174 @@ type SidebarTheme = ReturnType<typeof useUnistyles>["theme"];
 
 interface LeftSidebarProps {
   selectedAgentId?: string;
+}
+
+// Sidebar three-section redesign: distribute the original single-+-menu's
+// 8 actions across the workspace / humans / AI Agent sections. The four
+// device/host actions (scanToPair, joinHost, addDevice, linkToExisting)
+// stay on the workspace section because they're infrastructure-level
+// (basic plumbing) rather than per-content like friends/agents.
+const WORKSPACE_ADD_ITEMS: ReadonlyArray<AddMenuItem> = [
+  { id: "chat.add.newChat", labelKey: "chat.add.newChat" },
+  { id: "chat.add.createWorkspace", labelKey: "chat.add.createWorkspace" },
+  { id: "chat.add.scanToPair", labelKey: "chat.add.scanToPair" },
+  { id: "chat.add.joinHost", labelKey: "chat.add.joinHost" },
+  { id: "chat.add.addDevice", labelKey: "chat.add.addDevice" },
+  { id: "chat.add.linkToExisting", labelKey: "chat.add.linkToExisting" },
+];
+const HUMANS_ADD_ITEMS: ReadonlyArray<AddMenuItem> = [
+  { id: "chat.add.addFriend", labelKey: "chat.add.addFriend" },
+  { id: "chat.add.redeemFriendLink", labelKey: "chat.add.redeemFriendLink" },
+];
+const AI_AGENT_ADD_ITEMS: ReadonlyArray<AddMenuItem> = [
+  { id: "chat.add.newAiAgent", labelKey: "chat.add.newAiAgent" },
+  { id: "chat.add.addLocalService", labelKey: "chat.add.addLocalService" },
+];
+
+interface ProjectsSectionHeaderProps {
+  serverId: string | null;
+  count: number;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+// Top section header (项目). Trailing "+" hosts the workspace + device-pair
+// add-menu items the original sidebar header carried before the three-
+// section redesign. Visually consistent with the humans / AI Agent
+// section headers below it.
+function ProjectsSectionHeader({
+  serverId,
+  count,
+  collapsed,
+  onToggleCollapsed,
+}: ProjectsSectionHeaderProps) {
+  const { t } = useTranslation();
+  const trailing = useMemo(
+    () => (
+      <TopRightAddMenu
+        serverId={serverId ?? undefined}
+        testID="sidebar-projects-add"
+        items={WORKSPACE_ADD_ITEMS}
+        triggerLabelKey="sidebar.projects.addLabel"
+        size="sm"
+      />
+    ),
+    [serverId],
+  );
+  return (
+    <SidebarSectionHeader
+      icon={Folder}
+      label={t("sidebar.projects.title")}
+      count={count}
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
+      trailing={trailing}
+      testID="sidebar-section-projects"
+    />
+  );
+}
+
+interface HumansSectionHeaderProps {
+  serverId: string | null;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+function HumansSectionHeader({ serverId, collapsed, onToggleCollapsed }: HumansSectionHeaderProps) {
+  const { t } = useTranslation();
+  const summary = useSidebarHumans(serverId);
+  const trailing = useMemo(
+    () => (
+      <TopRightAddMenu
+        serverId={serverId ?? undefined}
+        testID="sidebar-humans-add"
+        items={HUMANS_ADD_ITEMS}
+        triggerLabelKey="sidebar.humans.addLabel"
+        size="sm"
+      />
+    ),
+    [serverId],
+  );
+  return (
+    <SidebarSectionHeader
+      icon={Users}
+      label={t("sidebar.humans.title")}
+      count={summary.count}
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
+      trailing={trailing}
+      testID="sidebar-section-humans"
+    />
+  );
+}
+
+interface AiAgentsSectionHeaderProps {
+  serverId: string | null;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+function AiAgentsSectionHeader({
+  serverId,
+  collapsed,
+  onToggleCollapsed,
+}: AiAgentsSectionHeaderProps) {
+  const { t } = useTranslation();
+  const rows = useSidebarAiAgents(serverId);
+  const trailing = useMemo(
+    () => (
+      <TopRightAddMenu
+        serverId={serverId ?? undefined}
+        testID="sidebar-ai-agents-add"
+        items={AI_AGENT_ADD_ITEMS}
+        triggerLabelKey="sidebar.aiAgents.addLabel"
+        size="sm"
+      />
+    ),
+    [serverId],
+  );
+  return (
+    <SidebarSectionHeader
+      icon={Bot}
+      label={t("sidebar.aiAgents.title")}
+      count={rows.length}
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
+      trailing={trailing}
+      testID="sidebar-section-ai-agents"
+    />
+  );
+}
+
+interface SidebarThreeSectionState {
+  projectsCollapsed: boolean;
+  humansCollapsed: boolean;
+  agentsCollapsed: boolean;
+  toggleProjects: () => void;
+  toggleHumans: () => void;
+  toggleAgents: () => void;
+}
+
+// Local state holder — collapsed-by-default is `false` for all three so
+// the user sees content on first paint. Persistence (remember collapsed
+// state across reloads) is a follow-up if it surfaces in feedback.
+function useSidebarThreeSectionState(): SidebarThreeSectionState {
+  const [projectsCollapsed, setProjectsCollapsed] = useState(false);
+  const [humansCollapsed, setHumansCollapsed] = useState(false);
+  const [agentsCollapsed, setAgentsCollapsed] = useState(false);
+
+  const toggleProjects = useCallback(() => setProjectsCollapsed((p) => !p), []);
+  const toggleHumans = useCallback(() => setHumansCollapsed((p) => !p), []);
+  const toggleAgents = useCallback(() => setAgentsCollapsed((p) => !p), []);
+
+  return {
+    projectsCollapsed,
+    humansCollapsed,
+    agentsCollapsed,
+    toggleProjects,
+    toggleHumans,
+    toggleAgents,
+  };
 }
 
 interface SidebarSharedProps {
@@ -348,7 +517,7 @@ export const LeftSidebar = memo(function LeftSidebar({
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <View style={{ flexDirection: "row", height: "100%", zIndex: 10 }}>
+      <View style={staticStyles.desktopRow}>
         <DesktopSidebar
           {...sharedProps}
           insetsTop={insets.top}
@@ -437,16 +606,10 @@ function MobileSidebar({
     closeToAgent();
   }, [closeToAgent, gestureAnimatingRef]);
 
-  // Phase 2.c-ui: the chats-tab "+" button now opens the same 5-item add
-  // menu the sessions-screen header uses (newChat / scanToPair / joinHost /
-  // createWorkspace / addDevice). Single-purpose buttons in two places led
-  // to a discoverability gap — Add device wasn't reachable from this entry
-  // even though it was the more natural surface to look. handleOpenProject
-  // is still wired through chat.add.createWorkspace inside the menu.
-  const mobileChatsTrailing = useMemo(
-    () => <TopRightAddMenu serverId={activeServerId ?? undefined} testID="sidebar-add-menu" />,
-    [activeServerId],
-  );
+  // Sidebar 3-section redesign: the original single "+" menu's 8 items
+  // are now split across project / humans / AI Agent section headers.
+  // The 聊天 SidebarHeaderRow becomes a pure tab marker with no trailing.
+  const threeSectionState = useSidebarThreeSectionState();
 
   const handleMobileTabSelect = useCallback(
     (tab: MobileTab) => {
@@ -489,10 +652,6 @@ function MobileSidebar({
     translateX,
     windowWidth,
   ]);
-
-  const handleWorkspacePress = useCallback(() => {
-    closeToAgent();
-  }, [closeToAgent]);
 
   const closeGesture = useMemo(
     () =>
@@ -643,24 +802,47 @@ function MobileSidebar({
               onPress={handleViewMore}
               isActive={isSessionsActive}
               testID="sidebar-sessions"
-              trailing={mobileChatsTrailing}
             />
 
-            {isInitialLoad ? (
-              <SidebarAgentListSkeleton />
-            ) : (
-              <SidebarWorkspaceList
-                serverId={activeServerId}
-                collapsedProjectKeys={collapsedProjectKeys}
-                onToggleProjectCollapsed={toggleProjectCollapsed}
-                shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
-                projects={projects}
-                isRefreshing={isManualRefresh && isRevalidating}
-                onRefresh={handleRefresh}
-                onWorkspacePress={handleWorkspacePress}
-                onAddProject={handleOpenProject}
-                parentGestureRef={closeGestureRef}
-              />
+            <ProjectsSectionHeader
+              serverId={activeServerId}
+              count={projects.length}
+              collapsed={threeSectionState.projectsCollapsed}
+              onToggleCollapsed={threeSectionState.toggleProjects}
+            />
+            {(() => {
+              if (threeSectionState.projectsCollapsed) return null;
+              if (isInitialLoad) return <SidebarAgentListSkeleton />;
+              return (
+                <SidebarWorkspaceList
+                  serverId={activeServerId}
+                  collapsedProjectKeys={collapsedProjectKeys}
+                  onToggleProjectCollapsed={toggleProjectCollapsed}
+                  shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
+                  projects={projects}
+                  isRefreshing={isManualRefresh && isRevalidating}
+                  onRefresh={handleRefresh}
+                  onAddProject={handleOpenProject}
+                />
+              );
+            })()}
+
+            <HumansSectionHeader
+              serverId={activeServerId}
+              collapsed={threeSectionState.humansCollapsed}
+              onToggleCollapsed={threeSectionState.toggleHumans}
+            />
+            {threeSectionState.humansCollapsed ? null : (
+              <SidebarHumansList serverId={activeServerId} />
+            )}
+
+            <AiAgentsSectionHeader
+              serverId={activeServerId}
+              collapsed={threeSectionState.agentsCollapsed}
+              onToggleCollapsed={threeSectionState.toggleAgents}
+            />
+            {threeSectionState.agentsCollapsed ? null : (
+              <SidebarAiAgentsList serverId={activeServerId} />
             )}
 
             <MobileTabBar activeTab="chats" onSelect={handleMobileTabSelect} />
@@ -672,7 +854,7 @@ function MobileSidebar({
 }
 
 function DesktopSidebar({
-  theme,
+  theme: _theme,
   activeServerId,
   activeHostLabel: _activeHostLabel,
   activeHostStatusColor: _activeHostStatusColor,
@@ -703,10 +885,7 @@ function DesktopSidebar({
   // (extensions / activity / devices / settings) so the page gets full width.
   const isNonChatRoute = /\/(community|devices|usage|settings)(\/|$)/.test(pathname);
   const padding = useWindowControlsPadding("sidebar");
-  const desktopChatsTrailing = useMemo(
-    () => <TopRightAddMenu serverId={activeServerId ?? undefined} testID="sidebar-add-menu" />,
-    [activeServerId],
-  );
+  const threeSectionState = useSidebarThreeSectionState();
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const setSidebarWidth = usePanelStore((state) => state.setSidebarWidth);
   const { width: viewportWidth } = useWindowDimensions();
@@ -777,23 +956,45 @@ function DesktopSidebar({
             onPress={handleViewMore}
             isActive={isSessionsActive}
             testID="sidebar-sessions"
-            trailing={desktopChatsTrailing}
           />
         </View>
 
-        {isInitialLoad ? (
-          <SidebarAgentListSkeleton />
-        ) : (
-          <SidebarWorkspaceList
-            serverId={activeServerId}
-            collapsedProjectKeys={collapsedProjectKeys}
-            onToggleProjectCollapsed={toggleProjectCollapsed}
-            shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
-            projects={projects}
-            isRefreshing={isManualRefresh && isRevalidating}
-            onRefresh={handleRefresh}
-            onAddProject={handleOpenProject}
-          />
+        <ProjectsSectionHeader
+          serverId={activeServerId}
+          count={projects.length}
+          collapsed={threeSectionState.projectsCollapsed}
+          onToggleCollapsed={threeSectionState.toggleProjects}
+        />
+        {!threeSectionState.projectsCollapsed &&
+          (isInitialLoad ? (
+            <SidebarAgentListSkeleton />
+          ) : (
+            <SidebarWorkspaceList
+              serverId={activeServerId}
+              collapsedProjectKeys={collapsedProjectKeys}
+              onToggleProjectCollapsed={toggleProjectCollapsed}
+              shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
+              projects={projects}
+              isRefreshing={isManualRefresh && isRevalidating}
+              onRefresh={handleRefresh}
+              onAddProject={handleOpenProject}
+            />
+          ))}
+
+        <HumansSectionHeader
+          serverId={activeServerId}
+          collapsed={threeSectionState.humansCollapsed}
+          onToggleCollapsed={threeSectionState.toggleHumans}
+        />
+        {threeSectionState.humansCollapsed ? null : <SidebarHumansList serverId={activeServerId} />}
+
+        <AiAgentsSectionHeader
+          serverId={activeServerId}
+          collapsed={threeSectionState.agentsCollapsed}
+          onToggleCollapsed={threeSectionState.toggleAgents}
+        />
+        {threeSectionState.agentsCollapsed ? null : (
+          <SidebarAiAgentsList serverId={activeServerId} />
         )}
 
         <SidebarCalloutSlot />
@@ -824,6 +1025,11 @@ const staticStyles = RNStyleSheet.create({
   },
   desktopSidebar: {
     position: "relative" as const,
+  },
+  desktopRow: {
+    flexDirection: "row" as const,
+    height: "100%",
+    zIndex: 10,
   },
 });
 

@@ -201,13 +201,112 @@
     "skipForPowerUsers": "跳过（高阶用户）",
     "dontShowAgain": "不再显示"
   },
+  "emptyHome": {
+    "title": "欢迎来到 Ottie",
+    "subtitle": "你的本地 AI agent，从你的口袋。",
+    "newUser": {
+      "title": "注册",
+      "subtitle": "第一次用 Ottie — 给自己取个昵称就开始"
+    },
+    "oldUser": {
+      "title": "登录",
+      "subtitle": "我之前用过 — 接回原来的身份和数据"
+    },
+    "footerPair": "配对手机或远程电脑 →",
+    "advancedDeviceLink": "高级：从其他设备链接 →",
+    "nameInput": {
+      "title": "怎么称呼你？",
+      "placeholder": "你的名字",
+      "helper": "会用作昵称。之后能改。",
+      "back": "上一步",
+      "submit": "完成",
+      "submitting": "创建中…",
+      "submitNeedsPair": "下一步：配对设备",
+      "needDaemon": "还没连上设备——先配一台再创建昵称。",
+      "pairButton": "去配对",
+      "unknownError": "出了点问题，请再试一次。"
+    },
+    "comingSoon": {
+      "back": "上一步",
+      "oldUser": {
+        "title": "文件夹恢复即将上线",
+        "body": "选已有的 Ottie 数据文件夹这条路会做在桌面版里（含预览页，让你确认这个文件夹属于谁后再决定）。现在请先用配对的方式接到原有的 daemon。"
+      },
+      "deviceLink": {
+        "title": "设备链接即将上线",
+        "body": "通过 relay 把这台机器链接到已有的 Ottie 身份——协议层已经就位，只差 UI。会和桌面版的文件夹恢复一起上。"
+      }
+    }
+  },
   "sidebar": {
     "sessions": "聊天",
     "addProject": "添加项目",
     "noProjectsYet": "暂无项目",
     "noProjectsHint": "添加项目以开始使用",
     "projects": "项目",
-    "spaces": "空间"
+    "spaces": "空间",
+    "projects": {
+      "title": "项目",
+      "addLabel": "添加项目"
+    },
+    "humans": {
+      "title": "人类",
+      "addLabel": "添加好友",
+      "empty": "暂无好友"
+    },
+    "aiAgents": {
+      "title": "AI Agent",
+      "addLabel": "添加 AI Agent",
+      "empty": "暂无 Agent"
+    }
+  },
+  "newAiAgent": {
+    "title": "新建 AI Agent",
+    "editTitle": "编辑 AI Agent",
+    "name": "名字",
+    "namePlaceholder": "我的助理",
+    "description": "描述",
+    "descriptionPlaceholder": "这个助理是干嘛的",
+    "descriptionHint": "可选，最多 140 个字。",
+    "runtime": {
+      "label": "Runtime",
+      "claude": "Claude Code",
+      "codex": "Codex CLI",
+      "copilot": "GitHub Copilot",
+      "opencode": "OpenCode CLI",
+      "gemini": "Gemini CLI",
+      "pi": "Pi"
+    },
+    "model": "模型",
+    "modelHint": {
+      "claude": "例如 claude-sonnet-4-6、claude-opus-4-7",
+      "codex": "例如 gpt-5、gpt-5-codex",
+      "copilot": "例如 gpt-4.1、claude-sonnet-4",
+      "opencode": "例如 claude-sonnet-4-6、gpt-5",
+      "gemini": "例如 gemini-2.5-pro、gemini-2.5-flash",
+      "pi": "Pi 通常用默认模型，留空即可"
+    },
+    "systemPrompt": "系统提示词",
+    "systemPromptPlaceholder": "你是一个有帮助的助理…",
+    "systemPromptHint": "可选，设定它的角色与行为。",
+    "cancel": "取消",
+    "create": "创建",
+    "save": "保存"
+  },
+  "aiAgentDetail": {
+    "notFound": "找不到该 Agent",
+    "chatComingSoon": "和这个助理聊天即将上线——配置已经保存到本地。",
+    "edit": "编辑",
+    "delete": "删除"
+  },
+  "aiAgentChat": {
+    "placeholder": "问点什么开始对话吧。",
+    "inputPlaceholder": "发消息…",
+    "send": "发送",
+    "thinking": "思考中…",
+    "timeout": "回复超时了，再试一次或把问题拆开。",
+    "unknownError": "出了点问题，请重试。",
+    "emptyResponse": "（空响应）"
   },
   "project": {
     "addProject": "添加项目",
@@ -699,7 +798,9 @@
       "addDevice": "添加设备",
       "linkToExisting": "把这台设备加入已有账号",
       "addFriend": "添加好友",
-      "redeemFriendLink": "配对好友"
+      "redeemFriendLink": "配对好友",
+      "newAiAgent": "新建 AI Agent",
+      "addLocalService": "添加本地服务…"
     },
     "swipe": {
       "markRead": "已读",

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
+  type TextInputKeyPressEventData,
   View,
 } from "react-native";
+import { isWeb } from "@/constants/platform";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { ArrowUp, Search, X } from "lucide-react-native";
@@ -158,6 +161,16 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
     });
   }, [draft, serverId, client, isPending, appendTurn, setPending, agentId]);
 
+  const handleKeyPress = useCallback(
+    (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+      const nativeEvent = e.nativeEvent as TextInputKeyPressEventData & { shiftKey?: boolean };
+      if (nativeEvent.key === "Enter" && !nativeEvent.shiftKey) {
+        void onSend();
+      }
+    },
+    [onSend],
+  );
+
   // Auto-scroll when new turns arrive (covers the case where reply
   // lands while the panel is mounted).
   useEffect(() => {
@@ -293,8 +306,9 @@ export function OpenclawChatPanel({ serverId }: OpenclawChatPanelProps) {
           style={styles.input}
           multiline
           editable={!isPending}
-          onSubmitEditing={onSend}
-          submitBehavior="blurAndSubmit"
+          onSubmitEditing={isWeb ? undefined : onSend}
+          submitBehavior={isWeb ? undefined : "blurAndSubmit"}
+          onKeyPress={isWeb ? handleKeyPress : undefined}
           testID="openclaw-composer-input"
         />
         <Pressable
@@ -478,10 +492,10 @@ const styles = StyleSheet.create((theme) => ({
     height: 40,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.accent,
+    backgroundColor: "#0ea5e9",
     borderRadius: theme.borderRadius.full,
   },
   sendButtonDisabled: {
-    opacity: 0.5,
+    backgroundColor: theme.colors.surface3,
   },
 }));

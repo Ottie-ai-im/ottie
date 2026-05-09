@@ -2,13 +2,15 @@ import { type ComponentType, useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { PlusCircle, QrCode, Server } from "lucide-react-native";
+import { ChevronRight, PlusCircle, QrCode, Server } from "lucide-react-native";
+import { router, type Href } from "expo-router";
 
 import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
 import { AddHostModal } from "@/components/add-host-modal";
 import { PairDeviceModal } from "@/desktop/components/pair-device-modal";
 import { useHosts, useHostRuntimeSnapshot } from "@/runtime/host-runtime";
 import type { HostProfile } from "@/types/host-connection";
+import { buildSettingsHostRoute } from "@/utils/host-routes";
 
 export function DevicesScreen() {
   const hosts = useHosts();
@@ -130,11 +132,21 @@ function DeviceRow({ host }: { host: HostProfile }) {
 
   const dotStyle = useMemo(() => [styles.statusDot, { backgroundColor: dotColor }], [dotColor]);
 
+  // Click → host detail page (connections / daemon controls / providers /
+  // local services / remove). The detail page lives under the settings
+  // route tree but is now reached from devices, not from a duplicated
+  // "host list" in the settings sidebar — see settings-screen sidebar
+  // change that drops that group.
+  const handlePress = useCallback(() => {
+    router.push(buildSettingsHostRoute(host.serverId) as Href);
+  }, [host.serverId]);
+
   return (
     <Pressable
       style={styles.row}
       accessibilityRole="button"
       testID={`devices-row-${host.serverId}`}
+      onPress={handlePress}
     >
       <View style={dotStyle} />
       <View style={styles.rowText}>
@@ -145,6 +157,7 @@ function DeviceRow({ host }: { host: HostProfile }) {
           {statusText}
         </Text>
       </View>
+      <ChevronRight size={18} color={theme.colors.foregroundMuted} />
     </Pressable>
   );
 }

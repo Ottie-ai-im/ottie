@@ -13,18 +13,18 @@ export interface LocalServiceProbe {
 
 const PROBES: LocalServiceProbe[] = [
   {
-    id: "open-webui",
-    label: "Open WebUI",
-    defaultPort: 3000,
-    fallbackPort: 13000,
-    healthPath: "/health",
-  },
-  {
     id: "openclaw",
     label: "OpenClaw",
     defaultPort: 18789,
     fallbackPort: 18790,
     healthPath: "/",
+  },
+  {
+    id: "open-webui",
+    label: "Open WebUI",
+    defaultPort: 3000,
+    fallbackPort: 13000,
+    healthPath: "/health",
   },
   {
     id: "hermes",

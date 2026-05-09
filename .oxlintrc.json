@@ -84,6 +84,12 @@
       "rules": {
         "no-empty-pattern": "off"
       }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+      "rules": {
+        "max-nested-callbacks": "off"
+      }
     }
   ]
 }

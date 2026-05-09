@@ -341,6 +341,38 @@ export function registerChatRowActions(): void {
       },
     }),
   );
+
+  // Sidebar AI Agent + — open the "create conversation agent" form. The form
+  // captures name + description + runtime + model + system prompt and saves
+  // to `useAiAgentsStore` (AsyncStorage). Chat backend is a follow-up phase.
+  actionRegistry.register(
+    defineAction("chat.add.newAiAgent", {
+      description: "Create a new conversation AI Agent",
+      modalities: ["menu", "cmdk"],
+      schema: OptionalServerPayload,
+      handler: async () => {
+        const { useAiAgentsUiStore } = await import("@/stores/ai-agents-ui-store");
+        useAiAgentsUiStore.getState().openCreateModal();
+      },
+    }),
+  );
+
+  // Sidebar AI Agent + — route to the existing AssistantsScreen, which
+  // hosts the OpenClaw / OpenWebUI / Hermes install flows.
+  actionRegistry.register(
+    defineAction("chat.add.addLocalService", {
+      description: "Browse and install local AI services (OpenClaw, OpenWebUI, …)",
+      modalities: ["menu", "cmdk"],
+      schema: OptionalServerPayload,
+      handler: async (payload) => {
+        const { router } = await import("expo-router");
+        const serverId = payload?.serverId;
+        if (typeof serverId === "string" && serverId.length > 0) {
+          router.push(`/h/${encodeURIComponent(serverId)}/assistants`);
+        }
+      },
+    }),
+  );
 }
 
 // Side-effect: register on first import.

@@ -20,6 +20,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 import { CommandCenter } from "@/components/command-center";
 import { DesktopNavRail } from "@/components/desktop-nav-rail";
+import { NewAiAgentModal } from "@/components/new-ai-agent-modal";
 import { SplashOverlay } from "@/components/splash-overlay";
 import { GhostCursorOverlay } from "@/voice-control/ghost-cursor-overlay";
 import { VoiceCommandBridgeProvider } from "@/voice-control/voice-command-bridge-provider";
@@ -519,6 +520,7 @@ function AppContainer({
       />
       <WorkspaceSetupDialog />
       <KeyboardShortcutsDialog />
+      <NewAiAgentModal />
       {/* Voice Control · Beta — both surfaces self-gate on the flag + platform.
           The pill listens for the configured hotkey on web/desktop. The orb
           mounts a draggable always-on mic button on iOS/Android. The bridge

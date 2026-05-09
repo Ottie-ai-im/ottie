@@ -196,10 +196,19 @@ export function ProjectPickerModal() {
     return () => window.removeEventListener("keydown", handler, true);
   }, [activeIndex, handleSelectPath, handleSubmitCustom, open, options, query, setOpen]);
 
-  const panelStyle = useMemo(() => [styles.panel], []);
+  const panelStyle = useMemo(
+    () => [
+      styles.panel,
+      {
+        backgroundColor: theme.colors.surface0,
+        borderColor: theme.colors.border,
+      },
+    ],
+    [theme.colors.border, theme.colors.surface0],
+  );
   const headerStyle = useMemo(
-    () => [styles.header, { borderBottomColor: theme.colors.borderGlass }],
-    [theme.colors.borderGlass],
+    () => [styles.header, { borderBottomColor: theme.colors.border }],
+    [theme.colors.border],
   );
   const inputStyle = useMemo(
     () => [styles.input, { color: theme.colors.foreground }],
@@ -278,12 +287,10 @@ const styles = StyleSheet.create((theme) => ({
     maxWidth: "92%",
     maxHeight: "80%",
     borderWidth: 1,
-    borderRadius: theme.borderRadius.glassSheet,
+    borderRadius: theme.borderRadius.card,
     borderCurve: "continuous",
     overflow: "hidden",
     ...theme.shadow.glassDeep,
-    backdropFilter: "blur(40px) saturate(180%)",
-    WebkitBackdropFilter: "blur(40px) saturate(180%)",
   } as object,
   header: {
     paddingHorizontal: theme.spacing[4],

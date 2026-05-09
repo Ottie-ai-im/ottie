@@ -201,13 +201,112 @@
     "skipForPowerUsers": "Skip for power users",
     "dontShowAgain": "Don't show this again"
   },
+  "emptyHome": {
+    "title": "Welcome to Ottie",
+    "subtitle": "Your local AI agents — in your pocket.",
+    "newUser": {
+      "title": "Sign up",
+      "subtitle": "First time on Ottie — pick a nickname and you're in"
+    },
+    "oldUser": {
+      "title": "Sign in",
+      "subtitle": "I've used Ottie before — restore my identity and data"
+    },
+    "footerPair": "Pair a phone or remote computer →",
+    "advancedDeviceLink": "Advanced: link from another device →",
+    "nameInput": {
+      "title": "What should we call you?",
+      "placeholder": "Your name",
+      "helper": "Used as your nickname. You can change it later.",
+      "back": "Back",
+      "submit": "Done",
+      "submitting": "Setting up…",
+      "submitNeedsPair": "Next: pair a device",
+      "needDaemon": "No connected device yet — pair one first to claim a nickname.",
+      "pairButton": "Pair a device",
+      "unknownError": "Something went wrong. Please try again."
+    },
+    "comingSoon": {
+      "back": "Back",
+      "oldUser": {
+        "title": "Folder restore is coming soon",
+        "body": "Picking an existing Ottie data folder will live in the desktop app (with a preview of who that folder belongs to before you commit). For now, pair this client to your existing daemon to keep using your data."
+      },
+      "deviceLink": {
+        "title": "Device link is coming soon",
+        "body": "Linking this machine to an existing Ottie identity over the relay will land alongside the desktop folder restore. The protocol is already in place — only the UI is missing."
+      }
+    }
+  },
   "sidebar": {
     "sessions": "Chats",
     "addProject": "Add project",
     "noProjectsYet": "No projects yet",
     "noProjectsHint": "Add a project to get started",
     "projects": "Projects",
-    "spaces": "Spaces"
+    "spaces": "Spaces",
+    "projects": {
+      "title": "Projects",
+      "addLabel": "Add project"
+    },
+    "humans": {
+      "title": "Humans",
+      "addLabel": "Add human",
+      "empty": "No friends yet"
+    },
+    "aiAgents": {
+      "title": "AI Agent",
+      "addLabel": "Add AI Agent",
+      "empty": "No agents yet"
+    }
+  },
+  "newAiAgent": {
+    "title": "New AI Agent",
+    "editTitle": "Edit AI Agent",
+    "name": "Name",
+    "namePlaceholder": "My assistant",
+    "description": "Description",
+    "descriptionPlaceholder": "What this assistant is for",
+    "descriptionHint": "Optional. Up to 140 characters.",
+    "runtime": {
+      "label": "Runtime",
+      "claude": "Claude Code",
+      "codex": "Codex CLI",
+      "copilot": "GitHub Copilot",
+      "opencode": "OpenCode CLI",
+      "gemini": "Gemini CLI",
+      "pi": "Pi"
+    },
+    "model": "Model",
+    "modelHint": {
+      "claude": "e.g. claude-sonnet-4-6, claude-opus-4-7",
+      "codex": "e.g. gpt-5, gpt-5-codex",
+      "copilot": "e.g. gpt-4.1, claude-sonnet-4",
+      "opencode": "e.g. claude-sonnet-4-6, gpt-5",
+      "gemini": "e.g. gemini-2.5-pro, gemini-2.5-flash",
+      "pi": "Leave empty unless your Pi build supports custom models"
+    },
+    "systemPrompt": "System prompt",
+    "systemPromptPlaceholder": "You are a helpful assistant…",
+    "systemPromptHint": "Optional. Sets the assistant's role and behaviour.",
+    "cancel": "Cancel",
+    "create": "Create",
+    "save": "Save"
+  },
+  "aiAgentDetail": {
+    "notFound": "Agent not found",
+    "chatComingSoon": "Chat with this assistant is coming soon — the configuration is saved locally for now.",
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "aiAgentChat": {
+    "placeholder": "Ask anything to start a conversation.",
+    "inputPlaceholder": "Message…",
+    "send": "Send",
+    "thinking": "Thinking…",
+    "timeout": "Took too long to reply. Try again or break the prompt up.",
+    "unknownError": "Something went wrong. Please try again.",
+    "emptyResponse": "(empty response)"
   },
   "project": {
     "addProject": "Add project",
@@ -699,7 +798,9 @@
       "addDevice": "Add device",
       "linkToExisting": "Link this device to an account",
       "addFriend": "Add friend",
-      "redeemFriendLink": "Pair with a friend"
+      "redeemFriendLink": "Pair with a friend",
+      "newAiAgent": "New AI Agent",
+      "addLocalService": "Add local service…"
     },
     "swipe": {
       "markRead": "Read",

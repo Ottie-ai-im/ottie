@@ -2925,11 +2925,19 @@ export function SidebarWorkspaceList({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  // Sidebar 3-section layout: the workspace list sits between the projects
+  // header and the humans/AI-Agent sections. Originally `flex: 1` made it
+  // eat all remaining vertical space, pushing the lower sections to the
+  // bottom of the sidebar. Switch to `flexShrink: 1` so the container
+  // auto-sizes to its content but can shrink (and the inner ScrollView
+  // takes over) when the project list outgrows the available space.
   container: {
-    flex: 1,
+    flexShrink: 1,
+    minHeight: 0,
   },
   list: {
-    flex: 1,
+    flexShrink: 1,
+    minHeight: 0,
   },
   searchBar: {
     paddingHorizontal: theme.spacing[3],
