@@ -8,7 +8,7 @@ import Foundation
 //   updateAgentRunActivity(activityId, state)
 //   endAgentRunActivity(activityId, finalState?, dismissAfterMs)
 //
-// All three are no-ops on iOS < 16.1 (return a coded error) and on
+// All three are no-ops on iOS < 16.2 (return a coded error) and on
 // platforms other than iOS (the module is iOS-only per
 // expo-module.config.json so it's never reached on Android/web).
 //
@@ -31,7 +31,7 @@ public class OttieLiveActivityModule: Module {
         Name("OttieLiveActivity")
 
         AsyncFunction("isLiveActivitySupported") { () -> Bool in
-            if #available(iOS 16.1, *) {
+            if #available(iOS 16.2, *) {
                 return ActivityAuthorizationInfo().areActivitiesEnabled
             }
             return false
@@ -39,7 +39,7 @@ public class OttieLiveActivityModule: Module {
 
         AsyncFunction("startAgentRunActivity") {
             (params: AgentRunStartParams, promise: Promise) in
-            if #available(iOS 16.1, *) {
+            if #available(iOS 16.2, *) {
                 guard ActivityAuthorizationInfo().areActivitiesEnabled else {
                     promise.reject(
                         "live_activity_disabled",
@@ -74,14 +74,14 @@ public class OttieLiveActivityModule: Module {
             } else {
                 promise.reject(
                     "unavailable_ios_version",
-                    "Live Activities require iOS 16.1 or newer."
+                    "Live Activities require iOS 16.2 or newer."
                 )
             }
         }
 
         AsyncFunction("updateAgentRunActivity") {
             (params: AgentRunUpdateParams, promise: Promise) in
-            if #available(iOS 16.1, *) {
+            if #available(iOS 16.2, *) {
                 guard
                     let activity = self.activeActivities[params.activityId]
                         as? Activity<AgentRunActivityAttributes>
@@ -103,13 +103,13 @@ public class OttieLiveActivityModule: Module {
                     promise.resolve(nil)
                 }
             } else {
-                promise.reject("unavailable_ios_version", "Live Activities require iOS 16.1+.")
+                promise.reject("unavailable_ios_version", "Live Activities require iOS 16.2+.")
             }
         }
 
         AsyncFunction("endAgentRunActivity") {
             (params: AgentRunEndParams, promise: Promise) in
-            if #available(iOS 16.1, *) {
+            if #available(iOS 16.2, *) {
                 guard
                     let activity = self.activeActivities[params.activityId]
                         as? Activity<AgentRunActivityAttributes>
@@ -142,12 +142,12 @@ public class OttieLiveActivityModule: Module {
                     promise.resolve(nil)
                 }
             } else {
-                promise.reject("unavailable_ios_version", "Live Activities require iOS 16.1+.")
+                promise.reject("unavailable_ios_version", "Live Activities require iOS 16.2+.")
             }
         }
 
         AsyncFunction("endAllAgentRunActivities") { (promise: Promise) in
-            if #available(iOS 16.1, *) {
+            if #available(iOS 16.2, *) {
                 Task {
                     for activity in Activity<AgentRunActivityAttributes>.activities {
                         await activity.end(nil, dismissalPolicy: .immediate)

@@ -10,8 +10,9 @@ Pod::Spec.new do |s|
   s.license        = 'MIT'
   s.author         = 'Ottie'
   s.homepage       = 'https://ottie.app'
-  # 16.1 is the minimum that ships ActivityKit. Older devices fall through
-  # to the no-op `unavailable_ios_version` error returned from JS.
+  # ActivityKit ships from 16.1; ActivityContent/ActivityAuthorizationInfo
+  # require 16.2 and are guarded with #available(iOS 16.2, *) in the module.
+  # Older devices fall through to the no-op `unavailable_ios_version` error.
   s.platforms      = { :ios => '16.1' }
   s.swift_version  = '5.9'
   s.source         = { :path => '.' }
