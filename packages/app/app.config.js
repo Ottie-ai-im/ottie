@@ -184,7 +184,7 @@ export default {
     ],
     experiments: {
       typedRoutes: true,
-      reactCompiler: true,
+      reactCompiler: false,
       autolinkingModuleResolution: true,
     },
     // EAS project intentionally not configured. To enable EAS builds,
