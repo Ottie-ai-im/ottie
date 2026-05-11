@@ -71,6 +71,12 @@ export function SettingsFlatList({ contentContainerStyle, testID }: SettingsFlat
           label={t("settings.agents.permissions")}
           testID="settings-row-agents-permissions"
         />
+        <SettingsRow
+          bucket="advanced"
+          slug="extensions"
+          label={t("settings.extensions.title")}
+          testID="settings-row-agents-extensions"
+        />
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.section.voice")} testID="settings-group-voice">

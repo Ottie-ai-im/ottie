@@ -12,7 +12,12 @@ import { SidebarWechatList } from "@/components/sidebar/sidebar-wechat-list";
 import { useSidebarWechatSessions } from "@/hooks/use-sidebar-wechat-sessions";
 import { useAppSettings } from "@/hooks/use-settings";
 import { Bot, Folder, MessageCircle, Users } from "lucide-react-native";
-import { buildHostCommunityRoute, buildHostDevicesRoute } from "@/utils/host-routes";
+import {
+  buildHostAssistantsRoute,
+  buildHostCommunityRoute,
+  buildHostDevicesRoute,
+  buildHostUsageRoute,
+} from "@/utils/host-routes";
 import { MessagesSquare } from "lucide-react-native";
 import {
   type Dispatch,
@@ -723,7 +728,17 @@ function MobileSidebar({
           if (activeServerId) {
             router.push(buildHostCommunityRoute(activeServerId));
           }
-          break;
+          return;
+        case "assistants":
+          if (activeServerId) {
+            router.push(buildHostAssistantsRoute(activeServerId));
+          }
+          return;
+        case "usage":
+          if (activeServerId) {
+            router.push(buildHostUsageRoute(activeServerId));
+          }
+          return;
         case "settings":
           router.push("/settings");
           return;
