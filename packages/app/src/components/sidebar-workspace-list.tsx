@@ -158,6 +158,9 @@ interface SidebarWorkspaceListProps {
   externalSearchQuery?: string;
   /** Callback for controlled search query changes */
   onExternalSearchChange?: (query: string) => void;
+  /** When true, disables the internal ScrollView/NestableScrollContainer so a
+   *  parent ScrollView can own all scrolling (e.g. mobile sidebar overlay). */
+  scrollEnabled?: boolean;
 }
 
 interface ProjectHeaderRowProps {
@@ -2443,6 +2446,7 @@ export function SidebarWorkspaceList({
   hideSearch = false,
   externalSearchQuery,
   onExternalSearchChange,
+  scrollEnabled = true,
 }: SidebarWorkspaceListProps) {
   const pathname = usePathname();
   const [creatingWorkspaceIds, setCreatingWorkspaceIds] = useState<Set<string>>(() => new Set());
@@ -2858,6 +2862,7 @@ export function SidebarWorkspaceList({
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          scrollEnabled={scrollEnabled}
           testID="sidebar-project-workspace-list-scroll"
         >
           {content}
@@ -2867,6 +2872,7 @@ export function SidebarWorkspaceList({
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          scrollEnabled={scrollEnabled}
           testID="sidebar-project-workspace-list-scroll"
         >
           {content}

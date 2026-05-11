@@ -900,63 +900,70 @@ function MobileSidebar({
               testID="sidebar-sessions"
             />
 
-            <View style={styles.mobileSidebarSearch}>
-              <SearchInput
-                placeholder={t("sidebar.searchPlaceholder", { defaultValue: "Search..." })}
-                value={mobileSearchQuery}
-                onChangeText={setMobileSearchQuery}
-              />
-            </View>
-
-            <ProjectsSectionHeader
-              serverId={activeServerId}
-              count={projects.length}
-              collapsed={threeSectionState.projectsCollapsed}
-              onToggleCollapsed={threeSectionState.toggleProjects}
-            />
-            {(() => {
-              if (threeSectionState.projectsCollapsed) return null;
-              if (isInitialLoad) return <SidebarAgentListSkeleton />;
-              return (
-                <SidebarWorkspaceList
-                  serverId={activeServerId}
-                  collapsedProjectKeys={collapsedProjectKeys}
-                  onToggleProjectCollapsed={toggleProjectCollapsed}
-                  shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
-                  projects={projects}
-                  isRefreshing={isManualRefresh && isRevalidating}
-                  onRefresh={handleRefresh}
-                  onAddProject={handleOpenProject}
-                  hideSearch
-                  externalSearchQuery={mobileSearchQuery}
-                  onExternalSearchChange={setMobileSearchQuery}
+            <ScrollView
+              style={styles.mobileSidebarScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.mobileSidebarSearch}>
+                <SearchInput
+                  placeholder={t("sidebar.searchPlaceholder", { defaultValue: "Search..." })}
+                  value={mobileSearchQuery}
+                  onChangeText={setMobileSearchQuery}
                 />
-              );
-            })()}
+              </View>
 
-            <HumansSectionHeader
-              serverId={activeServerId}
-              collapsed={threeSectionState.humansCollapsed}
-              onToggleCollapsed={threeSectionState.toggleHumans}
-            />
-            {threeSectionState.humansCollapsed ? null : (
-              <SidebarHumansList serverId={activeServerId} />
-            )}
+              <ProjectsSectionHeader
+                serverId={activeServerId}
+                count={projects.length}
+                collapsed={threeSectionState.projectsCollapsed}
+                onToggleCollapsed={threeSectionState.toggleProjects}
+              />
+              {(() => {
+                if (threeSectionState.projectsCollapsed) return null;
+                if (isInitialLoad) return <SidebarAgentListSkeleton />;
+                return (
+                  <SidebarWorkspaceList
+                    serverId={activeServerId}
+                    collapsedProjectKeys={collapsedProjectKeys}
+                    onToggleProjectCollapsed={toggleProjectCollapsed}
+                    shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
+                    projects={projects}
+                    isRefreshing={isManualRefresh && isRevalidating}
+                    onRefresh={handleRefresh}
+                    onAddProject={handleOpenProject}
+                    hideSearch
+                    scrollEnabled={false}
+                    externalSearchQuery={mobileSearchQuery}
+                    onExternalSearchChange={setMobileSearchQuery}
+                  />
+                );
+              })()}
 
-            <AiAgentsSectionHeader
-              serverId={activeServerId}
-              collapsed={threeSectionState.agentsCollapsed}
-              onToggleCollapsed={threeSectionState.toggleAgents}
-            />
-            {threeSectionState.agentsCollapsed ? null : (
-              <SidebarAiAgentsList serverId={activeServerId} />
-            )}
+              <HumansSectionHeader
+                serverId={activeServerId}
+                collapsed={threeSectionState.humansCollapsed}
+                onToggleCollapsed={threeSectionState.toggleHumans}
+              />
+              {threeSectionState.humansCollapsed ? null : (
+                <SidebarHumansList serverId={activeServerId} />
+              )}
 
-            <WechatSection
-              serverId={activeServerId}
-              collapsed={threeSectionState.wechatCollapsed}
-              onToggleCollapsed={threeSectionState.toggleWechat}
-            />
+              <AiAgentsSectionHeader
+                serverId={activeServerId}
+                collapsed={threeSectionState.agentsCollapsed}
+                onToggleCollapsed={threeSectionState.toggleAgents}
+              />
+              {threeSectionState.agentsCollapsed ? null : (
+                <SidebarAiAgentsList serverId={activeServerId} />
+              )}
+
+              <WechatSection
+                serverId={activeServerId}
+                collapsed={threeSectionState.wechatCollapsed}
+                onToggleCollapsed={threeSectionState.toggleWechat}
+              />
+            </ScrollView>
 
             <MobileTabBar activeTab="chats" onSelect={handleMobileTabSelect} />
           </View>
@@ -1170,6 +1177,10 @@ const staticStyles = RNStyleSheet.create({
 
 const styles = StyleSheet.create((theme) => ({
   sidebarContent: {
+    flex: 1,
+    minHeight: 0,
+  },
+  mobileSidebarScroll: {
     flex: 1,
     minHeight: 0,
   },
