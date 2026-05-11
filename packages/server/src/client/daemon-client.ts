@@ -88,6 +88,14 @@ import {
   OpenclawSendMessageResponseSchema,
   type OpenclawAgent,
 } from "../server/openclaw/rpc-schemas.js";
+import {
+  HermesListModelsResponseSchema,
+  HermesSendMessageResponseSchema,
+  HermesSetupCheckResponseSchema,
+  HermesSetupConfigureResponseSchema,
+  type HermesModel,
+  type HermesSetupState,
+} from "../server/hermes/rpc-schemas.js";
 import type {
   CreateScheduleInput,
   ScheduleSummary,
@@ -5400,6 +5408,95 @@ export class DaemonClient {
     return { reply: payload.reply };
   }
 
+  async listHermesModels(params?: { requestId?: string }): Promise<HermesModel[]> {
+    const requestId = this.createRequestId(params?.requestId);
+    const payload = await this.sendRequest({
+      requestId,
+      message: { type: "hermes/models/list", requestId },
+      timeout: 10_000,
+      select: (msg) => {
+        if (msg.type === "hermes/models/list/response" && msg.payload.requestId === requestId) {
+          return HermesListModelsResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.models;
+  }
+
+  async sendHermesMessage(args: {
+    text: string;
+    modelId?: string | null;
+    requestId?: string;
+  }): Promise<{ reply: string }> {
+    const requestId = this.createRequestId(args.requestId);
+    const payload = await this.sendRequest({
+      requestId,
+      message: {
+        type: "hermes/chat/send",
+        requestId,
+        text: args.text,
+        modelId: args.modelId ?? null,
+      },
+      timeout: 90_000,
+      select: (msg) => {
+        if (msg.type === "hermes/chat/send/response" && msg.payload.requestId === requestId) {
+          return HermesSendMessageResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+    if (payload.error) throw new Error(payload.error);
+    return { reply: payload.reply };
+  }
+
+  async checkHermesSetup(params?: { requestId?: string }): Promise<HermesSetupState> {
+    const requestId = this.createRequestId(params?.requestId);
+    const payload = await this.sendRequest({
+      requestId,
+      message: { type: "hermes/setup/check", requestId },
+      timeout: 10_000,
+      select: (msg) => {
+        if (msg.type === "hermes/setup/check/response" && msg.payload.requestId === requestId) {
+          return HermesSetupCheckResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+    if (payload.error) throw new Error(payload.error);
+    return payload.state;
+  }
+
+  async configureHermes(args: {
+    provider: string;
+    model: string;
+    apiKey: string;
+    baseUrl?: string;
+    requestId?: string;
+  }): Promise<void> {
+    const requestId = this.createRequestId(args.requestId);
+    const payload = await this.sendRequest({
+      requestId,
+      message: {
+        type: "hermes/setup/configure",
+        requestId,
+        provider: args.provider,
+        model: args.model,
+        apiKey: args.apiKey,
+        baseUrl: args.baseUrl,
+      },
+      timeout: 30_000,
+      select: (msg) => {
+        if (msg.type === "hermes/setup/configure/response" && msg.payload.requestId === requestId) {
+          return HermesSetupConfigureResponseSchema.parse(msg).payload;
+        }
+        return null;
+      },
+    });
+    if (payload.error) throw new Error(payload.error);
+  }
+
   async getUsage(params?: { requestId?: string }): Promise<UsageSummary> {
     const requestId = this.createRequestId(params?.requestId);
     const payload = await this.sendRequest({
@@ -5487,6 +5584,165 @@ export class DaemonClient {
     });
 
     if (payload.error) throw new Error(payload.error);
+  }
+
+  // ─── WeChat sidebar (MVP, read-only) ──────────────────────────────────
+
+  async wechatState(params?: { requestId?: string; timeoutMs?: number }): Promise<{
+    status: import("../server/wechat/wechat-rpc-schemas.js").WechatSetupStatus | undefined;
+    detail: string | null | undefined;
+    daemonPid: number | null | undefined;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "wechat/state", requestId },
+      timeout: params?.timeoutMs ?? 10_000,
+      select: (msg) => {
+        if (msg.type !== "wechat/state/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return {
+          status: msg.payload.status,
+          detail: msg.payload.detail,
+          daemonPid: msg.payload.daemonPid,
+          error: msg.payload.error,
+        };
+      },
+    });
+  }
+
+  async wechatSubscribe(args?: {
+    filter?: import("../server/wechat/wechat-types.js").WechatChatType[];
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{
+    sessions: readonly import("../server/wechat/wechat-types.js").WechatSession[] | undefined;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "wechat/subscribe",
+        requestId,
+        ...(args?.filter ? { filter: args.filter } : {}),
+      },
+      timeout: args?.timeoutMs ?? 30_000,
+      select: (msg) => {
+        if (msg.type !== "wechat/subscribe/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { sessions: msg.payload.sessions, error: msg.payload.error };
+      },
+    });
+  }
+
+  async wechatUnsubscribe(params?: {
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{ error: string | null }> {
+    const requestId = this.createRequestId(params?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: { type: "wechat/unsubscribe", requestId },
+      timeout: params?.timeoutMs ?? 5_000,
+      select: (msg) => {
+        if (msg.type !== "wechat/unsubscribe/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { error: msg.payload.error };
+      },
+    });
+  }
+
+  async wechatListUnread(args?: {
+    filter?: import("../server/wechat/wechat-types.js").WechatChatType[];
+    limit?: number;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{
+    sessions: readonly import("../server/wechat/wechat-types.js").WechatSession[] | undefined;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args?.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "wechat/list_unread",
+        requestId,
+        ...(args?.filter ? { filter: args.filter } : {}),
+        ...(args?.limit !== undefined ? { limit: args.limit } : {}),
+      },
+      timeout: args?.timeoutMs ?? 30_000,
+      select: (msg) => {
+        if (msg.type !== "wechat/list_unread/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { sessions: msg.payload.sessions, error: msg.payload.error };
+      },
+    });
+  }
+
+  async wechatLlmComplete(args: {
+    prompt: string;
+    modelId?: string | null;
+    timeoutMs?: number;
+    requestId?: string;
+  }): Promise<{
+    reply: string | undefined;
+    errorCode: string | null | undefined;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "wechat/llm_complete",
+        requestId,
+        prompt: args.prompt,
+        ...(args.modelId !== undefined ? { modelId: args.modelId } : {}),
+        ...(args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {}),
+      },
+      timeout: args.timeoutMs ?? 90_000,
+      select: (msg) => {
+        if (msg.type !== "wechat/llm_complete/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return {
+          reply: msg.payload.reply,
+          errorCode: msg.payload.errorCode,
+          error: msg.payload.error,
+        };
+      },
+    });
+  }
+
+  async wechatReadHistory(args: {
+    chat: string;
+    limit?: number;
+    since?: string;
+    until?: string;
+    requestId?: string;
+    timeoutMs?: number;
+  }): Promise<{
+    messages: readonly import("../server/wechat/wechat-types.js").WechatMessage[] | undefined;
+    error: string | null;
+  }> {
+    const requestId = this.createRequestId(args.requestId);
+    return this.sendRequest({
+      requestId,
+      message: {
+        type: "wechat/read_history",
+        requestId,
+        chat: args.chat,
+        ...(args.limit !== undefined ? { limit: args.limit } : {}),
+        ...(args.since ? { since: args.since } : {}),
+        ...(args.until ? { until: args.until } : {}),
+      },
+      timeout: args.timeoutMs ?? 30_000,
+      select: (msg) => {
+        if (msg.type !== "wechat/read_history/response") return null;
+        if (msg.payload.requestId !== requestId) return null;
+        return { messages: msg.payload.messages, error: msg.payload.error };
+      },
+    });
   }
 }
 

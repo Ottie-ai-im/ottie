@@ -29,9 +29,9 @@ const PROBES: LocalServiceProbe[] = [
   {
     id: "hermes",
     label: "Hermes Agent",
-    defaultPort: 8080,
-    fallbackPort: 18081,
-    healthPath: "/",
+    defaultPort: 8642,
+    fallbackPort: 8643,
+    healthPath: "/health",
   },
 ];
 

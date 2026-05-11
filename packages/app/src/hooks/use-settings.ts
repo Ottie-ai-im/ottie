@@ -58,6 +58,17 @@ export interface AppSettings {
   // Opt-in experimental features. Default-off. Each lives behind its own flag
   // inside the Labs settings panel — no surprise behavior on upgrade.
   betaFeatures: BetaFeatureSettings;
+  // WeChat sidebar (MVP). Default-on so the section appears on first
+  // launch; user can hide it from Settings if they don't want the source.
+  wechatEnabled: boolean;
+  // Persisted "I understand AI suggestions send chat content to the
+  // selected model provider" — gated before any LLM call from the
+  // WeChat detail page. Once accepted we never prompt again.
+  wechatPrivacyAgreed: boolean;
+  // User-picked Claude model id for WeChat AI features. Null = let the
+  // daemon pick its default (claude-haiku-4-5). The picker on the WeChat
+  // detail page reads / writes this.
+  wechatClaudeModelId: string | null;
 }
 
 const VALID_VOICE_INTENT_PROVIDERS = new Set<VoiceIntentProvider>([
@@ -88,6 +99,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   releaseChannel: "stable",
   defaultWorkspaceRoot: null,
   betaFeatures: DEFAULT_BETA_FEATURE_SETTINGS,
+  wechatEnabled: true,
+  wechatPrivacyAgreed: false,
+  wechatClaudeModelId: null,
 };
 
 export interface UseAppSettingsReturn {
@@ -203,6 +217,19 @@ export async function loadSettingsFromStorage(): Promise<AppSettings> {
       // betaFeatures is a nested object — shallow spread loses sub-defaults if
       // the stored payload omits inner fields. Normalize before merge.
       parsed.betaFeatures = normalizeBetaFeatures(parsed);
+      if (typeof parsed.wechatEnabled !== "boolean") {
+        parsed.wechatEnabled = DEFAULT_APP_SETTINGS.wechatEnabled;
+      }
+      if (typeof parsed.wechatPrivacyAgreed !== "boolean") {
+        parsed.wechatPrivacyAgreed = DEFAULT_APP_SETTINGS.wechatPrivacyAgreed;
+      }
+      if (
+        parsed.wechatClaudeModelId !== undefined &&
+        parsed.wechatClaudeModelId !== null &&
+        typeof parsed.wechatClaudeModelId !== "string"
+      ) {
+        parsed.wechatClaudeModelId = null;
+      }
       return { ...DEFAULT_APP_SETTINGS, ...parsed };
     }
 

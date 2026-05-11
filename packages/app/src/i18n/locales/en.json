@@ -294,6 +294,105 @@
       "title": "AI Agent",
       "addLabel": "Add AI Agent",
       "empty": "No agents yet"
+    },
+    "wechat": {
+      "title": "WeChat",
+      "settingsLabel": "WeChat settings",
+      "empty": "All caught up",
+      "loading": "Loading…",
+      "unavailable": "WeChat unavailable",
+      "viewAll": "View all",
+      "private": "Direct messages",
+      "group": "Groups"
+    }
+  },
+  "wechat": {
+    "detail": {
+      "back": "Back",
+      "loadingHistory": "Loading history…",
+      "noHistory": "No messages yet.",
+      "self": "Me",
+      "suggestionsTitle": "Suggested replies",
+      "generate": "Generate",
+      "regenerate": "Regenerate",
+      "generating": "Generating…",
+      "noSuggestions": "No suggestions returned.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "groupHint": "Group chat — tap Generate to draft a reply.",
+      "replyToSelected": "Reply ({{count}})",
+      "selectedHint": "{{count}} message(s) selected — tap Reply to focus on them.",
+      "clearSelection": "Clear",
+      "modelLoading": "Loading models…",
+      "modelMissingShort": "No models",
+      "noModelHint": "Pick a model →",
+      "errorPrefix": "Could not load",
+      "modelMissing": "Pick a model in Settings to enable AI suggestions.",
+      "voiceAnnotateHint": "Add transcript",
+      "voiceAnnotatePlaceholder": "Type what the voice message said…",
+      "voiceAnnotateSave": "Save",
+      "voiceAnnotateCancel": "Cancel",
+      "voiceAnnotateEdit": "Edit transcript"
+    },
+    "rewrite": {
+      "title": "Rewrite my draft",
+      "draftPlaceholder": "Type a draft, then pick a tone…",
+      "rewriting": "Rewriting…",
+      "noResult": "No rewrite returned.",
+      "tones": {
+        "formal": "More formal",
+        "shorter": "Shorter",
+        "warmer": "Warmer",
+        "professional": "More professional",
+        "cooler": "Cooler"
+      }
+    },
+    "settings": {
+      "title": "WeChat",
+      "description": "Read-only WeChat sidebar powered by wx-cli (running locally). Hides the section when off.",
+      "enabled": "Show WeChat in sidebar",
+      "modelHint": "AI suggestions use the model selected in your AI Agent settings.",
+      "privacyResetLabel": "Reset privacy notice",
+      "privacyResetHint": "Show the privacy notice again next time AI suggestions run."
+    },
+    "privacy": {
+      "title": "Send chat content to your AI model?",
+      "body": "AI suggestions and rewrites send the recent WeChat conversation to the model you've selected in AI Agent settings. Nothing is sent until you open a chat and AI is invoked. WeChat data otherwise stays on your machine.",
+      "accept": "I understand, continue",
+      "cancel": "Not now"
+    },
+    "wizard": {
+      "title": "Set up WeChat",
+      "intro": "Run the steps below in Terminal once. After Step 3 the sidebar will start populating automatically.",
+      "macSign": {
+        "title": "1. Re-sign WeChat (macOS only)",
+        "body": "Required so wx-cli can read WeChat's process memory. Re-run after every WeChat update."
+      },
+      "macRestart": {
+        "title": "2. Restart WeChat and log in",
+        "body": "Closes WeChat and reopens it under the new signature."
+      },
+      "init": {
+        "title": "3. Initialize wx-cli",
+        "body": "Scans WeChat memory for the database keys. Asks for your sudo password."
+      },
+      "linuxInit": {
+        "title": "Initialize wx-cli",
+        "body": "Asks for your sudo password — wx-cli needs it to read /proc/<pid>/mem."
+      },
+      "windowsInit": {
+        "title": "Initialize wx-cli",
+        "body": "Run PowerShell as Administrator and execute the command below."
+      },
+      "checkAgain": "Check again",
+      "stateReady": "Connected to WeChat — ready to use.",
+      "stateBinaryMissing": "wx binary not found. Reinstall ottie or set OTTIE_WX_BINARY.",
+      "stateNotInitialized": "wx-cli isn't initialized yet — run the steps above.",
+      "stateWechatNotRunning": "WeChat isn't running — start it and try again.",
+      "stateCodesignRequired": "WeChat needs an ad-hoc signature — run step 1 above.",
+      "stateDaemonTimeout": "wx-daemon took too long to start. Try again.",
+      "statePermissionDenied": "wx-cli can't write to ~/.wx-cli — see the suggested chown command.",
+      "stateUnknown": "wx-cli is unreachable for an unknown reason."
     }
   },
   "newAiAgent": {
@@ -709,6 +808,30 @@
     "searchEmpty": "No matches in this conversation.",
     "searchMatchCount_one": "{{count}} match",
     "searchMatchCount_other": "{{count}} matches"
+  },
+  "hermes": {
+    "defaultModel": "Default model",
+    "emptyTitle": "Talk to Hermes Agent",
+    "emptyHint": "Type a message below — Ottie sends it to your local Hermes Agent.",
+    "thinking": "Hermes is thinking…",
+    "placeholder": "Message Hermes…",
+    "send": "Send",
+    "setup": {
+      "title": "Set up Hermes Agent",
+      "hint": "Choose an LLM provider and model for Hermes to use. API keys are stored locally in ~/.hermes/.env and never leave your machine.",
+      "cliSection": "CLI login (no API key)",
+      "apiSection": "API key",
+      "modelLabel": "Model",
+      "modelPlaceholder": "e.g. mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "baseUrlLabel": "Base URL",
+      "apiKeyPlaceholder": "Paste your API key",
+      "save": "Save & start Hermes",
+      "authHint": {
+        "claudeCode": "Uses your Claude Code login — no API key needed. Make sure `claude` is installed and signed in.",
+        "copilotAcp": "Spawns the GitHub Copilot CLI — no API key needed. Make sure `copilot` is installed and authenticated.",
+        "qwenOauth": "Reuses your local Qwen CLI login — no API key needed. Make sure the Qwen CLI is signed in."
+      }
+    }
   },
   "usage": {
     "title": "Usage",

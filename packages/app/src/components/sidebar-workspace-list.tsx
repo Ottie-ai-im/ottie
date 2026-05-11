@@ -152,6 +152,12 @@ interface SidebarWorkspaceListProps {
   listFooterComponent?: ReactElement | null;
   /** Gesture ref for coordinating with parent gestures (e.g., sidebar close) */
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
+  /** Hide the built-in search bar (caller renders it externally) */
+  hideSearch?: boolean;
+  /** Controlled search query — used when hideSearch is true */
+  externalSearchQuery?: string;
+  /** Callback for controlled search query changes */
+  onExternalSearchChange?: (query: string) => void;
 }
 
 interface ProjectHeaderRowProps {
@@ -2434,6 +2440,9 @@ export function SidebarWorkspaceList({
   onAddProject,
   listFooterComponent,
   parentGestureRef,
+  hideSearch = false,
+  externalSearchQuery,
+  onExternalSearchChange,
 }: SidebarWorkspaceListProps) {
   const pathname = usePathname();
   const [creatingWorkspaceIds, setCreatingWorkspaceIds] = useState<Set<string>>(() => new Set());
@@ -2457,7 +2466,9 @@ export function SidebarWorkspaceList({
   // Search filter — matches project name, workspace name/alias, and any agent
   // title within the project. A project is kept whenever any of its rows
   // matches, so the existing project → workspace nesting is preserved.
-  const [searchQuery, setSearchQuery] = useState("");
+  const [internalSearchQuery, setInternalSearchQuery] = useState("");
+  const searchQuery = externalSearchQuery !== undefined ? externalSearchQuery : internalSearchQuery;
+  const setSearchQuery = onExternalSearchChange ?? setInternalSearchQuery;
   const filteredProjects = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return projects;
@@ -2833,7 +2844,7 @@ export function SidebarWorkspaceList({
 
   return (
     <View style={styles.container}>
-      {projects.length > 0 ? (
+      {!hideSearch && projects.length > 0 ? (
         <View style={styles.searchBar}>
           <SearchInput
             placeholder={t("sidebar.searchPlaceholder", { defaultValue: "Search..." })}

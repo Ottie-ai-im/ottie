@@ -8,7 +8,10 @@ import {
   SidebarAiAgentsList,
   useSidebarAiAgents,
 } from "@/components/sidebar/sidebar-ai-agents-list";
-import { Bot, Folder, Users } from "lucide-react-native";
+import { SidebarWechatList } from "@/components/sidebar/sidebar-wechat-list";
+import { useSidebarWechatSessions } from "@/hooks/use-sidebar-wechat-sessions";
+import { useAppSettings } from "@/hooks/use-settings";
+import { Bot, Folder, MessageCircle, Users } from "lucide-react-native";
 import { buildHostCommunityRoute, buildHostDevicesRoute } from "@/utils/host-routes";
 import { MessagesSquare } from "lucide-react-native";
 import {
@@ -23,7 +26,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Platform, StyleSheet as RNStyleSheet, useWindowDimensions, View } from "react-native";
+import {
+  Platform,
+  ScrollView,
+  StyleSheet as RNStyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Extrapolation,
@@ -36,11 +45,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
-import { ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
+import { ComboboxItem, type ComboboxOption, SearchInput } from "@/components/ui/combobox";
 import { HEADER_TOP_PADDING_MOBILE, useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import { BlurView } from "expo-blur";
-import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import {
+  AgentListDndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@/components/agent-list-dnd-context";
 import { useGlobalDragStore } from "@/stores/global-drag-store";
 import { buildHostWorkspaceOpenRoute, buildHostNewWorkspaceRoute } from "@/utils/host-routes";
 import { useSidebarAnimation } from "@/contexts/sidebar-animation-context";
@@ -99,6 +114,12 @@ const AI_AGENT_ADD_ITEMS: ReadonlyArray<AddMenuItem> = [
   { id: "chat.add.newAiAgent", labelKey: "chat.add.newAiAgent" },
   { id: "chat.add.addLocalService", labelKey: "chat.add.addLocalService" },
 ];
+
+// WeChat section is read-only — no "+" menu items. The trailing slot on
+// the section header is reserved for the gear/cog that opens the WeChat
+// settings page (Step 7); until then we leave it blank to avoid a
+// dead-end button.
+const WECHAT_ADD_ITEMS: ReadonlyArray<AddMenuItem> = [];
 
 interface ProjectsSectionHeaderProps {
   serverId: string | null;
@@ -215,34 +236,108 @@ function AiAgentsSectionHeader({
   );
 }
 
+interface WechatSectionHeaderProps {
+  serverId: string | null;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+// 4th sidebar section — WeChat. Read-only data source from wx-cli; the
+// trailing slot would normally host a "+" menu but WeChat has no
+// add-flow, so we leave WECHAT_ADD_ITEMS empty. Step 7 swaps that for a
+// gear linking into Settings → WeChat once the settings panel exists.
+interface WechatSectionProps {
+  serverId: string | null;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+}
+
+/**
+ * Wraps the WeChat section header + list in a single render branch
+ * gated on the user's `wechatEnabled` setting. Off → the entire
+ * section disappears (no header, no list, no daemon polling), so the
+ * user can hide WeChat without losing the toggle.
+ */
+function WechatSection({ serverId, collapsed, onToggleCollapsed }: WechatSectionProps) {
+  const { settings } = useAppSettings();
+  if (!settings.wechatEnabled) return null;
+  return (
+    <>
+      <WechatSectionHeader
+        serverId={serverId}
+        collapsed={collapsed}
+        onToggleCollapsed={onToggleCollapsed}
+      />
+      {collapsed ? null : <SidebarWechatList serverId={serverId} />}
+    </>
+  );
+}
+
+function WechatSectionHeader({ serverId, collapsed, onToggleCollapsed }: WechatSectionHeaderProps) {
+  const { t } = useTranslation();
+  const summary = useSidebarWechatSessions(serverId);
+  const trailing = useMemo(
+    () =>
+      WECHAT_ADD_ITEMS.length > 0 ? (
+        <TopRightAddMenu
+          serverId={serverId ?? undefined}
+          testID="sidebar-wechat-add"
+          items={WECHAT_ADD_ITEMS}
+          triggerLabelKey="sidebar.wechat.settingsLabel"
+          size="sm"
+        />
+      ) : null,
+    [serverId],
+  );
+  return (
+    <SidebarSectionHeader
+      icon={MessageCircle}
+      label={t("sidebar.wechat.title")}
+      count={summary.sessions.length}
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
+      trailing={trailing}
+      testID="sidebar-section-wechat"
+    />
+  );
+}
+
 interface SidebarThreeSectionState {
   projectsCollapsed: boolean;
   humansCollapsed: boolean;
   agentsCollapsed: boolean;
+  wechatCollapsed: boolean;
   toggleProjects: () => void;
   toggleHumans: () => void;
   toggleAgents: () => void;
+  toggleWechat: () => void;
 }
 
-// Local state holder — collapsed-by-default is `false` for all three so
-// the user sees content on first paint. Persistence (remember collapsed
-// state across reloads) is a follow-up if it surfaces in feedback.
+// Local state holder — collapsed-by-default is `false` so the user sees
+// content on first paint. Persistence (remember collapsed state across
+// reloads) is a follow-up if it surfaces in feedback. The interface name
+// is "ThreeSection" by history; WeChat is the 4th but renaming churns
+// nothing visible to the user.
 function useSidebarThreeSectionState(): SidebarThreeSectionState {
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [humansCollapsed, setHumansCollapsed] = useState(false);
   const [agentsCollapsed, setAgentsCollapsed] = useState(false);
+  const [wechatCollapsed, setWechatCollapsed] = useState(false);
 
   const toggleProjects = useCallback(() => setProjectsCollapsed((p) => !p), []);
   const toggleHumans = useCallback(() => setHumansCollapsed((p) => !p), []);
   const toggleAgents = useCallback(() => setAgentsCollapsed((p) => !p), []);
+  const toggleWechat = useCallback(() => setWechatCollapsed((p) => !p), []);
 
   return {
     projectsCollapsed,
     humansCollapsed,
     agentsCollapsed,
+    wechatCollapsed,
     toggleProjects,
     toggleHumans,
     toggleAgents,
+    toggleWechat,
   };
 }
 
@@ -500,7 +595,7 @@ export const LeftSidebar = memo(function LeftSidebar({
 
   if (isCompactLayout) {
     return (
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <AgentListDndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <MobileSidebar
           {...sharedProps}
           insetsTop={insets.top}
@@ -511,12 +606,12 @@ export const LeftSidebar = memo(function LeftSidebar({
           handleSettings={handleSettingsMobile}
           handleViewMoreNavigate={handleViewMoreNavigate}
         />
-      </DndContext>
+      </AgentListDndContext>
     );
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <AgentListDndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <View style={staticStyles.desktopRow}>
         <DesktopSidebar
           {...sharedProps}
@@ -527,7 +622,7 @@ export const LeftSidebar = memo(function LeftSidebar({
           handleViewMore={handleViewMoreNavigate}
         />
       </View>
-    </DndContext>
+    </AgentListDndContext>
   );
 });
 
@@ -588,6 +683,7 @@ function MobileSidebar({
   const pathname = usePathname();
   const { t } = useTranslation();
   const isSessionsActive = pathname.includes("/sessions");
+  const [mobileSearchQuery, setMobileSearchQuery] = useState("");
   const {
     translateX,
     backdropOpacity,
@@ -804,6 +900,14 @@ function MobileSidebar({
               testID="sidebar-sessions"
             />
 
+            <View style={styles.mobileSidebarSearch}>
+              <SearchInput
+                placeholder={t("sidebar.searchPlaceholder", { defaultValue: "Search..." })}
+                value={mobileSearchQuery}
+                onChangeText={setMobileSearchQuery}
+              />
+            </View>
+
             <ProjectsSectionHeader
               serverId={activeServerId}
               count={projects.length}
@@ -823,6 +927,9 @@ function MobileSidebar({
                   isRefreshing={isManualRefresh && isRevalidating}
                   onRefresh={handleRefresh}
                   onAddProject={handleOpenProject}
+                  hideSearch
+                  externalSearchQuery={mobileSearchQuery}
+                  onExternalSearchChange={setMobileSearchQuery}
                 />
               );
             })()}
@@ -844,6 +951,12 @@ function MobileSidebar({
             {threeSectionState.agentsCollapsed ? null : (
               <SidebarAiAgentsList serverId={activeServerId} />
             )}
+
+            <WechatSection
+              serverId={activeServerId}
+              collapsed={threeSectionState.wechatCollapsed}
+              onToggleCollapsed={threeSectionState.toggleWechat}
+            />
 
             <MobileTabBar activeTab="chats" onSelect={handleMobileTabSelect} />
           </View>
@@ -886,6 +999,7 @@ function DesktopSidebar({
   const isNonChatRoute = /\/(community|devices|usage|settings)(\/|$)/.test(pathname);
   const padding = useWindowControlsPadding("sidebar");
   const threeSectionState = useSidebarThreeSectionState();
+  const [desktopSearchQuery, setDesktopSearchQuery] = useState("");
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const setSidebarWidth = usePanelStore((state) => state.setSidebarWidth);
   const { width: viewportWidth } = useWindowDimensions();
@@ -959,45 +1073,66 @@ function DesktopSidebar({
           />
         </View>
 
-        <ProjectsSectionHeader
-          serverId={activeServerId}
-          count={projects.length}
-          collapsed={threeSectionState.projectsCollapsed}
-          onToggleCollapsed={threeSectionState.toggleProjects}
-        />
-        {!threeSectionState.projectsCollapsed &&
-          (isInitialLoad ? (
-            <SidebarAgentListSkeleton />
-          ) : (
-            <SidebarWorkspaceList
-              serverId={activeServerId}
-              collapsedProjectKeys={collapsedProjectKeys}
-              onToggleProjectCollapsed={toggleProjectCollapsed}
-              shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
-              projects={projects}
-              isRefreshing={isManualRefresh && isRevalidating}
-              onRefresh={handleRefresh}
-              onAddProject={handleOpenProject}
-            />
-          ))}
+        <View style={styles.mobileSidebarSearch}>
+          <SearchInput
+            placeholder={t("sidebar.searchPlaceholder", { defaultValue: "Search..." })}
+            value={desktopSearchQuery}
+            onChangeText={setDesktopSearchQuery}
+          />
+        </View>
 
-        <HumansSectionHeader
-          serverId={activeServerId}
-          collapsed={threeSectionState.humansCollapsed}
-          onToggleCollapsed={threeSectionState.toggleHumans}
-        />
-        {threeSectionState.humansCollapsed ? null : <SidebarHumansList serverId={activeServerId} />}
+        <ScrollView style={styles.desktopScrollArea} showsVerticalScrollIndicator={false}>
+          <ProjectsSectionHeader
+            serverId={activeServerId}
+            count={projects.length}
+            collapsed={threeSectionState.projectsCollapsed}
+            onToggleCollapsed={threeSectionState.toggleProjects}
+          />
+          {!threeSectionState.projectsCollapsed &&
+            (isInitialLoad ? (
+              <SidebarAgentListSkeleton />
+            ) : (
+              <SidebarWorkspaceList
+                serverId={activeServerId}
+                collapsedProjectKeys={collapsedProjectKeys}
+                onToggleProjectCollapsed={toggleProjectCollapsed}
+                shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
+                projects={projects}
+                isRefreshing={isManualRefresh && isRevalidating}
+                onRefresh={handleRefresh}
+                onAddProject={handleOpenProject}
+                hideSearch
+                externalSearchQuery={desktopSearchQuery}
+                onExternalSearchChange={setDesktopSearchQuery}
+              />
+            ))}
 
-        <AiAgentsSectionHeader
-          serverId={activeServerId}
-          collapsed={threeSectionState.agentsCollapsed}
-          onToggleCollapsed={threeSectionState.toggleAgents}
-        />
-        {threeSectionState.agentsCollapsed ? null : (
-          <SidebarAiAgentsList serverId={activeServerId} />
-        )}
+          <HumansSectionHeader
+            serverId={activeServerId}
+            collapsed={threeSectionState.humansCollapsed}
+            onToggleCollapsed={threeSectionState.toggleHumans}
+          />
+          {threeSectionState.humansCollapsed ? null : (
+            <SidebarHumansList serverId={activeServerId} />
+          )}
 
-        <SidebarCalloutSlot />
+          <AiAgentsSectionHeader
+            serverId={activeServerId}
+            collapsed={threeSectionState.agentsCollapsed}
+            onToggleCollapsed={threeSectionState.toggleAgents}
+          />
+          {threeSectionState.agentsCollapsed ? null : (
+            <SidebarAiAgentsList serverId={activeServerId} />
+          )}
+
+          <WechatSection
+            serverId={activeServerId}
+            collapsed={threeSectionState.wechatCollapsed}
+            onToggleCollapsed={threeSectionState.toggleWechat}
+          />
+
+          <SidebarCalloutSlot />
+        </ScrollView>
 
         {/* Resize handle - absolutely positioned over right border */}
         <GestureDetector gesture={resizeGesture}>
@@ -1035,6 +1170,14 @@ const staticStyles = RNStyleSheet.create({
 
 const styles = StyleSheet.create((theme) => ({
   sidebarContent: {
+    flex: 1,
+    minHeight: 0,
+  },
+  mobileSidebarSearch: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+  },
+  desktopScrollArea: {
     flex: 1,
     minHeight: 0,
   },

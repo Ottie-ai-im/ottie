@@ -294,6 +294,105 @@
       "title": "AI Agent",
       "addLabel": "添加 AI Agent",
       "empty": "暂无 Agent"
+    },
+    "wechat": {
+      "title": "WeChat",
+      "settingsLabel": "WeChat 设置",
+      "empty": "全部已读",
+      "loading": "加载中…",
+      "unavailable": "WeChat 不可用",
+      "viewAll": "查看全部",
+      "private": "私信",
+      "group": "群聊"
+    }
+  },
+  "wechat": {
+    "detail": {
+      "back": "返回",
+      "loadingHistory": "加载聊天记录…",
+      "noHistory": "暂无消息。",
+      "self": "我",
+      "suggestionsTitle": "AI 候选回复",
+      "generate": "生成",
+      "regenerate": "重新生成",
+      "generating": "生成中…",
+      "noSuggestions": "AI 没有返回候选。",
+      "copy": "复制",
+      "copied": "已复制",
+      "groupHint": "群聊 — 点击「生成」来获取回复建议。",
+      "replyToSelected": "回复 {{count}} 条",
+      "selectedHint": "已选 {{count}} 条消息 — 点击「回复」专门针对它们生成。",
+      "clearSelection": "清除",
+      "modelLoading": "加载模型中…",
+      "modelMissingShort": "无可用模型",
+      "noModelHint": "请选择模型 →",
+      "errorPrefix": "加载失败",
+      "modelMissing": "请在设置中选择模型以启用 AI 建议。",
+      "voiceAnnotateHint": "添加文字转录",
+      "voiceAnnotatePlaceholder": "写下这条语音的内容…",
+      "voiceAnnotateSave": "保存",
+      "voiceAnnotateCancel": "取消",
+      "voiceAnnotateEdit": "编辑转录"
+    },
+    "rewrite": {
+      "title": "改写我的回复",
+      "draftPlaceholder": "先写一段草稿,再选择语气…",
+      "rewriting": "改写中…",
+      "noResult": "AI 没有返回改写结果。",
+      "tones": {
+        "formal": "更正式",
+        "shorter": "更简短",
+        "warmer": "更亲切",
+        "professional": "更专业",
+        "cooler": "更冷淡"
+      }
+    },
+    "settings": {
+      "title": "WeChat",
+      "description": "通过本地的 wx-cli 在侧栏只读展示微信会话。关闭后会隐藏该入口。",
+      "enabled": "在侧栏显示 WeChat",
+      "modelHint": "AI 建议使用你在 AI Agent 设置里选择的模型。",
+      "privacyResetLabel": "重置隐私提示",
+      "privacyResetHint": "下次调用 AI 建议时再次弹出隐私提示。"
+    },
+    "privacy": {
+      "title": "确认发送聊天内容给 AI 模型?",
+      "body": "AI 建议与改写功能会把最近的微信聊天记录发送给你在 AI Agent 设置中选择的模型。只有在你打开聊天并触发 AI 时才会发送,其他情况下微信数据保留在本机。",
+      "accept": "我明白,继续使用",
+      "cancel": "暂不使用"
+    },
+    "wizard": {
+      "title": "配置 WeChat",
+      "intro": "在终端中按下面三步执行一次。完成第 3 步后,侧栏会自动开始展示会话。",
+      "macSign": {
+        "title": "1. 给 WeChat 重新签名(仅 macOS)",
+        "body": "wx-cli 需要这个签名才能读取 WeChat 进程内存。每次 WeChat 更新后需要重做。"
+      },
+      "macRestart": {
+        "title": "2. 重启 WeChat 并重新登录",
+        "body": "关闭并重新打开 WeChat,使新签名生效。"
+      },
+      "init": {
+        "title": "3. 初始化 wx-cli",
+        "body": "扫描 WeChat 内存提取数据库密钥。会要求输入你的 sudo 密码。"
+      },
+      "linuxInit": {
+        "title": "初始化 wx-cli",
+        "body": "需要 sudo 密码 — wx-cli 用它来读取 /proc/<pid>/mem。"
+      },
+      "windowsInit": {
+        "title": "初始化 wx-cli",
+        "body": "以管理员身份运行 PowerShell,然后执行下面的命令。"
+      },
+      "checkAgain": "重新检查",
+      "stateReady": "已连接 WeChat — 可以使用。",
+      "stateBinaryMissing": "找不到 wx 可执行文件。请重装 ottie 或设置 OTTIE_WX_BINARY。",
+      "stateNotInitialized": "wx-cli 尚未初始化 — 请执行上面的步骤。",
+      "stateWechatNotRunning": "WeChat 没有运行 — 请先启动微信再试。",
+      "stateCodesignRequired": "WeChat 需要重新签名 — 请执行上面的第 1 步。",
+      "stateDaemonTimeout": "wx-daemon 启动超时,请重试。",
+      "statePermissionDenied": "wx-cli 无法写入 ~/.wx-cli — 请按提示运行 chown 命令。",
+      "stateUnknown": "wx-cli 无法访问,原因未知。"
     }
   },
   "newAiAgent": {
@@ -709,6 +808,30 @@
     "searchEmpty": "当前对话中没有匹配项。",
     "searchMatchCount_one": "{{count}} 条匹配",
     "searchMatchCount_other": "{{count}} 条匹配"
+  },
+  "hermes": {
+    "defaultModel": "默认模型",
+    "emptyTitle": "和 Hermes Agent 对话",
+    "emptyHint": "在下方输入框打字——Ottie 会把消息发到本地 Hermes Agent。",
+    "thinking": "Hermes 正在思考…",
+    "placeholder": "给 Hermes 发消息…",
+    "send": "发送",
+    "setup": {
+      "title": "配置 Hermes Agent",
+      "hint": "选择 Hermes 使用的大模型提供商和模型。API 密钥仅保存在本机 ~/.hermes/.env，不会上传。",
+      "cliSection": "CLI 登录（无需 API Key）",
+      "apiSection": "API Key",
+      "modelLabel": "模型",
+      "modelPlaceholder": "例如 mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "baseUrlLabel": "接口地址",
+      "apiKeyPlaceholder": "粘贴 API 密钥",
+      "save": "保存并启动 Hermes",
+      "authHint": {
+        "claudeCode": "复用你的 Claude Code 登录——无需 API Key。请确保已安装并登录 `claude` CLI。",
+        "copilotAcp": "直接调用 GitHub Copilot CLI——无需 API Key。请确保已安装并登录 `copilot` CLI。",
+        "qwenOauth": "复用本机 Qwen CLI 登录状态——无需 API Key。请确保 Qwen CLI 已登录。"
+      }
+    }
   },
   "usage": {
     "title": "用量",

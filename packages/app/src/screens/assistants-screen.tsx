@@ -10,6 +10,17 @@ import { openExternalUrl } from "@/utils/open-external-url";
 import { useHosts } from "@/runtime/host-runtime";
 import { useInstallLocalService, useLocalServices } from "@/hooks/use-local-services";
 import { OpenclawChatPanel } from "@/components/openclaw-chat-panel";
+import { HermesChatPanel } from "@/components/hermes-chat-panel";
+
+function renderActiveService(
+  service: { id: string; url: string | null },
+  serverId: string | null,
+  fallbackUrl: string,
+) {
+  if (service.id === "openclaw") return <OpenclawChatPanel serverId={serverId} />;
+  if (service.id === "hermes") return <HermesChatPanel serverId={serverId} />;
+  return <EmbeddedWebUi url={service.url ?? fallbackUrl} />;
+}
 import { DEFAULT_OPEN_WEBUI_URL, useAssistantsConfigStore } from "@/stores/assistants-config-store";
 
 interface KnownDashboard {
@@ -44,7 +55,7 @@ const KNOWN_DASHBOARDS: KnownDashboard[] = [
     id: "hermes",
     labelKey: "assistants.hermes.label",
     descriptionKey: "assistants.hermes.description",
-    defaultUrl: "http://localhost:8080",
+    defaultUrl: "http://localhost:8642",
     installHintKey: "assistants.hermes.installHint",
     installCommand: "See https://hermes-agent.org for install instructions",
   },
@@ -156,11 +167,7 @@ export function AssistantsScreen() {
                     onSelect={setSelectedServiceId}
                   />
                 ) : null}
-                {activeService.id === "openclaw" ? (
-                  <OpenclawChatPanel serverId={serverId} />
-                ) : (
-                  <EmbeddedWebUi url={activeService.url ?? openWebUiUrl} />
-                )}
+                {renderActiveService(activeService, serverId, openWebUiUrl)}
               </>
             );
           }

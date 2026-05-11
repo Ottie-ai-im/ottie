@@ -646,6 +646,13 @@ export interface SessionOptions {
   chatService: FileBackedChatService;
   chatSubscriptionManager: ChatSubscriptionManager;
   /**
+   * WeChat sidebar (MVP, optional). Sessions emit a typed "unavailable"
+   * RPC error when these are absent — keeps existing test instantiations
+   * compiling without forcing every caller to wire up wx-cli.
+   */
+  wechatService?: import("./wechat/wechat-service.js").WechatService;
+  wechatSubscriptionManager?: import("./wechat/wechat-subscription-manager.js").WechatSubscriptionManager;
+  /**
    * Phase 1.g — root identity. Optional for backward compat with existing
    * test instantiations and old daemons that haven't constructed the service
    * yet; when omitted, the identity/* RPCs return a structured "unavailable"
@@ -839,6 +846,10 @@ export class Session {
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly chatService: FileBackedChatService;
   private readonly chatSubscriptionManager: ChatSubscriptionManager;
+  private readonly wechatService: import("./wechat/wechat-service.js").WechatService | undefined;
+  private readonly wechatSubscriptionManager:
+    | import("./wechat/wechat-subscription-manager.js").WechatSubscriptionManager
+    | undefined;
   private readonly identityService: IdentityService | undefined;
   private readonly scheduleService: ScheduleService;
   private readonly loopService: LoopService;
@@ -941,6 +952,8 @@ export class Session {
       workspaceRegistry,
       chatService,
       chatSubscriptionManager,
+      wechatService,
+      wechatSubscriptionManager,
       identityService,
       scheduleService,
       loopService,
@@ -990,6 +1003,8 @@ export class Session {
     this.workspaceRegistry = workspaceRegistry;
     this.chatService = chatService;
     this.chatSubscriptionManager = chatSubscriptionManager;
+    this.wechatService = wechatService;
+    this.wechatSubscriptionManager = wechatSubscriptionManager;
     this.identityService = identityService;
     this.scheduleService = scheduleService;
     this.loopService = loopService;
@@ -1060,6 +1075,12 @@ export class Session {
     );
     this.router.register("openclaw/agents/list", (m) => this.handleOpenclawListAgentsRequest(m));
     this.router.register("openclaw/chat/send", (m) => this.handleOpenclawSendMessageRequest(m));
+    this.router.register("hermes/models/list", (m) => this.handleHermesListModelsRequest(m));
+    this.router.register("hermes/chat/send", (m) => this.handleHermesSendMessageRequest(m));
+    this.router.register("hermes/setup/check", (m) => this.handleHermesSetupCheckRequest(m));
+    this.router.register("hermes/setup/configure", (m) =>
+      this.handleHermesSetupConfigureRequest(m),
+    );
 
     void this.initializeAgentMcp();
     this.subscribeToAgentEvents();
@@ -1826,6 +1847,8 @@ export class Session {
       this.dispatchTerminalMessage(msg) ??
       this.dispatchChatSyncMessage(msg) ??
       this.dispatchChatScheduleLoopMessage(msg) ??
+      this.dispatchWechatMessage(msg) ??
+      this.dispatchHermesMessage(msg) ??
       this.dispatchIdentityMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
@@ -2196,8 +2219,48 @@ export class Session {
     }
   }
 
+  private dispatchHermesMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "hermes/models/list":
+        return this.handleHermesListModelsRequest(msg);
+      case "hermes/chat/send":
+        return this.handleHermesSendMessageRequest(msg);
+      case "hermes/setup/check":
+        return this.handleHermesSetupCheckRequest(msg);
+      case "hermes/setup/configure":
+        return this.handleHermesSetupConfigureRequest(msg);
+      default:
+        return undefined;
+    }
+  }
+
   private dispatchChatScheduleLoopMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     return this.dispatchChatMessage(msg) ?? this.dispatchScheduleLoopMessage(msg);
+  }
+
+  /**
+   * WeChat sidebar RPCs (MVP). Sits in its own dispatcher to keep the
+   * parent under the 20-case cyclomatic-complexity cap and so the wechat
+   * surface area can grow independently in v2 (sns-*, contacts, …)
+   * without bloating dispatchChatScheduleLoopMessage.
+   */
+  private dispatchWechatMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "wechat/state":
+        return this.handleWechatStateRequest(msg);
+      case "wechat/subscribe":
+        return this.handleWechatSubscribeRequest(msg);
+      case "wechat/unsubscribe":
+        return this.handleWechatUnsubscribeRequest(msg);
+      case "wechat/list_unread":
+        return this.handleWechatListUnreadRequest(msg);
+      case "wechat/read_history":
+        return this.handleWechatReadHistoryRequest(msg);
+      case "wechat/llm_complete":
+        return this.handleWechatLlmCompleteRequest(msg);
+      default:
+        return undefined;
+    }
   }
 
   private async dispatchMiscMessage(msg: SessionInboundMessage): Promise<void> {
@@ -10153,6 +10216,232 @@ export class Session {
     }
   }
 
+  // ─── WeChat sidebar (MVP) ─────────────────────────────────────────────
+
+  private wechatUnavailable(requestId: string, type: string, error: string): void {
+    this.emit({
+      type: `${type}/response` as never,
+      payload: { requestId, error } as never,
+    });
+    this.sessionLogger.debug({ requestId, type }, error);
+  }
+
+  private describeWechatError(err: unknown): string {
+    if (err instanceof Error) {
+      // WechatServiceError carries `kind` we want surfaced to the wizard.
+      const kind = (err as { kind?: string }).kind;
+      return kind ? `${kind}: ${err.message}` : err.message;
+    }
+    return String(err);
+  }
+
+  /**
+   * Coerce any `WechatErrorKind` into the narrower `WechatSetupStatus`
+   * enum the wizard speaks. Failure modes that aren't actionable from
+   * the wizard (e.g. `invalid_json` — wx-cli regressed its output shape)
+   * collapse to `unknown` so the UI shows a generic error rather than
+   * crashing on schema validation.
+   */
+  private toWechatSetupStatus(
+    kind: import("./wechat/wechat-errors.js").WechatErrorKind | null,
+    daemonRunning: boolean,
+  ): import("./wechat/wechat-rpc-schemas.js").WechatSetupStatus {
+    if (kind === null) return daemonRunning ? "ready" : "not_initialized";
+    switch (kind) {
+      case "binary_not_found":
+      case "not_initialized":
+      case "wechat_not_running":
+      case "codesign_required":
+      case "daemon_timeout":
+      case "permission_denied":
+        return kind;
+      default:
+        return "unknown";
+    }
+  }
+
+  private async handleWechatStateRequest(
+    request: Extract<SessionInboundMessage, { type: "wechat/state" }>,
+  ): Promise<void> {
+    if (!this.wechatService) {
+      this.emit({
+        type: "wechat/state/response",
+        payload: {
+          requestId: request.requestId,
+          status: "binary_not_found",
+          detail: "WeChat sidecar disabled in this build",
+          daemonPid: null,
+          error: null,
+        },
+      });
+      return;
+    }
+    try {
+      const status = await this.wechatService.daemonStatus();
+      const persisted = this.wechatSubscriptionManager?.describeState();
+      this.emit({
+        type: "wechat/state/response",
+        payload: {
+          requestId: request.requestId,
+          status: this.toWechatSetupStatus(persisted?.lastErrorKind ?? null, status.running),
+          detail: null,
+          daemonPid: status.pid,
+          error: null,
+        },
+      });
+    } catch (err) {
+      const kind =
+        (err as { kind?: import("./wechat/wechat-errors.js").WechatErrorKind }).kind ?? null;
+      this.emit({
+        type: "wechat/state/response",
+        payload: {
+          requestId: request.requestId,
+          status: this.toWechatSetupStatus(kind, false),
+          detail: this.describeWechatError(err),
+          daemonPid: null,
+          error: null,
+        },
+      });
+    }
+  }
+
+  private async handleWechatSubscribeRequest(
+    request: Extract<SessionInboundMessage, { type: "wechat/subscribe" }>,
+  ): Promise<void> {
+    if (!this.wechatSubscriptionManager) {
+      this.wechatUnavailable(request.requestId, "wechat/subscribe", "WeChat unavailable");
+      return;
+    }
+    try {
+      const sessions = await this.wechatSubscriptionManager.subscribe(this.sessionId, {
+        send: (payload) => {
+          this.emit({
+            type: "wechat/unread_update",
+            payload,
+          });
+        },
+      });
+      this.emit({
+        type: "wechat/subscribe/response",
+        payload: {
+          requestId: request.requestId,
+          sessions,
+          error: null,
+        },
+      });
+    } catch (err) {
+      this.emit({
+        type: "wechat/subscribe/response",
+        payload: {
+          requestId: request.requestId,
+          error: this.describeWechatError(err),
+        },
+      });
+    }
+  }
+
+  private async handleWechatUnsubscribeRequest(
+    request: Extract<SessionInboundMessage, { type: "wechat/unsubscribe" }>,
+  ): Promise<void> {
+    if (this.wechatSubscriptionManager) {
+      this.wechatSubscriptionManager.unsubscribe(this.sessionId);
+    }
+    this.emit({
+      type: "wechat/unsubscribe/response",
+      payload: { requestId: request.requestId, error: null },
+    });
+  }
+
+  private async handleWechatListUnreadRequest(
+    request: Extract<SessionInboundMessage, { type: "wechat/list_unread" }>,
+  ): Promise<void> {
+    if (!this.wechatService) {
+      this.wechatUnavailable(request.requestId, "wechat/list_unread", "WeChat unavailable");
+      return;
+    }
+    try {
+      const sessions = await this.wechatService.listUnread({
+        filter: request.filter,
+        limit: request.limit,
+      });
+      this.emit({
+        type: "wechat/list_unread/response",
+        payload: { requestId: request.requestId, sessions, error: null },
+      });
+    } catch (err) {
+      this.emit({
+        type: "wechat/list_unread/response",
+        payload: { requestId: request.requestId, error: this.describeWechatError(err) },
+      });
+    }
+  }
+
+  private async handleWechatLlmCompleteRequest(
+    request: Extract<SessionInboundMessage, { type: "wechat/llm_complete" }>,
+  ): Promise<void> {
+    try {
+      const { runWechatClaudeCompletion, WechatLlmError } = await import("./wechat/wechat-llm.js");
+      try {
+        const reply = await runWechatClaudeCompletion({
+          prompt: request.prompt,
+          modelId: request.modelId ?? null,
+          timeoutMs: request.timeoutMs,
+          logger: this.sessionLogger,
+        });
+        this.emit({
+          type: "wechat/llm_complete/response",
+          payload: { requestId: request.requestId, reply, errorCode: null, error: null },
+        });
+      } catch (err) {
+        const errorCode = err instanceof WechatLlmError ? err.code : "unknown";
+        const message = err instanceof Error ? err.message : String(err);
+        this.sessionLogger.warn(
+          { requestId: request.requestId, errorCode, message },
+          "wechat/llm_complete failed",
+        );
+        this.emit({
+          type: "wechat/llm_complete/response",
+          payload: { requestId: request.requestId, errorCode, error: message },
+        });
+      }
+    } catch (importErr) {
+      this.emit({
+        type: "wechat/llm_complete/response",
+        payload: {
+          requestId: request.requestId,
+          errorCode: "import_failed",
+          error: importErr instanceof Error ? importErr.message : String(importErr),
+        },
+      });
+    }
+  }
+
+  private async handleWechatReadHistoryRequest(
+    request: Extract<SessionInboundMessage, { type: "wechat/read_history" }>,
+  ): Promise<void> {
+    if (!this.wechatService) {
+      this.wechatUnavailable(request.requestId, "wechat/read_history", "WeChat unavailable");
+      return;
+    }
+    try {
+      const messages = await this.wechatService.readHistory({
+        chat: request.chat,
+        limit: request.limit,
+        since: request.since,
+        until: request.until,
+      });
+      this.emit({
+        type: "wechat/read_history/response",
+        payload: { requestId: request.requestId, messages, error: null },
+      });
+    } catch (err) {
+      this.emit({
+        type: "wechat/read_history/response",
+        payload: { requestId: request.requestId, error: this.describeWechatError(err) },
+      });
+    }
+  }
+
   private toScheduleSummary(
     schedule: Awaited<ReturnType<ScheduleService["inspect"]>>,
   ): Extract<
@@ -10543,6 +10832,134 @@ export class Session {
         payload: {
           requestId: request.requestId,
           reply: "",
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleHermesListModelsRequest(
+    request: Extract<SessionInboundMessage, { type: "hermes/models/list" }>,
+  ): Promise<void> {
+    this.sessionLogger.info(
+      { requestId: request.requestId },
+      "hermes/models/list — querying Hermes API",
+    );
+    try {
+      const { listHermesModels } = await import("./hermes/hermes-client.js");
+      const models = await listHermesModels();
+      this.sessionLogger.info(
+        { requestId: request.requestId, count: models.length },
+        "hermes/models/list — done",
+      );
+      this.emit({
+        type: "hermes/models/list/response",
+        payload: { requestId: request.requestId, models, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { requestId: request.requestId, err: error },
+        "hermes/models/list — failed",
+      );
+      this.emit({
+        type: "hermes/models/list/response",
+        payload: {
+          requestId: request.requestId,
+          models: [],
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleHermesSendMessageRequest(
+    request: Extract<SessionInboundMessage, { type: "hermes/chat/send" }>,
+  ): Promise<void> {
+    this.sessionLogger.info(
+      {
+        requestId: request.requestId,
+        modelId: request.modelId,
+        textPreview: request.text.slice(0, 80),
+        textLength: request.text.length,
+      },
+      "hermes/chat/send — dispatching to Hermes API",
+    );
+    try {
+      const { sendHermesMessage } = await import("./hermes/hermes-client.js");
+      const result = await sendHermesMessage({
+        text: request.text,
+        modelId: request.modelId ?? undefined,
+      });
+      this.sessionLogger.info(
+        {
+          requestId: request.requestId,
+          replyLength: result.reply.length,
+          replyPreview: result.reply.slice(0, 120),
+        },
+        "hermes/chat/send — got reply",
+      );
+      this.emit({
+        type: "hermes/chat/send/response",
+        payload: { requestId: request.requestId, reply: result.reply, error: null },
+      });
+    } catch (error) {
+      this.sessionLogger.error(
+        { requestId: request.requestId, err: error },
+        "hermes/chat/send — failed",
+      );
+      this.emit({
+        type: "hermes/chat/send/response",
+        payload: {
+          requestId: request.requestId,
+          reply: "",
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleHermesSetupCheckRequest(
+    request: Extract<SessionInboundMessage, { type: "hermes/setup/check" }>,
+  ): Promise<void> {
+    try {
+      const { checkHermesSetup } = await import("./hermes/hermes-setup.js");
+      const state = await checkHermesSetup();
+      this.emit({
+        type: "hermes/setup/check/response",
+        payload: { requestId: request.requestId, state, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "hermes/setup/check/response",
+        payload: {
+          requestId: request.requestId,
+          state: { installed: false, configured: false, provider: null, model: null },
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async handleHermesSetupConfigureRequest(
+    request: Extract<SessionInboundMessage, { type: "hermes/setup/configure" }>,
+  ): Promise<void> {
+    try {
+      const { configureHermes } = await import("./hermes/hermes-setup.js");
+      await configureHermes({
+        provider: request.provider,
+        model: request.model,
+        apiKey: request.apiKey,
+        baseUrl: request.baseUrl,
+      });
+      this.emit({
+        type: "hermes/setup/configure/response",
+        payload: { requestId: request.requestId, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "hermes/setup/configure/response",
+        payload: {
+          requestId: request.requestId,
           error: error instanceof Error ? error.message : String(error),
         },
       });

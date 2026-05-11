@@ -414,6 +414,7 @@ export const SETTINGS_SECTION_SLUGS = [
   "extensions",
   "diagnostics",
   "about",
+  "wechat",
 ] as const;
 
 export type SettingsSectionSlug = (typeof SETTINGS_SECTION_SLUGS)[number];
@@ -484,6 +485,7 @@ export const SLUG_TO_BUCKET: Record<SettingsSectionSlug, SettingsBucket> = {
   extensions: "advanced",
   diagnostics: "advanced",
   about: "advanced",
+  wechat: "advanced",
 } as const;
 
 export function resolveBucketForSlug(slug: SettingsSectionSlug): SettingsBucket {

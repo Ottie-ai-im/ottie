@@ -32,6 +32,7 @@ import {
   FlaskConical,
   Lock,
   Blocks,
+  MessageCircle,
 } from "lucide-react-native";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { MobileTabHeader } from "@/components/headers/mobile-tab-header";
@@ -56,6 +57,7 @@ import { AddHostModal } from "@/components/add-host-modal";
 import { PairLinkModal } from "@/components/pair-link-modal";
 import { KeyboardShortcutsSection } from "@/screens/settings/keyboard-shortcuts-section";
 import { LabsSection } from "@/screens/settings/labs-section";
+import { WechatSettingsSection } from "@/screens/settings/wechat-section";
 import { LocalDaemonPanel } from "@/screens/settings/local-daemon-panel";
 import { ExtensionsSection } from "@/screens/settings/extensions-section";
 import { Button } from "@/components/ui/button";
@@ -116,6 +118,7 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "labs", labelKey: "settings.labs.title", icon: FlaskConical },
   { id: "localDaemon", labelKey: "settings.localDaemon.title", icon: Lock },
   { id: "extensions", labelKey: "settings.extensions.title", icon: Blocks },
+  { id: "wechat", labelKey: "wechat.settings.title", icon: MessageCircle },
   { id: "diagnostics", labelKey: "settings.diagnostics", icon: Stethoscope },
   { id: "about", labelKey: "settings.about", icon: Info },
 ];
@@ -1063,6 +1066,8 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
           );
         case "labs":
           return <LabsSection />;
+        case "wechat":
+          return <WechatSettingsSection />;
         case "localDaemon":
           return <LocalDaemonPanel />;
         case "extensions":

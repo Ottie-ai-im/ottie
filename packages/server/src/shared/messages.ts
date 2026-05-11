@@ -28,6 +28,21 @@ import {
   ChatStatusEventSchema,
 } from "../server/chat/chat-rpc-schemas.js";
 import {
+  WechatStateRequestSchema,
+  WechatStateResponseSchema,
+  WechatSubscribeRequestSchema,
+  WechatSubscribeResponseSchema,
+  WechatUnsubscribeRequestSchema,
+  WechatUnsubscribeResponseSchema,
+  WechatListUnreadRequestSchema,
+  WechatListUnreadResponseSchema,
+  WechatReadHistoryRequestSchema,
+  WechatReadHistoryResponseSchema,
+  WechatLlmCompleteRequestSchema,
+  WechatLlmCompleteResponseSchema,
+  WechatUnreadUpdateSchema,
+} from "../server/wechat/wechat-rpc-schemas.js";
+import {
   DeviceLinkApproveRequestSchema,
   DeviceLinkApproveResponseSchema,
   DeviceLinkCancelRequestSchema,
@@ -126,6 +141,16 @@ import {
   OpenclawSendMessageRequestSchema,
   OpenclawSendMessageResponseSchema,
 } from "../server/openclaw/rpc-schemas.js";
+import {
+  HermesListModelsRequestSchema,
+  HermesListModelsResponseSchema,
+  HermesSendMessageRequestSchema,
+  HermesSendMessageResponseSchema,
+  HermesSetupCheckRequestSchema,
+  HermesSetupCheckResponseSchema,
+  HermesSetupConfigureRequestSchema,
+  HermesSetupConfigureResponseSchema,
+} from "../server/hermes/rpc-schemas.js";
 import {
   LoopRunRequestSchema,
   LoopListRequestSchema,
@@ -2174,6 +2199,10 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LocalServicesInstallRequestSchema,
   OpenclawListAgentsRequestSchema,
   OpenclawSendMessageRequestSchema,
+  HermesListModelsRequestSchema,
+  HermesSendMessageRequestSchema,
+  HermesSetupCheckRequestSchema,
+  HermesSetupConfigureRequestSchema,
   LoopRunRequestSchema,
   LoopListRequestSchema,
   LoopInspectRequestSchema,
@@ -2189,6 +2218,12 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   PluginLaunchRequestSchema,
   PluginSetEnabledRequestSchema,
   PluginRefreshCatalogRequestSchema,
+  WechatStateRequestSchema,
+  WechatSubscribeRequestSchema,
+  WechatUnsubscribeRequestSchema,
+  WechatListUnreadRequestSchema,
+  WechatReadHistoryRequestSchema,
+  WechatLlmCompleteRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3829,6 +3864,10 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LocalServicesInstallResponseSchema,
   OpenclawListAgentsResponseSchema,
   OpenclawSendMessageResponseSchema,
+  HermesListModelsResponseSchema,
+  HermesSendMessageResponseSchema,
+  HermesSetupCheckResponseSchema,
+  HermesSetupConfigureResponseSchema,
   LoopRunResponseSchema,
   LoopListResponseSchema,
   LoopInspectResponseSchema,
@@ -3845,6 +3884,13 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   PluginInstallProgressSchema,
   PluginSetEnabledResponseSchema,
   PluginRefreshCatalogResponseSchema,
+  WechatStateResponseSchema,
+  WechatSubscribeResponseSchema,
+  WechatUnsubscribeResponseSchema,
+  WechatListUnreadResponseSchema,
+  WechatReadHistoryResponseSchema,
+  WechatLlmCompleteResponseSchema,
+  WechatUnreadUpdateSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

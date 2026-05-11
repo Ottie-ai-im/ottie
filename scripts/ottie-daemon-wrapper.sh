@@ -43,4 +43,12 @@ else
   NODE_BIN="node"
 fi
 
+# Expose the bundled wx-cli binary to the daemon (consumed by WechatService
+# in packages/server/src/server/wechat/wechat-service.ts). When this var is
+# unset the daemon falls back to a PATH lookup, which is the dev-time path
+# when scripts/build-wx-sidecar.sh hasn't been run.
+if [ -z "$OTTIE_WX_BINARY" ] && [ -x "$RESOURCES/wx-cli/wx" ]; then
+  export OTTIE_WX_BINARY="$RESOURCES/wx-cli/wx"
+fi
+
 exec "$NODE_BIN" "$RESOURCES/server.mjs" "$@"

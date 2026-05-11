@@ -359,6 +359,10 @@ export class VoiceAssistantWebSocketServer {
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly chatService: FileBackedChatService;
   private readonly chatSubscriptionManager: ChatSubscriptionManager;
+  private readonly wechatService: import("./wechat/wechat-service.js").WechatService | undefined;
+  private readonly wechatSubscriptionManager:
+    | import("./wechat/wechat-subscription-manager.js").WechatSubscriptionManager
+    | undefined;
   private readonly loopService: LoopService;
   private readonly scheduleService: ScheduleService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
@@ -470,6 +474,11 @@ export class VoiceAssistantWebSocketServer {
     localTokenMode: LocalTokenMode = { kind: "loopback-trust" },
     pluginManager?: PluginManager,
     identityService?: import("./identity/identity-service.js").IdentityService,
+    // WeChat sidebar (Phase 1, MVP). Optional so existing test instantiations
+    // continue to compile without specifying — sessions handle the absence
+    // by emitting "wechat unavailable" RPC errors rather than crashing.
+    wechatService?: import("./wechat/wechat-service.js").WechatService,
+    wechatSubscriptionManager?: import("./wechat/wechat-subscription-manager.js").WechatSubscriptionManager,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.serverId = serverId;
@@ -490,6 +499,8 @@ export class VoiceAssistantWebSocketServer {
     });
     this.chatService = requiredServices.chatService;
     this.chatSubscriptionManager = requiredServices.chatSubscriptionManager;
+    this.wechatService = wechatService;
+    this.wechatSubscriptionManager = wechatSubscriptionManager;
     this.loopService = requiredServices.loopService;
     this.scheduleService = requiredServices.scheduleService;
     this.checkoutDiffManager = requiredServices.checkoutDiffManager;
@@ -934,6 +945,8 @@ export class VoiceAssistantWebSocketServer {
       workspaceRegistry: this.workspaceRegistry,
       chatService: this.chatService,
       chatSubscriptionManager: this.chatSubscriptionManager,
+      wechatService: this.wechatService,
+      wechatSubscriptionManager: this.wechatSubscriptionManager,
       identityService: this.identityService,
       loopService: this.loopService,
       scheduleService: this.scheduleService,

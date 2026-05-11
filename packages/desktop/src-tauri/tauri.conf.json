@@ -5,7 +5,7 @@
   "identifier": "com.ottie.desktop",
   "build": {
     "beforeDevCommand": "pnpm --filter @ottie/app web",
-    "beforeBuildCommand": "pnpm --filter @ottie/app build:web && pnpm -w build:sidecar",
+    "beforeBuildCommand": "pnpm --filter @ottie/app build:web && pnpm -w build:sidecar && pnpm -w build:wx-sidecar",
     "devUrl": "http://localhost:8081",
     "frontendDist": "../../app/dist"
   },
